@@ -46,7 +46,7 @@ Do not invert this into Domain depending on framework/provider code.
 
 ## Framework relationship
 
-The reference implementation may use Laravel as the runtime/application framework.
+The initial executable implementation may use Laravel as the runtime/application framework.
 
 Laravel facilities should be reused where fit. Framework replacement is not a current goal.
 
@@ -65,6 +65,21 @@ PHP/Laravel
 ```
 
 and later add Redis, object storage, search engines, queues, specialized services, or other runtimes only from evidence.
+
+## Consumer relationship
+
+A suitable product should consume the shared Foundation through the supported versioned boundary rather than permanently copy Foundation runtime code.
+
+```text
+Product shell
+  -> Foundation Core
+  -> selected Foundation Modules
+  -> product-local Modules
+```
+
+The product owns its domain behavior, delivery, and runtime truth. Foundation Core/Modules own only reusable application behavior that has earned shared ownership.
+
+Architecture boundaries do not automatically create package boundaries; see [Consumption and packaging](consumption-and-packaging.md).
 
 ## Extraction rule
 
