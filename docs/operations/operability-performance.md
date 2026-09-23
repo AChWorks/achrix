@@ -2,7 +2,7 @@
 
 ## Operational simplicity
 
-The reference path should remain deployable without auxiliary infrastructure until evidence requires it.
+The primary Foundation implementation path should remain deployable without auxiliary infrastructure until evidence requires it.
 
 Do not make Redis, queue supervisors, brokers, search clusters, container orchestration, or Node production runtime mandatory for a simple application.
 
