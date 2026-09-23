@@ -8,17 +8,17 @@ Other modules read or mutate it only through an intentional contract, query proj
 
 Shared database access does not make tables shared ownership.
 
-## Reference persistence
+## Primary persistence path
 
 The initial general-purpose persistence model is relational.
 
-MariaDB is the intended primary reference engine for the first executable implementation.
+MariaDB is the intended primary relational engine for the first executable implementation.
 
 The Foundation must not encode MariaDB as business identity.
 
 Official support for another engine requires real migrations/tests/compatibility evidence.
 
-SQLite is not part of the reference baseline.
+SQLite is not part of the primary implementation/test baseline.
 
 ## Portability
 
