@@ -6,6 +6,7 @@ This file is an index of where durable truth lives. It is not a status report.
 
 - `/MASTER-SPEC.md` — canonical mission, non-goals, durable principles, architecture boundaries, lifecycle expectations, and success criteria.
 - `AChWorks/platform:docs/architecture/platform-architecture.md` — authoritative ecosystem-level Platform → Foundation → Product ownership/intake model; generic cross-project contracts remain under `AChWorks/platform:docs/contracts/`.
+- `/achworks.yaml` — stable machine-readable Foundation identity/capability metadata; it points to authoritative sources and must not mirror live work/runtime state.
 
 ## Architecture
 
