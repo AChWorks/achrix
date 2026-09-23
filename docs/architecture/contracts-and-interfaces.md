@@ -76,6 +76,26 @@ Where useful, published operations should expose:
 
 JSON Schema/OpenAPI or similarly portable formats are preferred where they fit.
 
+## Error and failure contracts
+
+Published machine-facing interfaces should expose stable failure semantics where callers need to act on them.
+
+When relevant, distinguish categories such as:
+
+- validation failure;
+- unauthenticated/unauthorized;
+- not found;
+- conflict/concurrency precondition failure;
+- rate/quota/resource limit;
+- transient/upstream failure;
+- definitive business rejection.
+
+Transport-specific details such as HTTP status codes may map onto these semantics but should not be the only machine-readable contract when clients need stable behavior.
+
+Do not leak framework exceptions, SQL details, provider internals, stack traces, or secrets as the public error model.
+
+Where retry behavior matters, make retryability and correlation/operation identity explicit rather than forcing callers or AI agents to guess.
+
 ## Compatibility
 
 Prefer additive change.

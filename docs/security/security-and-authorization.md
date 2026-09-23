@@ -70,6 +70,24 @@ Outbound integrations should consider, as relevant:
 - idempotency;
 - secret-safe logging.
 
+## Abuse and resource protection
+
+Authorization answers whether an actor may perform an action; it does not by itself protect the system from abusive or accidental resource consumption.
+
+For public or untrusted boundaries, apply only the controls justified by the threat/workload, such as:
+
+- request/payload/upload size bounds;
+- rate limits or quotas;
+- concurrency limits;
+- anti-automation/anti-spam controls;
+- webhook/replay protections;
+- expensive-operation budgets;
+- provider/API quota protection.
+
+Place these controls at the most effective boundary (edge, application, module, provider adapter, or infrastructure) rather than forcing one universal limiter into Core.
+
+Do not add abuse infrastructure to private/low-risk paths without evidence, but do not leave a public expensive or security-sensitive operation unbounded merely because authentication exists.
+
 ## Audit
 
 Sensitive/admin/financial/security actions may require a durable audit trail.

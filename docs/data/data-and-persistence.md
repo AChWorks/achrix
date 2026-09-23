@@ -45,6 +45,17 @@ A module may require capabilities such as:
 
 Declare/support the real requirement instead of pretending every engine is equivalent.
 
+## Consistency and transaction boundaries
+
+Consistency is a domain requirement, not an architectural fashion.
+
+- keep invariants that require strong consistency inside an explicit transaction boundary where practical;
+- choose eventual consistency only when the product can tolerate and explain the lag/failure semantics;
+- shared relational infrastructure may support a cross-module use case transaction in the modular monolith, but participating modules must still be invoked through their Application boundaries rather than by direct foreign-table mutation;
+- do not introduce distributed transactions, sagas, compensation workflows, or outbox mechanics until the actual topology/failure model requires them;
+- if a module is later extracted into a service, re-evaluate the affected consistency contract explicitly rather than pretending the old in-process transaction boundary still exists;
+- derived/search/cache/read-model copies may lag only when that staleness is acceptable to the consuming use case.
+
 ## Schema design
 
 Use domain-specific schemas.
@@ -90,6 +101,20 @@ Possible domain operations include:
 - retain immutably.
 
 The owning module defines the correct semantics.
+
+## Data lifecycle and privacy
+
+The owning module is responsible for the lifecycle semantics of the data it creates.
+
+Where applicable:
+
+- collect and retain only data justified by product/domain needs;
+- distinguish ordinary, sensitive, confidential, and regulated data when that distinction changes handling;
+- make retention, archival, anonymization, deletion, export, and legal/business preservation rules explicit for the domain that needs them;
+- ensure materially important derived copies such as search indexes, caches, exports, analytics feeds, or backups are considered when deletion/redaction/retention semantics require it;
+- avoid placing personal/sensitive data in identifiers, URLs, logs, events, or capability metadata without a concrete need.
+
+Do not build a universal compliance/privacy subsystem before a real product or jurisdiction requires it. Preserve the boundaries needed to implement product-specific privacy obligations correctly later.
 
 ## Migration and recovery
 
