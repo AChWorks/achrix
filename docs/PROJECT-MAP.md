@@ -5,6 +5,7 @@ This file is an index of where durable truth lives. It is not a status report.
 ## Project-level intent
 
 - `/MASTER-SPEC.md` — canonical mission, non-goals, durable principles, architecture boundaries, lifecycle expectations, and success criteria.
+- `AChWorks/platform` Platform architecture — authoritative ecosystem-level Platform → Foundation → Product ownership/intake model and generic cross-project contracts.
 
 ## Architecture
 
