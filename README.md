@@ -1,6 +1,6 @@
 # AChWorks Application Foundation
 
-Reusable, AI-first application foundation for building evolvable web-connected products with a minimal core and composable modules.
+Executable, reusable, versioned, AI-first application foundation for building evolvable web-connected products with a minimal Core and composable Modules.
 
 The Foundation is designed to reduce repeated engineering decisions while keeping product logic and future technology choices open.
 
@@ -12,12 +12,14 @@ It is intentionally **not** a new framework, mandatory monorepo, mandatory datab
 
 - [MASTER-SPEC.md](MASTER-SPEC.md) — project mission, durable principles, boundaries, non-goals, lifecycle expectations, and success criteria.
 - [docs/PROJECT-MAP.md](docs/PROJECT-MAP.md) — where each kind of durable project truth lives.
+- [achworks.yaml](achworks.yaml) — machine-readable Foundation identity/capability metadata for AChWorks discovery; not a live backlog/runtime-state store.
 
 ### Architecture
 
 - [Architecture overview](docs/architecture/overview.md)
 - [Module model](docs/architecture/module-model.md)
 - [Contracts and interfaces](docs/architecture/contracts-and-interfaces.md)
+- [Consumption and packaging](docs/architecture/consumption-and-packaging.md) — how products consume/upgrade shared Foundation code without permanent copy divergence.
 
 ### Engineering principles
 
@@ -46,7 +48,7 @@ It is intentionally **not** a new framework, mandatory monorepo, mandatory datab
 
 ## Current state
 
-The repository currently owns the durable project foundation and development rules. Executable runtime code should be introduced only through the next accepted implementation outcome rather than being invented speculatively during bootstrap.
+The repository currently owns the durable Application Foundation intent, architecture, and development rules. The next accepted implementation outcome introduces the first executable/versioned Foundation Core and proves a real consumer boundary rather than creating a reference-only application or starter copy.
 
 GitHub Issues own current actionable work. Documentation must not mirror live task status.
 
@@ -57,3 +59,11 @@ reuse -> configure -> extend -> adapt -> extract -> replace/build when justified
 ```
 
 Build the smallest correct thing today while preserving credible paths for tomorrow.
+
+## AChWorks ecosystem relationship
+
+`AChWorks/platform` is the ecosystem-level engineering governance/discovery/intake layer. This repository is an executable Foundation owned independently from Platform.
+
+Suitable products may consume the versioned Application Foundation Core and reusable Modules, while keeping their own product/domain behavior, Issues, PRs, CI, releases, deployment truth, and runtime state.
+
+Platform generic contracts remain authoritative at the cross-project level; this Foundation specializes them for application products. Platform is not a runtime dependency of the Foundation.

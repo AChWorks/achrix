@@ -17,19 +17,21 @@ Completion evidence:
 - initial ADR;
 - current next implementation outcome represented in GitHub.
 
-## Outcome 1 — Minimal executable reference foundation
+## Outcome 1 — Minimal executable reusable Foundation
 
-Goal: prove the smallest useful runtime without building speculative modules.
+Goal: prove the smallest useful executable/versioned Foundation Core and a real consumer boundary without building speculative modules.
 
 Expected work:
 
-- confirm/reference runtime ADR from current evidence;
-- bootstrap the chosen framework/runtime;
+- confirm implementation/consumption ADR from current official compatibility evidence;
+- bootstrap the chosen framework/runtime as reusable Foundation implementation rather than a reference-only application;
+- prove a separate minimal consumer can use a versioned Foundation path without permanent shared-source copying;
 - minimal module registration/composition;
 - capability identity/metadata model;
 - application boundary conventions;
 - authorization primitives only as needed by the proving product;
 - relational persistence baseline;
+- root `achworks.yaml` Foundation descriptor;
 - health/config/test/release skeleton;
 - architecture fitness checks only for important proven boundaries.
 
@@ -41,9 +43,9 @@ Non-goals:
 - every database;
 - every module.
 
-## Outcome 2 — First proving distribution: lightweight content/CMS
+## Outcome 2 — First real distribution: lightweight content/CMS
 
-Goal: validate that the Foundation accelerates a real application.
+Goal: validate that a real application consumes and benefits from the Foundation rather than redefining/copying it.
 
 Expected capabilities:
 
@@ -57,7 +59,7 @@ Expected capabilities:
 - safe draft/publish lifecycle;
 - simple deployment.
 
-Use real needs from this distribution to refine Module/Core boundaries.
+Use real needs from this distribution to refine Module/Core boundaries. Keep CMS/product-specific behavior in the distribution unless repeated consumers prove it belongs in the Foundation.
 
 ## Outcome 3 — Lifecycle hardening
 
@@ -83,7 +85,7 @@ Choose a real product, not a synthetic benchmark.
 
 Compare:
 
-- which capabilities truly repeat;
+- which capabilities truly repeat and should be promoted from product-local to Foundation ownership;
 - which remain product-specific;
 - which adapters/providers vary;
 - whether any module/package extraction is now justified.
@@ -92,7 +94,7 @@ Compare:
 
 Only after multiple consumers converge, consider:
 
-- reusable packages;
+- independently versioned reusable packages only where internal Module boundaries have earned that distribution boundary;
 - starter/distribution tooling;
 - shared lifecycle helpers;
 - additional database/provider support;

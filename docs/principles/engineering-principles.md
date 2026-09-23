@@ -23,6 +23,8 @@ These principles are guardrails, not excuses for ceremony.
 19. **Duplication can be cheaper than a premature shared abstraction.**
 20. **Delete architecture that has no current owner/value; do not preserve complexity for hypothetical futures.**
 21. **Golden paths are optional paved roads; keep explicit, bounded escape hatches for justified product-specific needs.**
+22. **Shared Foundation runtime should be consumed/versioned, not permanently copied into every product.**
+23. **Design cheap credible reuse paths, but promote/extract only from real consumer evidence.**
 
 ## Practical decision sequence
 
@@ -41,9 +43,9 @@ Can a bounded extension/adapter solve it?
         |
        no
         v
-Is there repeated proven common behavior worth extracting?
+Is there repeated proven common behavior worth promoting?
         |
-       yes -> extract
+       yes -> promote to the smallest shared ownership level that fits
         |
        no
         v

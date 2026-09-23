@@ -10,11 +10,29 @@ First define the lifecycle behavior every published distribution/module must mak
 
 ## Version identity
 
-Published artifacts must have an immutable version/build identity tied to source.
+Published Foundation artifacts, consumer-facing Foundation versions, and independently distributed Modules must have an immutable version/build identity tied to source.
 
 Use semantic versioning where it accurately communicates compatibility.
 
 Do not use version numbers as a substitute for a documented compatibility boundary.
+
+## Foundation consumer lifecycle
+
+A product consuming the Foundation must be able to identify the Foundation version it uses and the supported compatibility/update path.
+
+A Foundation upgrade is not just a source refresh. Where applicable it must account for:
+
+- consumer runtime/framework compatibility;
+- enabled Foundation Module compatibility;
+- configuration/default changes;
+- schema/data migrations;
+- published Application/API/event contract changes;
+- required preflight/postflight behavior;
+- recovery/rollback or roll-forward constraints.
+
+Do not make routine Foundation maintenance depend on manually copying shared runtime source into each product.
+
+The product remains owner of its deployment/release operation; the Foundation owns the compatibility information and migration behavior of Foundation code it publishes.
 
 ## Installation
 

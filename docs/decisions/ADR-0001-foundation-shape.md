@@ -15,7 +15,9 @@ Two failure modes must be avoided:
 
 ## Decision
 
-Create `AChWorks/application-foundation` as a reusable application implementation foundation.
+Create `AChWorks/application-foundation` as an executable, reusable, versioned application implementation Foundation that suitable products can consume while keeping product/domain-specific behavior in their own repositories.
+
+`AChWorks/platform` remains the ecosystem governance/discovery/contract layer and is not a runtime dependency of this Foundation.
 
 Use these boundaries:
 
@@ -26,15 +28,18 @@ Use these boundaries:
 - stable published contracts and module-owned data;
 - AI/human interfaces over shared Application capabilities;
 - lifecycle/update/upgrade/recovery as first-class concerns;
-- evidence-driven infrastructure and extraction.
+- evidence-driven infrastructure and extraction;
+- a supported versioned consumer boundary so shared Foundation runtime code is not permanently copied/forked into each product.
 
-The initial executable reference path is expected to use PHP/Laravel with MariaDB as the primary relational reference engine, subject to implementation-time verification.
+The initial executable implementation path is expected to use PHP/Laravel with MariaDB as the primary relational implementation engine, subject to implementation-time verification.
 
-These technologies are reference implementation choices, not Foundation identity.
+These technologies are initial implementation choices, not Foundation identity.
 
-SQLite is excluded from the reference persistence path.
+SQLite is excluded from the primary persistence path.
 
 A module boundary does not imply a separate package, plugin, repository, service, deployment, or database.
+
+A separate product should consume shared Foundation behavior through a deliberate version/update boundary. An unmanaged long-lived copy or fork of shared Foundation runtime code is not the default reuse model. Exact initial packaging mechanics are decided in the implementation ADR required by Issue #1.
 
 ## Consequences
 
@@ -45,7 +50,8 @@ Positive:
 - lower initial operational cost;
 - future provider/database/service evolution remains possible at meaningful boundaries;
 - AI and human tooling can share stable application capabilities;
-- modules can later be extracted if real evidence justifies it.
+- modules can later be promoted/extracted if real consumer evidence justifies shared ownership and independent versioning;
+- Foundation fixes can flow through a supported version/update path instead of repeated manual source copying.
 
 Costs:
 
@@ -71,6 +77,10 @@ Rejected because lowest-common-denominator abstractions and broad compatibility 
 ### Keep no module boundaries until later
 
 Rejected because ownership/coupling mistakes become expensive to unwind, especially for AI, lifecycle, data, and future service extraction.
+
+### Treat the Foundation as a reference/starter copy
+
+Rejected because permanent copies/forks of shared runtime code would diverge across products, making security fixes, compatibility changes, and lifecycle improvements repeated manual work instead of shared maintenance.
 
 ## Revisit triggers
 
