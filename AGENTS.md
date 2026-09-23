@@ -69,8 +69,12 @@ For every change:
 
 Architecture boundaries important enough to prevent recurring regression should eventually be machine-checked.
 
-## Main branch
+## Integration path
 
 `main` is the canonical integration branch.
+
+For tracked repository changes that alter durable project intent, architecture, implementation, CI, lifecycle, metadata, or contributor/agent rules, use an isolated branch and Pull Request. Validate the exact candidate with the strongest currently available checks before integrating. Direct-write capability is not the normal integration path.
+
+Until Issue #1 establishes executable CI and the strongest branch policy supported by the current GitHub plan, PR review plus change-appropriate validation is the repository integration boundary.
 
 Preserve unrelated contributor work. Avoid force pushes, destructive cleanup, or overwriting ambiguous state.
