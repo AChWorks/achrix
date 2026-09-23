@@ -1,0 +1,36 @@
+schemaVersion: achworks.dev/v1alpha1
+kind: Foundation
+
+metadata:
+  name: application-foundation
+  title: AChWorks Application Foundation
+  description: Executable, reusable, versioned application Foundation for suitable web-connected and online AChWorks products.
+
+spec:
+  type: application-foundation
+  lifecycle: active
+  system: achworks-application-ecosystem
+  ownership: AChWorks
+
+  capabilities:
+    provides:
+      - application-foundation
+      - application-module-composition
+      - application-capability-contracts
+    consumes:
+      - cross-project-engineering-standards
+      - lifecycle-contract
+
+  documentation:
+    path: docs/
+
+  source:
+    repository: AChWorks/application-foundation
+    url: https://github.com/AChWorks/application-foundation
+
+  extensions:
+    foundation:
+      family: application-online
+      ecosystemPlatform: AChWorks/platform
+      consumption: versioned-executable
+      mandatoryAtEcosystemLevel: false
