@@ -11,6 +11,7 @@ This file is an index of where durable truth lives. It is not a status report.
 - `docs/architecture/overview.md` — system shape and default deployment model.
 - `docs/architecture/module-model.md` — module ownership, composition, dependencies, provider/channel variation.
 - `docs/architecture/contracts-and-interfaces.md` — commands, queries, events, public contracts, capability discovery, versioning.
+- `docs/architecture/consumption-and-packaging.md` — versioned Foundation consumption, product boundary, Module/package extraction, and upgrade constraints.
 
 ## Principles
 
