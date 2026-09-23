@@ -12,6 +12,8 @@ The Foundation should make common application concerns predictable, reusable, AI
 
 The intended product range is deliberately broad: content sites, SaaS products, marketplaces, commerce systems, payment/financial products, media platforms, APIs, automation products, and future web-connected applications.
 
+Within the AChWorks ecosystem, `AChWorks/platform` owns cross-project governance, discovery, intake, and generic contracts. This repository owns the executable Application Foundation implementation, Core/Module boundaries, packaging/versioning, releases, and application-specific specialization. Platform is not a runtime dependency of the Foundation.
+
 ## 2. Desired outcome
 
 A suitable new product should be able to consume a small, well-understood Foundation baseline, upgrade that shared baseline deliberately over time, and focus primarily on its differentiating domain.
@@ -45,7 +47,7 @@ The Foundation is not:
 - a promise to support every possible technology from version 1;
 - an excuse to build speculative abstractions before real variation exists.
 
-SQLite is intentionally outside the reference persistence path unless a future explicit project decision changes that boundary.
+SQLite is intentionally outside the primary persistence path unless a future explicit project decision changes that boundary.
 
 ## 4. Governing engineering principles
 
@@ -103,7 +105,7 @@ Introduce infrastructure in response to measured workload, failure, latency, thr
 
 ### 4.9 Optional paved roads and explicit escape hatches
 
-Reference defaults and distributions are paved roads, not closed boundaries.
+Default paths and distributions are paved roads, not closed boundaries.
 
 A product may diverge when its workload, domain, security, compatibility, or operational constraints justify a different path. Divergence should be explicit, localized, testable, and should preserve the applicable security, data-ownership, compatibility, and lifecycle contracts rather than bypassing them.
 
@@ -568,6 +570,6 @@ The Foundation is successful when:
 
 This file owns durable project-level intent and constraints.
 
-Update it only when the mission, non-goals, core architectural principles, stable boundaries, reference strategy, source-of-truth model, or success criteria materially change.
+Update it only when the mission, non-goals, core architectural principles, stable boundaries, initial implementation strategy, source-of-truth model, or success criteria materially change.
 
 Do not use this file as a task log, roadmap status report, or release note.
