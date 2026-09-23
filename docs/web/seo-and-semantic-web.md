@@ -21,6 +21,14 @@ Use meaningful elements and hierarchy:
 
 This helps users, assistive technology, search engines, crawlers, and AI extraction.
 
+## Internationalization and directionality
+
+Use Unicode/UTF-8 throughout the public content path.
+
+When a product needs localization, keep locale/language and presentation direction explicit enough to support both LTR and RTL output, and render semantic language/direction metadata where applicable.
+
+Do not build a full translation subsystem before a product needs it, but avoid hardcoding one language or text direction into reusable content/domain contracts when a small local choice can preserve future support.
+
 ## SEO capabilities
 
 A content/SEO distribution should be able to manage, as applicable:

@@ -99,6 +99,14 @@ Do not add Redis, queues, brokers, distributed caches, OpenSearch, microservices
 
 Introduce infrastructure in response to measured workload, failure, latency, throughput, availability, isolation, security, or operational requirements.
 
+### 4.9 Optional paved roads and explicit escape hatches
+
+Reference defaults and distributions are paved roads, not closed boundaries.
+
+A product may diverge when its workload, domain, security, compatibility, or operational constraints justify a different path. Divergence should be explicit, localized, testable, and should preserve the applicable security, data-ownership, compatibility, and lifecycle contracts rather than bypassing them.
+
+The Foundation should make the common path easy without making the uncommon-but-valid path impossible.
+
 ## 5. Reference implementation strategy
 
 The Foundation's identity is not a language or framework.
@@ -322,6 +330,8 @@ When a distribution exposes public web content, the default path is server-rende
 
 Content semantics should be separable from presentation/theme where doing so improves reuse, AI readability, SEO, accessibility, or redesignability.
 
+User-facing web foundations should preserve Unicode/UTF-8 content, locale-aware presentation, and RTL/LTR directionality where applicable. Domain/content models should not hardcode one language or direction when a small local design choice can keep later internationalization feasible.
+
 Relevant web modules should support, when applicable:
 
 - semantic document structure and headings;
@@ -479,7 +489,7 @@ Examples may eventually include:
 
 Distributions are optional paved roads, not constraints on products.
 
-The first proving distribution is expected to be the lightweight content/CMS use case discussed at project inception, because it exercises modules, themes/content separation, SEO, AI readability, admin, media, lifecycle, and deployment without requiring speculative enterprise infrastructure.
+The first proving distribution is expected to be a lightweight content/CMS use case because it exercises modules, theme/content separation, SEO, AI readability, admin, media, lifecycle, and deployment without requiring speculative enterprise infrastructure.
 
 ## 26. Development/evolution rule
 

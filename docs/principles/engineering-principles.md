@@ -22,6 +22,7 @@ These principles are guardrails, not excuses for ceremony.
 18. **Prefer reversible decisions while uncertainty is high.**
 19. **Duplication can be cheaper than a premature shared abstraction.**
 20. **Delete architecture that has no current owner/value; do not preserve complexity for hypothetical futures.**
+21. **Golden paths are optional paved roads; keep explicit, bounded escape hatches for justified product-specific needs.**
 
 ## Practical decision sequence
 
