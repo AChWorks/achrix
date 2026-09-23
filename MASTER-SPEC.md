@@ -6,7 +6,7 @@ Scope: Reusable application foundation for present and future AChWorks products
 
 ## 1. Mission
 
-AChWorks Application Foundation exists to shorten the path from an idea to a maintainable production application without forcing every new product to redesign the same engineering foundations.
+AChWorks Application Foundation exists as an executable, reusable, versioned application base that shortens the path from an idea to a maintainable production application without forcing every suitable new product to redesign or reimplement the same engineering foundations.
 
 The Foundation should make common application concerns predictable, reusable, AI-readable, secure, lifecycle-safe, and evolvable while leaving product/domain logic free to differ.
 
@@ -14,7 +14,7 @@ The intended product range is deliberately broad: content sites, SaaS products, 
 
 ## 2. Desired outcome
 
-A new product should be able to start from a small, well-understood baseline and focus primarily on its differentiating domain.
+A suitable new product should be able to consume a small, well-understood Foundation baseline, upgrade that shared baseline deliberately over time, and focus primarily on its differentiating domain.
 
 A competent human or AI agent should be able to discover:
 
@@ -25,6 +25,7 @@ A competent human or AI agent should be able to discover:
 - what is optional;
 - how authorization applies;
 - how data and side effects are owned;
+- how the product consumes and upgrades the Foundation without unmanaged source-copy divergence;
 - how install/update/upgrade/migration/recovery work;
 - how to extend the system without bypassing boundaries;
 - when to reuse, adapt, extract, replace, or build.
@@ -33,6 +34,7 @@ A competent human or AI agent should be able to discover:
 
 The Foundation is not:
 
+- a documentation-only reference architecture or starter that products are expected to permanently copy/fork;
 - a replacement framework built merely to avoid using mature frameworks;
 - a mandatory single database, cache, queue, search engine, AI provider, storage provider, frontend framework, or deployment platform;
 - a microservice platform by default;
@@ -57,7 +59,7 @@ Before building a non-differentiating capability, inspect maintained native/fram
 
 ### 4.2 Minimal stable core
 
-Core contains only responsibilities that nearly every distribution requires and that truly belong at platform composition level.
+Core contains only responsibilities that nearly every suitable consumer requires and that truly belong at the Foundation/application composition level.
 
 A capability does not enter Core merely because it is useful.
 
@@ -107,17 +109,17 @@ A product may diverge when its workload, domain, security, compatibility, or ope
 
 The Foundation should make the common path easy without making the uncommon-but-valid path impossible.
 
-## 5. Reference implementation strategy
+## 5. Initial executable implementation strategy
 
 The Foundation's identity is not a language or framework.
 
-The initial executable reference implementation is expected to use PHP with Laravel because it provides a mature application stack and strong idea-to-product speed. That choice must be captured as an implementation ADR when executable work begins and may evolve if evidence changes the trade-off.
+The initial executable implementation is expected to use PHP with Laravel because it provides a mature application stack and strong idea-to-product speed. That choice must be captured as an implementation ADR when executable work begins and may evolve if evidence changes the trade-off.
 
 Laravel is treated as a runtime/application framework, not as the definition of the Foundation.
 
 Domain/application semantics should avoid unnecessary framework coupling where that coupling would materially hinder testing, reuse, extraction, or future evolution. Conversely, framework features should be used directly in infrastructure/presentation code when they are fit; do not recreate Laravel behind custom wrappers for hypothetical portability.
 
-The primary relational reference engine is expected to be MariaDB. The architecture must avoid unnecessary MariaDB lock-in. PostgreSQL or another engine may be added when a real consumer or capability warrants it. Official support for an engine requires real CI/compatibility evidence; architectural portability does not equal support for every database.
+The primary relational implementation engine is expected to be MariaDB. The architecture must avoid unnecessary MariaDB lock-in. PostgreSQL or another engine may be added when a real consumer or capability warrants it. Official support for an engine requires real CI/compatibility evidence; architectural portability does not equal support for every database.
 
 ## 6. Architecture model
 
@@ -195,6 +197,29 @@ Rules:
 - module internals remain private unless intentionally published;
 - modules may use framework facilities inside Infrastructure/Presentation;
 - internal modules stay internal until extraction earns its cost.
+
+### 8.1 Consumption and packaging boundary
+
+The Foundation is intended to be consumed as shared, versioned implementation rather than permanently copied into each product.
+
+The default product relationship is:
+
+```text
+thin product/application shell
+  + versioned Foundation Core
+  + selected reusable Foundation modules
+  + product-local modules/domain behavior
+```
+
+An unmanaged long-lived copy or fork of shared Foundation runtime code is not the default reuse mechanism because it causes fixes, security changes, and lifecycle improvements to diverge across products.
+
+The exact packaging/layout for the initial PHP/Laravel implementation is an implementation decision that must be captured in an ADR before executable coupling. It must provide a deliberate version/update path and must be proven with a separate minimal consumer.
+
+An internal module boundary does **not** require an independent package. Keep Core and Modules together while that is cheaper and clearer. Extract a module into an independently versioned package/repository only when real consumers, lifecycle cadence, ownership, or compatibility needs make that boundary valuable.
+
+Product-specific capabilities should begin in the product when they are not yet proven Foundation concerns. Design a clean local boundary when future reuse is credible and cheap; promote only after real consumer convergence.
+
+See [Consumption and packaging](docs/architecture/consumption-and-packaging.md).
 
 ## 9. Composition and integration
 
@@ -355,7 +380,7 @@ Conventions such as `llms.txt` may be implemented as adapters if useful, but no 
 
 Lifecycle safety is a first-class architectural concern.
 
-Published artifacts/modules/distributions should have explicit version and compatibility semantics.
+Published Foundation artifacts/modules/distributions and consumer-facing Foundation dependencies should have explicit version and compatibility semantics.
 
 Lifecycle changes must consider:
 
@@ -374,6 +399,8 @@ Lifecycle changes must consider:
 Do not build one universal updater merely because lifecycle concerns are shared. Standardize the contract first; extract common updater/installer implementation only after multiple real consumers converge.
 
 Breaking public/module contracts require explicit version evolution. Persisted asynchronous messages/events must remain interpretable for their required lifetime.
+
+A product upgrading its Foundation version is a lifecycle operation: compatibility, configuration, module versions, migrations, and recovery implications must be knowable before activation. Foundation updates must not depend on manually re-copying shared source into every product.
 
 ## 18. Compatibility policy
 
@@ -477,7 +504,7 @@ Do not attempt combinatorial testing of every hypothetical module combination.
 
 ## 25. Distribution model
 
-A Distribution is a curated composition of the Foundation plus modules for a product class.
+A Distribution is a curated consumer composition of the versioned Foundation plus selected modules for a product class.
 
 Examples may eventually include:
 
@@ -487,9 +514,9 @@ Examples may eventually include:
 - API/headless;
 - future specialized products.
 
-Distributions are optional paved roads, not constraints on products.
+Distributions are optional paved roads, not constraints on products, and should consume the Foundation rather than become permanent source forks of it.
 
-The first proving distribution is expected to be a lightweight content/CMS use case because it exercises modules, theme/content separation, SEO, AI readability, admin, media, lifecycle, and deployment without requiring speculative enterprise infrastructure.
+The first real proving distribution is expected to be a lightweight content/CMS use case because it exercises modules, theme/content separation, SEO, AI readability, admin, media, lifecycle, and deployment without requiring speculative enterprise infrastructure.
 
 ## 26. Development/evolution rule
 
@@ -499,15 +526,17 @@ For every proposed capability:
 2. discover reusable native/existing solutions;
 3. choose the smallest implementation that satisfies current needs;
 4. identify only credible future variation that materially affects today's boundary;
-5. implement and verify;
-6. observe real second/third consumers before extraction;
-7. promote to shared package/service only when evidence justifies it.
+5. implement and verify at the smallest correct ownership level;
+6. when behavior starts product-local, observe a real additional consumer before promoting it into the Foundation;
+7. observe real second/third consumers before independent package/service extraction;
+8. promote only when shared ownership/versioning reduces total delivery/maintenance risk and cost.
 
 ## 27. Source-of-truth model
 
 | Truth | Owner |
 | --- | --- |
 | project mission, durable principles, non-goals | `MASTER-SPEC.md` |
+| generic cross-project AChWorks contracts/governance | `AChWorks/platform` |
 | architecture and engineering rules | `docs/` |
 | current work/priority/dependencies | GitHub Issues/Milestones/Projects when used |
 | lasting architecture decisions | `docs/decisions/` ADRs |
@@ -524,8 +553,9 @@ Do not duplicate live work state into docs.
 The Foundation is successful when:
 
 - a new product can start quickly without redesigning common application architecture;
+- a product can consume and deliberately upgrade the shared Foundation without unmanaged permanent source-copy divergence;
 - unused modules/infrastructure remain absent;
-- modules compose without knowledge of unrelated modules;
+- modules compose without knowledge of unrelated modules and can remain internal until independent packaging is economically justified;
 - AI/human interfaces reuse the same application capabilities;
 - a technology/provider/database can evolve at a credible boundary without rewriting unrelated domain logic;
 - lifecycle/update/upgrade remains safe and recoverable;
