@@ -12,6 +12,7 @@ It is intentionally **not** a new framework, mandatory monorepo, mandatory datab
 
 - [MASTER-SPEC.md](MASTER-SPEC.md) — project mission, durable principles, boundaries, non-goals, lifecycle expectations, and success criteria.
 - [docs/PROJECT-MAP.md](docs/PROJECT-MAP.md) — where each kind of durable project truth lives.
+- [achworks.yaml](achworks.yaml) — machine-readable Foundation identity/capability metadata for AChWorks discovery; not a live backlog/runtime-state store.
 
 ### Architecture
 
