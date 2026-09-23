@@ -58,3 +58,11 @@ reuse -> configure -> extend -> adapt -> extract -> replace/build when justified
 ```
 
 Build the smallest correct thing today while preserving credible paths for tomorrow.
+
+## AChWorks ecosystem relationship
+
+`AChWorks/platform` is the ecosystem-level engineering governance/discovery/intake layer. This repository is an executable Foundation owned independently from Platform.
+
+Suitable products may consume the versioned Application Foundation Core and reusable Modules, while keeping their own product/domain behavior, Issues, PRs, CI, releases, deployment truth, and runtime state.
+
+Platform generic contracts remain authoritative at the cross-project level; this Foundation specializes them for application products. Platform is not a runtime dependency of the Foundation.
