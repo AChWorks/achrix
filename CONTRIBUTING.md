@@ -14,7 +14,8 @@
 2. Follow the Project Map to the narrowest relevant architecture/engineering document.
 3. Check the current Issue/PR state.
 4. Inspect existing code/capabilities before creating a parallel mechanism.
-5. Confirm whether the need belongs in Core, an internal Module, an adapter, a package, or a separate service.
+5. Confirm whether the need belongs in Foundation Core, a reusable internal Foundation Module, a product-local Module, an adapter, an independently versioned package, or a separate service.
+6. For changes that affect how products consume shared Foundation code, read `docs/architecture/consumption-and-packaging.md` and preserve the supported version/update boundary.
 
 ## Definition of done
 
