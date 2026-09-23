@@ -1,6 +1,6 @@
 # AChWorks Application Foundation
 
-Reusable, AI-first application foundation for building evolvable web-connected products with a minimal core and composable modules.
+Executable, reusable, versioned, AI-first application foundation for building evolvable web-connected products with a minimal Core and composable Modules.
 
 The Foundation is designed to reduce repeated engineering decisions while keeping product logic and future technology choices open.
 
@@ -18,6 +18,7 @@ It is intentionally **not** a new framework, mandatory monorepo, mandatory datab
 - [Architecture overview](docs/architecture/overview.md)
 - [Module model](docs/architecture/module-model.md)
 - [Contracts and interfaces](docs/architecture/contracts-and-interfaces.md)
+- [Consumption and packaging](docs/architecture/consumption-and-packaging.md) — how products consume/upgrade shared Foundation code without permanent copy divergence.
 
 ### Engineering principles
 
@@ -46,7 +47,7 @@ It is intentionally **not** a new framework, mandatory monorepo, mandatory datab
 
 ## Current state
 
-The repository currently owns the durable project foundation and development rules. Executable runtime code should be introduced only through the next accepted implementation outcome rather than being invented speculatively during bootstrap.
+The repository currently owns the durable Application Foundation intent, architecture, and development rules. The next accepted implementation outcome introduces the first executable/versioned Foundation Core and proves a real consumer boundary rather than creating a reference-only application or starter copy.
 
 GitHub Issues own current actionable work. Documentation must not mirror live task status.
 
