@@ -113,11 +113,22 @@ OrderPaid
   -> Analytics listener (if installed)
 ```
 
-## Package extraction
+## Product-local promotion and package extraction
 
-An internal module may become a reusable package only after real consumers prove sufficiently stable shared semantics/mechanics.
+A capability that first appears in one product should remain product-local unless it is already a proven Foundation concern.
 
-A second consumer triggers comparison, not automatic extraction.
+If a future reuse path is credible and cheap, keep its ownership/Application boundary clean without creating a premature package.
+
+When another real consumer needs similar behavior:
+
+1. compare business semantics, lifecycle, data ownership, compatibility, and provider variation;
+2. keep separate implementations when the needs differ materially;
+3. promote into a reusable Foundation Module only when shared ownership lowers total cost/risk;
+4. extract that Module into an independently versioned package/repository only when independent distribution/versioning/ownership adds further value.
+
+A second consumer triggers comparison, not automatic promotion or package extraction.
+
+An internal Foundation Module may remain in the same repository and package indefinitely.
 
 ## Plugin system
 
