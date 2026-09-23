@@ -17,6 +17,8 @@ Two failure modes must be avoided:
 
 Create `AChWorks/application-foundation` as an executable, reusable, versioned application implementation Foundation that suitable products can consume while keeping product/domain-specific behavior in their own repositories.
 
+`AChWorks/platform` remains the ecosystem governance/discovery/contract layer and is not a runtime dependency of this Foundation.
+
 Use these boundaries:
 
 - modular monolith by default;
