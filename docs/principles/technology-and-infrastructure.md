@@ -4,19 +4,19 @@
 
 Technology is an implementation choice, not Foundation identity.
 
-The reference runtime may use PHP/Laravel today and another component/runtime may be introduced tomorrow without changing the Foundation mission.
+The initial executable implementation may use PHP/Laravel today and another component/runtime may be introduced tomorrow without changing the Foundation mission.
 
-## Reference path
+## Initial implementation path
 
 Initial intended executable path:
 
 - PHP/Laravel;
-- relational database, with MariaDB as the primary reference target;
+- relational database, with MariaDB as the primary implementation target;
 - server-rendered web where applicable;
 - minimal JavaScript by default;
 - no mandatory Redis, queue worker, Node production runtime, container orchestration, or search cluster.
 
-SQLite is not part of the reference path unless an explicit future architecture decision changes that.
+SQLite is not part of the primary implementation/test path unless an explicit future architecture decision changes that.
 
 ## Database support
 

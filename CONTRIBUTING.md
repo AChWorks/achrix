@@ -3,9 +3,9 @@
 ## Workflow
 
 - Start from current `main`.
-- Work in a focused branch when implementation work begins.
+- Work in a focused branch for tracked changes that alter durable project intent, architecture, implementation, CI, lifecycle, metadata, or repository working rules.
 - Keep one meaningful outcome reviewable together; do not split work merely by implementation layer.
-- Use PRs for substantive code once the executable foundation exists.
+- Use Pull Requests as the normal integration path for those tracked changes; validation depth should match the changed surface. Issue #1 will add executable CI and the strongest enforceable repository policy supported by the current GitHub plan.
 - Link PRs to the Issue/outcome they implement when a durable work item exists.
 
 ## Before implementation
