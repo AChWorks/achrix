@@ -15,7 +15,9 @@ Two failure modes must be avoided:
 
 ## Decision
 
-Create `AChWorks/application-foundation` as an executable, reusable, versioned application implementation Foundation that suitable products can consume while keeping product/domain-specific behavior in their own repositories.
+Create `AChWorks/achrix`, branded **AChrix**, as an executable, reusable, versioned application implementation Foundation that suitable products can consume while keeping product/domain-specific behavior in their own repositories.
+
+`AChrix` is the project/technology name; Application Foundation remains the architectural role.
 
 `AChWorks/platform` remains the ecosystem governance/discovery/contract layer and is not a runtime dependency of this Foundation.
 
