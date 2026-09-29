@@ -64,7 +64,7 @@ Build the smallest correct thing today while preserving credible paths for tomor
 
 ## AChWorks ecosystem relationship
 
-`AChWorks/platform` is the ecosystem-level engineering governance/discovery/intake layer. This repository is AChrix, the executable Application Foundation owned independently from Platform.
+**Koinon** (`AChWorks/koinon`) is the ecosystem-level governance/discovery/intake layer. This repository is AChrix, the executable Application Foundation owned independently from Platform.
 
 Suitable products may consume the versioned Application Foundation Core and reusable Modules, while keeping their own product/domain behavior, Issues, PRs, CI, releases, deployment truth, and runtime state.
 

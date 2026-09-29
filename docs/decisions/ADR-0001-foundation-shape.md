@@ -19,7 +19,7 @@ Create `AChWorks/achrix`, branded **AChrix**, as an executable, reusable, versio
 
 `AChrix` is the project/technology name; Application Foundation remains the architectural role.
 
-`AChWorks/platform` remains the ecosystem governance/discovery/contract layer and is not a runtime dependency of this Foundation.
+**Koinon** (`AChWorks/koinon`) remains the ecosystem governance/discovery/contract layer and is not a runtime dependency of this Foundation.
 
 Use these boundaries:
 

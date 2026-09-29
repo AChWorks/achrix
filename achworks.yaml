@@ -33,6 +33,6 @@ spec:
   extensions:
     foundation:
       family: application-online
-      ecosystemPlatform: AChWorks/platform
+      ecosystemPlatform: AChWorks/koinon
       consumption: versioned-executable
       mandatoryAtEcosystemLevel: false
