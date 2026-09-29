@@ -4,17 +4,17 @@ kind: Foundation
 metadata:
   name: achrix
   title: AChrix
-  description: AChrix is the executable, reusable, versioned AChWorks Application Foundation for suitable web-connected and online products.
+  description: AChrix is an executable, reusable, versioned AChWorks Foundation for web-connected applications.
 
 spec:
-  type: application-foundation
+  type: application-base
   lifecycle: active
-  system: achworks-application-ecosystem
+  system: achrix
   ownership: AChWorks
 
   capabilities:
     provides:
-      - application-foundation
+      - versioned-application-base
       - application-module-composition
       - application-capability-contracts
     consumes:
@@ -32,7 +32,7 @@ spec:
 
   extensions:
     foundation:
-      family: application-online
+      family: web-connected-applications
       koinon: AChWorks/koinon
       consumption: versioned-executable
       mandatoryAtEcosystemLevel: false
