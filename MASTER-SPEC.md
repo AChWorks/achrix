@@ -1,12 +1,14 @@
-# AChWorks Application Foundation — Master Specification
+# AChrix — AChWorks Application Foundation — Master Specification
 
 Status: Canonical project specification
-Repository: `AChWorks/application-foundation`
-Scope: Reusable application foundation for present and future AChWorks products
+Repository: `AChWorks/achrix`
+Scope: AChrix, the reusable application foundation for present and future AChWorks products
 
 ## 1. Mission
 
-AChWorks Application Foundation exists as an executable, reusable, versioned application base that shortens the path from an idea to a maintainable production application without forcing every suitable new product to redesign or reimplement the same engineering foundations.
+AChrix is the AChWorks Application Foundation. It exists as an executable, reusable, versioned application base that shortens the path from an idea to a maintainable production application without forcing every suitable new product to redesign or reimplement the same engineering foundations.
+
+`AChrix` is the stable project/technology name; **Application Foundation** is its architectural role. The official pronunciation is `ATCH-riks` (Persian: `اَچ‌ریکس`).
 
 The Foundation should make common application concerns predictable, reusable, AI-readable, secure, lifecycle-safe, and evolvable while leaving product/domain logic free to differ.
 
