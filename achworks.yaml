@@ -2,9 +2,9 @@ schemaVersion: achworks.dev/v1alpha1
 kind: Foundation
 
 metadata:
-  name: application-foundation
-  title: AChWorks Application Foundation
-  description: Executable, reusable, versioned application Foundation for suitable web-connected and online AChWorks products.
+  name: achrix
+  title: AChrix
+  description: AChrix is the executable, reusable, versioned AChWorks Application Foundation for suitable web-connected and online products.
 
 spec:
   type: application-foundation
@@ -27,8 +27,8 @@ spec:
     path: docs/
 
   source:
-    repository: AChWorks/application-foundation
-    url: https://github.com/AChWorks/application-foundation
+    repository: AChWorks/achrix
+    url: https://github.com/AChWorks/achrix
 
   extensions:
     foundation:
