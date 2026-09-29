@@ -14,7 +14,7 @@ The Foundation should make common application concerns predictable, reusable, AI
 
 The intended product range is deliberately broad: content sites, SaaS products, marketplaces, commerce systems, payment/financial products, media platforms, APIs, automation products, and future web-connected applications.
 
-Within the AChWorks ecosystem, **Koinon** (`AChWorks/koinon`) owns cross-project governance, discovery, intake, and generic contracts. This repository owns the executable Application Foundation implementation, Core/Module boundaries, packaging/versioning, releases, and application-specific specialization. Platform is not a runtime dependency of the Foundation.
+Within the AChWorks ecosystem, **Koinon** (`AChWorks/koinon`) owns cross-project governance, discovery, intake, and generic contracts. This repository owns the executable Application Foundation implementation, Core/Module boundaries, packaging/versioning, releases, and application-specific specialization. Koinon is not a runtime dependency of the Foundation.
 
 ## 2. Desired outcome
 
