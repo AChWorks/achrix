@@ -2,7 +2,7 @@
 
 ## Purpose
 
-AChWorks Application Foundation is shared executable software, not only architecture guidance or a starter repository.
+AChrix, the AChWorks Application Foundation, is shared executable software, not only architecture guidance or a starter repository.
 
 A suitable product should be able to consume Foundation behavior through an explicit versioned boundary, upgrade that boundary deliberately, and keep product/domain-specific behavior outside the Foundation.
 
