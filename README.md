@@ -1,8 +1,10 @@
-# AChWorks Application Foundation
+# AChrix
 
-Executable, reusable, versioned, AI-first application foundation for building evolvable web-connected products with a minimal Core and composable Modules.
+**AChrix** (pronounced `ATCH-riks`; Persian: `اَچ‌ریکس`) is the AChWorks Application Foundation: an executable, reusable, versioned, AI-first base for building evolvable web-connected products with a minimal Core and composable Modules.
 
-The Foundation is designed to reduce repeated engineering decisions while keeping product logic and future technology choices open.
+`AChrix` is the project and technology name; **Application Foundation** remains its architectural role.
+
+AChrix is designed to reduce repeated engineering decisions while keeping product logic and future technology choices open.
 
 It is intentionally **not** a new framework, mandatory monorepo, mandatory database, plugin marketplace, or microservice platform.
 
@@ -62,7 +64,7 @@ Build the smallest correct thing today while preserving credible paths for tomor
 
 ## AChWorks ecosystem relationship
 
-`AChWorks/platform` is the ecosystem-level engineering governance/discovery/intake layer. This repository is an executable Foundation owned independently from Platform.
+`AChWorks/platform` is the ecosystem-level engineering governance/discovery/intake layer. This repository is AChrix, the executable Application Foundation owned independently from Platform.
 
 Suitable products may consume the versioned Application Foundation Core and reusable Modules, while keeping their own product/domain behavior, Issues, PRs, CI, releases, deployment truth, and runtime state.
 
