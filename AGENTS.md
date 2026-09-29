@@ -36,7 +36,7 @@ Do not rely on chat history as project truth.
 14. Keep logs and audit semantics distinct.
 15. Shared Foundation runtime/Core must have a supported versioned consumer path; do not use permanent unmanaged copies/forks as the normal reuse mechanism.
 16. Keep product-specific capabilities product-local until real consumers justify promotion into Foundation ownership.
-17. Generic cross-project contracts remain owned by `AChWorks/platform`; specialize them here for applications without creating competing generic Platform policy.
+17. Generic cross-project contracts remain owned by `AChWorks/koinon`; specialize them here for applications without creating competing generic Platform policy.
 18. Never commit secrets, credentials, tokens, private keys, production data, or restricted artifacts.
 
 ## Implementation shape

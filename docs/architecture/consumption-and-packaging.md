@@ -26,7 +26,7 @@ Product repository
 
 The product remains independently owned. It keeps its own Issues, PRs, CI, releases, runtime/deployment truth, secrets, and domain-specific architecture.
 
-`AChWorks/platform` is an ecosystem governance/contract/discovery source and is not a product runtime dependency.
+**Koinon** (`AChWorks/koinon`) is an ecosystem governance/contract/discovery source and is not a product runtime dependency.
 
 ## Consumption guarantees
 
