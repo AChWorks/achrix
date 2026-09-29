@@ -1,4 +1,4 @@
-# ADR-0001 — Application Foundation Shape
+# ADR-0001 — AChrix Foundation Shape
 
 Status: Accepted
 
@@ -17,7 +17,7 @@ Two failure modes must be avoided:
 
 Create `AChWorks/achrix`, branded **AChrix**, as an executable, reusable, versioned application implementation Foundation that suitable products can consume while keeping product/domain-specific behavior in their own repositories.
 
-`AChrix` is the project/technology name; Application Foundation remains the architectural role.
+`AChrix` is the project/technology name; `Foundation` is the generic architectural category AChrix fulfills for web-connected applications.
 
 **Koinon** (`AChWorks/koinon`) remains the ecosystem governance/discovery/contract layer and is not a runtime dependency of this Foundation.
 

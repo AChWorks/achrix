@@ -1,8 +1,8 @@
-# Foundation Consumption and Packaging
+# AChrix Consumption and Packaging
 
 ## Purpose
 
-AChrix, the AChWorks Application Foundation, is shared executable software, not only architecture guidance or a starter repository.
+AChrix is shared executable software and an AChWorks Foundation for web-connected applications, not only architecture guidance or a starter repository.
 
 A suitable product should be able to consume Foundation behavior through an explicit versioned boundary, upgrade that boundary deliberately, and keep product/domain-specific behavior outside the Foundation.
 
@@ -17,9 +17,9 @@ Product repository
 |   +-- product configuration/composition
 |   +-- delivery/deployment ownership
 |
-+-- versioned Application Foundation Core
++-- versioned AChrix Core
 |
-+-- selected reusable Foundation Modules
++-- selected reusable AChrix Modules
 |
 +-- product-local Modules / domain behavior
 ```

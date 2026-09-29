@@ -1,8 +1,8 @@
 # AChrix
 
-**AChrix** (pronounced `ATCH-riks`; Persian: `اَچ‌ریکس`) is the AChWorks Application Foundation: an executable, reusable, versioned, AI-first base for building evolvable web-connected products with a minimal Core and composable Modules.
+**AChrix** (pronounced `ATCH-riks`; Persian: `اَچ‌ریکس`) is an executable, reusable, versioned, AI-first application base for building evolvable web-connected products with a minimal Core and composable Modules.
 
-`AChrix` is the project and technology name; **Application Foundation** remains its architectural role.
+`AChrix` is the project and technology name. Architecturally, AChrix is an AChWorks **Foundation** specialized for web-connected applications; `Foundation` is the generic architectural category, not a second product name.
 
 AChrix is designed to reduce repeated engineering decisions while keeping product logic and future technology choices open.
 
@@ -44,13 +44,13 @@ It is intentionally **not** a new framework, mandatory monorepo, mandatory datab
 ### Development
 
 - [Development roadmap](docs/development/roadmap.md)
-- [ADR-0001 — Foundation shape](docs/decisions/ADR-0001-foundation-shape.md)
+- [ADR-0001 — AChrix Foundation shape](docs/decisions/ADR-0001-foundation-shape.md)
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [AGENTS.md](AGENTS.md)
 
 ## Current state
 
-The repository currently owns the durable Application Foundation intent, architecture, and development rules. The next accepted implementation outcome introduces the first executable/versioned Foundation Core and proves a real consumer boundary rather than creating a reference-only application or starter copy.
+The repository currently owns the durable AChrix intent, architecture, and development rules. The next accepted implementation outcome introduces the first executable/versioned AChrix Core and proves a real consumer boundary rather than creating a reference-only application or starter copy.
 
 GitHub Issues own current actionable work. Documentation must not mirror live task status.
 
@@ -64,8 +64,8 @@ Build the smallest correct thing today while preserving credible paths for tomor
 
 ## AChWorks ecosystem relationship
 
-**Koinon** (`AChWorks/koinon`) is the ecosystem-level governance/discovery/intake layer. This repository is AChrix, the executable Application Foundation owned independently from Koinon.
+**Koinon** (`AChWorks/koinon`) is the ecosystem-level governance/discovery/intake layer. This repository is AChrix, an executable Foundation owned independently from Koinon.
 
-Suitable products may consume the versioned Application Foundation Core and reusable Modules, while keeping their own product/domain behavior, Issues, PRs, CI, releases, deployment truth, and runtime state.
+Suitable products may consume the versioned AChrix Core and reusable AChrix Modules, while keeping their own product/domain behavior, Issues, PRs, CI, releases, deployment truth, and runtime state.
 
 Koinon generic contracts remain authoritative at the cross-project level; this Foundation specializes them for application products. Koinon is not a runtime dependency of the Foundation.

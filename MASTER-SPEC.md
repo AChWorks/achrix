@@ -1,20 +1,20 @@
-# AChrix — AChWorks Application Foundation — Master Specification
+# AChrix — Master Specification
 
 Status: Canonical project specification
 Repository: `AChWorks/achrix`
-Scope: AChrix, the reusable application foundation for present and future AChWorks products
+Scope: AChrix, the reusable application base for suitable present and future AChWorks products
 
 ## 1. Mission
 
-AChrix is the AChWorks Application Foundation. It exists as an executable, reusable, versioned application base that shortens the path from an idea to a maintainable production application without forcing every suitable new product to redesign or reimplement the same engineering foundations.
+AChrix is an executable, reusable, versioned AChWorks Foundation specialized for web-connected applications. It shortens the path from an idea to a maintainable production application without forcing every suitable new product to redesign or reimplement the same engineering foundations.
 
-`AChrix` is the stable project/technology name; **Application Foundation** is its architectural role. The official pronunciation is `ATCH-riks` (Persian: `اَچ‌ریکس`).
+`AChrix` is the stable project/technology name. **Foundation** is the generic AChWorks architectural category that AChrix fulfills; it is not an alternate product name. The official pronunciation is `ATCH-riks` (Persian: `اَچ‌ریکس`).
 
 The Foundation should make common application concerns predictable, reusable, AI-readable, secure, lifecycle-safe, and evolvable while leaving product/domain logic free to differ.
 
 The intended product range is deliberately broad: content sites, SaaS products, marketplaces, commerce systems, payment/financial products, media platforms, APIs, automation products, and future web-connected applications.
 
-Within the AChWorks ecosystem, **Koinon** (`AChWorks/koinon`) owns cross-project governance, discovery, intake, and generic contracts. This repository owns the executable Application Foundation implementation, Core/Module boundaries, packaging/versioning, releases, and application-specific specialization. Koinon is not a runtime dependency of the Foundation.
+Within the AChWorks ecosystem, **Koinon** (`AChWorks/koinon`) owns cross-project governance, discovery, intake, and generic contracts. This repository owns AChrix's executable implementation, Core/Module boundaries, packaging/versioning, releases, and application-specific specialization. Koinon is not a runtime dependency of AChrix.
 
 ## 2. Desired outcome
 
