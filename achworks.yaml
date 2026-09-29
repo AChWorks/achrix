@@ -20,6 +20,8 @@ spec:
     consumes:
       - cross-project-engineering-standards
       - lifecycle-contract
+      - validation-evidence-contract
+      - external-effect-safety-contract
 
   documentation:
     path: docs/
