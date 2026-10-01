@@ -86,12 +86,12 @@ func TestUnsupportedDatabaseEncoding(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer p.Close()
-			var actual string
-			if err := p.QueryRow(ctx, "SHOW server_encoding").Scan(&actual); err != nil || actual != encoding {
-				t.Fatal(actual, err)
+			var actual, actualDatabase string
+			if err := p.QueryRow(ctx, "SELECT current_database(), current_setting('server_encoding')").Scan(&actualDatabase, &actual); err != nil || actualDatabase != name || actual != encoding {
+				t.Fatal(actualDatabase, actual, err)
 			}
-			if err := infrastructure.Migrate(ctx, p, infrastructure.Migrations()); err == nil {
-				t.Fatal("unsupported installation accepted")
+			if err := infrastructure.Migrate(ctx, p, infrastructure.Migrations()); err == nil || err.Error() != "unsupported database environment" {
+				t.Fatal("installation not rejected for encoding", err)
 			}
 			logger := diagnosis.New(io.Discard)
 			s, err := infrastructure.New(dsn, logger)
