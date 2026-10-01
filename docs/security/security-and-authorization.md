@@ -34,7 +34,7 @@ Security is enforced by implementation and review; scanners/WAFs/headers are sup
 - Security-sensitive concurrency/state transitions (session rotation/revocation, permission changes, password changes, recovery, lifecycle updates) define atomicity and stale/replay behavior explicitly.
 - HIGH/CRITICAL changes to credentials, sessions, authorization, sensitive data, untrusted file/network boundaries or update trust require independent security/correctness review and discriminating tests. A green static/vulnerability scanner never waives code review.
 
-Use OWASP guidance such as [Secure Code Review](https://cheatsheetseries.owasp.org/cheatsheets/Secure_Code_Review_Cheat_Sheet.html), [Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html), [CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html) and [Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) as current implementation references where applicable; verify current recommendations when coupling security-sensitive code.
+Use OWASP guidance such as [Secure Code Review](https://cheatsheetseries.owasp.org/cheatsheets/Secure_Code_Review_Cheat_Sheet.html), [Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html), [CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html), [Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html), [HTTP Security Headers](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html) and [Logging](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html) as current implementation references where applicable; verify current recommendations when coupling security-sensitive code.
 
 ## Product accounts and optional SSO
 
@@ -42,7 +42,9 @@ Products remain independent owners/operators of their account namespace/data and
 
 Identity may own generic local account status, credential/session lifecycle and external-identity mapping where composed. Each product/domain still owns product-specific profile semantics, domain data, permission grants and release boundary. Reusing Foundation identity capabilities does not imply one shared user table or one central AChrix runtime.
 
-For first-party browser administration, the starting authentication direction is an **opaque server-side session**, not a long-lived bearer/JWT credential stored in browser Web Storage. Generate high-entropy session identifiers, keep server-side revocation/expiry, rotate at authentication/privilege-sensitive transitions as required, and exchange the session only through HTTPS cookies with explicit `Secure`, `HttpOnly` and deliberate `SameSite`/host/path scope. Do not accept session identifiers through URLs. State-changing browser requests also use explicit CSRF defense. Exact schema, hash-at-rest strategy, expiry/concurrency policy and cookie semantics are owned and tested by the Identity implementation.
+For first-party browser administration, the starting authentication direction is an **opaque server-side session**, not a long-lived bearer/JWT credential stored in browser Web Storage. Generate high-entropy session identifiers, keep server-side revocation/expiry, rotate at authentication/privilege-sensitive transitions as required, and exchange the session only through HTTPS cookies with explicit `Secure`, `HttpOnly` and deliberate `SameSite`/host/path scope. Prefer host-only `__Host-` cookie semantics when the deployment does not need deliberate cross-subdomain sharing. Do not accept session identifiers through URLs.
+
+For this stateful session model, start with a synchronizer-token CSRF design bound to the session and add Origin/Referer validation where appropriate as defense in depth. SameSite is useful but is not the sole CSRF control. Exact schema, hash-at-rest strategy, expiry/concurrency policy and cookie semantics are owned and tested by the Identity implementation.
 
 For new local password storage, Argon2id is the preferred starting algorithm unless a documented deployment/compliance constraint requires another maintained option. Choose and record current parameters from maintained guidance at implementation time, keep per-credential algorithm/parameter identity so stronger settings can migrate, and rehash deliberately after successful verification when policy advances. Never use fast general-purpose hashes as password storage.
 
@@ -87,6 +89,20 @@ Secrets must not live in:
 
 Use the approved runtime/secret mechanism appropriate to the deployment.
 
+## Browser/web boundary
+
+First-party Admin/browser surfaces are same-origin by default. Do not enable broad CORS merely because an API exists; introduce explicit trusted origins/methods/credentials only for a real browser cross-origin consumer.
+
+Render untrusted content with context-appropriate escaping and keep the browser defense-in-depth policy appropriate to the actual surface:
+
+- correct `Content-Type` and `X-Content-Type-Options: nosniff`;
+- Content Security Policy, including framing control (for example `frame-ancestors`) for interactive Admin pages;
+- an explicit referrer policy;
+- `Cache-Control: no-store` or another deliberate private/sensitive policy for authenticated sensitive responses;
+- no obsolete `X-XSS-Protection` dependence or technology-disclosure headers as a security strategy.
+
+HSTS belongs to the supported HTTPS/deployment profile because an incorrect long-lived domain policy can lock out legitimate clients. Enable it deliberately where TLS/domain/certificate operations support it rather than hardcoding a universal preload policy in Core.
+
 ## External integrations
 
 Provider credentials belong to the narrowest integration boundary.
@@ -122,9 +138,9 @@ Do not add abuse infrastructure to private/low-risk paths without evidence, but 
 
 ## Audit
 
-Sensitive/admin/financial/security actions may require a durable audit trail.
+Sensitive/admin/financial/security actions may require a durable audit trail. The reusable [Audit Module](../architecture/module-model.md#audit) owns generic accountability-record mechanics when composed; each product/domain still decides which actions require audit and the business classification of their payload.
 
-Audit should capture enough to answer who/what/when/target/outcome/authority without storing secrets or excessive sensitive payloads.
+Audit should capture enough to answer who/what/when/target/outcome/authority without storing secrets or excessive sensitive payloads. Critical actions define whether the audit record must share commit semantics with domain state or how non-atomic outcomes are durably reconciled.
 
 Operational debug logs are not the audit source of truth. Repetitive invalid/denied traffic is not automatically an audit event; retain only the accountable/security evidence the product actually needs and bound attacker-controlled event volume.
 

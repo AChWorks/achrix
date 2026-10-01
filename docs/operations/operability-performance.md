@@ -4,7 +4,9 @@
 
 Simple applications run without mandatory auxiliary services. [ADR-0003](../decisions/ADR-0003-postgresql-and-optional-infrastructure.md) owns infrastructure defaults; introduce them for actual requirements.
 
-Separate business configuration, runtime/deployment configuration, secrets and domain data. Configuration has an owner, meaningful defaults, validation and explicit environment behavior. Shutdown is graceful; readiness probes only dependencies necessary for local readiness, not every external service synchronously.
+Separate business configuration, runtime/deployment configuration, secrets and domain data. Configuration has an owner, meaningful defaults, validation and explicit environment behavior. The **product/composition boundary owns configuration sources and precedence**; reusable Modules receive typed validated configuration and should not read environment variables, process-global config or secret stores directly. Module-owned business settings remain Module data/contracts rather than a universal settings table.
+
+Shutdown is graceful. Readiness probes only dependencies necessary for local readiness, not every external service synchronously. A Module readiness check must be side-effect-free, bounded and cheap enough for repeated probes; shared infrastructure should not be pinged redundantly once per Module merely because several Modules use it. Deep diagnostics belong to explicit operator/debug actions rather than health-probe fan-out.
 
 ## Supported environment
 
@@ -45,7 +47,24 @@ Releases declare maintained lines and upgrade/retirement paths. Older lines need
 
 ## Diagnosis and audit
 
-Core, Modules, adapters and product behavior use a common structured diagnostic path under the application's configuration. Attach time, severity, component identity and useful request/job/operation correlation; add release/version and trace context where they improve diagnosis. Propagate relevant context across boundaries instead of creating unrelated per-Module logs. Prefer the existing standard-library logging default in ADR-0003 over another logging framework.
+Core, Modules, adapters and product behavior use a common structured diagnostic path under the application's configuration. Prefer Go `log/slog` and its standard levels rather than another logging framework or a custom severity taxonomy.
+
+Use these meanings consistently:
+
+| Level | Use |
+| --- | --- |
+| `DEBUG` | bounded diagnostic detail useful during investigation; normally filtered from production defaults |
+| `INFO` | expected lifecycle/operational milestones worth retaining, such as a successful activation/readiness transition |
+| `WARN` | abnormal/degraded but recoverable condition that deserves operator attention; not routine validation/permission-denied traffic |
+| `ERROR` | an intended operation/lifecycle action failed and operator investigation may be required |
+
+Do not add default `TRACE`/`FATAL` levels merely for convention. A library/Module returns failure; product/main owns process termination. When tracing is actually needed, use the trace facility rather than inventing trace-level log spam.
+
+The product owns the `slog.Handler`, output and minimum threshold. The normal production default is Info or stricter; controlled runtime lowering may use a handler/LevelVar-style mechanism when the operating model needs it. Core/Modules do not mutate a process-global log level behind the product's back.
+
+Attach time, component identity and useful request/job/operation correlation; add release/version and trace context where they improve diagnosis. Correlation identities are bounded and trusted: generate a server-side request identity by default, use durable operation/job identity for long work, and accept propagated trace context only through the selected standard/trust boundary. Do not use arbitrary user strings as unbounded field names or cardinality dimensions.
+
+Propagate relevant context across boundaries instead of creating unrelated per-Module logs. Log the failure at the narrowest meaningful owner; another layer emits a second record only when it adds materially distinct transport/ownership evidence. Avoid the common “database error + service error + HTTP error” duplication when all three records say the same thing.
 
 Keep useful root-cause evidence in restricted diagnostics; public responses expose safe actionable errors and correlation under [Contracts](../architecture/contracts-and-interfaces.md#errors-concurrency-and-effects). Never log credentials, keys, tokens or unnecessary sensitive payloads. Model/provider telemetry must not retain sensitive prompts/responses by default.
 
