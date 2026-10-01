@@ -1,0 +1,111 @@
+# SPDX-License-Identifier: MPL-2.0
+name: AChrix release preparation
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Unpublished developer version (v0.MINOR.PATCH)
+        required: true
+        type: string
+permissions: {}
+concurrency:
+  group: achrix-release-preparation
+  cancel-in-progress: false
+jobs:
+  reject-untrusted-source:
+    if: github.repository != 'AChWorks/achrix' || github.ref != 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - run: |
+          echo "::error::Release preparation requires AChWorks/achrix main."
+          exit 1
+  prepare:
+    if: github.repository == 'AChWorks/achrix' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Check verifier capabilities
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh attestation verify --help > "$RUNNER_TEMP/attestation-verify-help"
+          for flag in --bundle --repo --signer-workflow --source-ref --source-digest --deny-self-hosted-runners --predicate-type; do
+            grep -Fq -- "$flag" "$RUNNER_TEMP/attestation-verify-help"
+          done
+      - name: Gate source and export matching tracked bytes
+        run: python3 scripts/prepare_release.py "$RELEASE_VERSION" "$RUNNER_TEMP/achrix-release"
+      - name: Inventory the exact exported source
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          path: ${{ runner.temp }}/achrix-release/source/achrix-${{ inputs.version }}
+          format: spdx-json
+          output-file: ${{ runner.temp }}/achrix-release/assets/achrix-${{ inputs.version }}-source.spdx.json
+          syft-version: v1.52.0
+          upload-artifact: false
+          upload-release-assets: false
+          dependency-snapshot: false
+      - name: Hash source, inventory and release identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/achrix-release/assets"
+          sha256sum "achrix-$RELEASE_VERSION-source.tar.gz" "achrix-$RELEASE_VERSION-source.spdx.json" release.json > SHA256SUMS
+      - name: Attest all release subjects
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-checksums: ${{ runner.temp }}/achrix-release/assets/SHA256SUMS
+          create-storage-record: false
+      - name: Attest the archive source inventory
+        id: sbom
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/achrix-release/assets/achrix-${{ inputs.version }}-source.tar.gz
+          sbom-path: ${{ runner.temp }}/achrix-release/assets/achrix-${{ inputs.version }}-source.spdx.json
+          create-storage-record: false
+      - name: Verify signed subjects and final source freshness
+        shell: bash
+        env:
+          PROVENANCE_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+          SBOM_BUNDLE: ${{ steps.sbom.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/achrix-release/assets"
+          cp "$PROVENANCE_BUNDLE" provenance.sigstore.json
+          cp "$SBOM_BUNDLE" sbom.sigstore.json
+          sha256sum --check SHA256SUMS
+          policy=(
+            --repo AChWorks/achrix
+            --signer-workflow AChWorks/achrix/.github/workflows/release.yml
+            --source-ref refs/heads/main
+            --source-digest "$GITHUB_SHA"
+            --deny-self-hosted-runners
+          )
+          for subject in "achrix-$RELEASE_VERSION-source.tar.gz" "achrix-$RELEASE_VERSION-source.spdx.json" release.json; do
+            gh attestation verify "$subject" --bundle provenance.sigstore.json "${policy[@]}"
+          done
+          gh attestation verify "achrix-$RELEASE_VERSION-source.tar.gz" --bundle sbom.sigstore.json "${policy[@]}" --predicate-type https://spdx.dev/Document/v2.3
+          cd "$GITHUB_WORKSPACE"
+          python3 scripts/prepare_release.py "$RELEASE_VERSION" --check-only
+      - name: Upload verified preparation for Master publication
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: achrix-${{ inputs.version }}-release
+          path: ${{ runner.temp }}/achrix-release/assets/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
