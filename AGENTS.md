@@ -6,12 +6,10 @@ Writable repository scope comes only from the current explicit assignment; this 
 
 Start with README and [Project Map](docs/PROJECT-MAP.md), then current main, the relevant Issue/PR and its execution gate. Load only decision-relevant documents. [MASTER-SPEC](docs/MASTER-SPEC.md) owns intent; topic docs own rules; active ADRs own choices; Git/GitHub/CI own evidence. Chat history is not project truth.
 
-Before the first executable baseline, honor [Issue #1](https://github.com/AChWorks/achrix/issues/1)'s owner start gate; public visibility or documentation integration does not itself authorize code.
-
 ## Implementation
 
 - Use accepted Go/PostgreSQL defaults and ADR-0005 consumption shape. Verify supported versions/API mechanics before coupling code; use real PostgreSQL rather than a SQLite test shortcut.
-- Follow [Module ownership](docs/architecture/module-model.md) and [Consumption](docs/architecture/consumption-and-packaging.md). Keep Core minimal, product semantics local and implementation internals private; cross-module writes go through authorized Application contracts.
+- Follow [Module ownership](docs/architecture/module-model.md) and [Consumption](docs/architecture/consumption-and-packaging.md). Keep Core minimal. When current evidence makes a coherent capability more likely than not to recur across product classes, establish a reusable AChrix Module boundary before product implementation; keep product-specific semantics local. Accepted Module ownership does not justify empty packages or separate repositories/services, and cross-module writes go through authorized Application contracts.
 - [Contracts](docs/architecture/contracts-and-interfaces.md) and [Security](docs/security/security-and-authorization.md) govern all human/machine entry points. AI never bypasses permissions or invents consent.
 - [Engineering principles](docs/principles/engineering-principles.md) govern reuse, dependencies and extraction. Do not create speculative wrappers, empty layers, packages, services or optional infrastructure.
 - Honor [Data](docs/data/data-and-persistence.md) and [Lifecycle](docs/lifecycle/lifecycle-and-compatibility.md) for state, effects, compatibility and recovery; never equate reverting source with reversing data.
