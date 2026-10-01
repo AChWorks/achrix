@@ -20,11 +20,31 @@ Do not encode business authorization only as UI visibility or role-name conditio
 
 Roles may be convenient permission bundles; policies/capabilities own enforcement semantics.
 
+## Secure implementation discipline
+
+Security is enforced by implementation and review; scanners/WAFs/headers are supporting controls, not substitutes for correct code.
+
+- Validate and canonicalize untrusted input at the owning ingress while preserving domain invariants at deeper boundaries. Bound body, field, collection, recursion, decompression and upload work before expensive processing.
+- Use parameterized database APIs and owned query code. Never construct SQL or authorization/resource identifiers by concatenating untrusted values.
+- Encode/escape output for its actual sink (HTML/attribute/URL/JSON/etc.); do not treat input sanitization as universal XSS prevention. Keep templates/renderers responsible for safe presentation.
+- Treat file paths/object keys, redirects and outbound URLs as security boundaries. Generate storage identities independently from user filenames, prevent traversal, and apply explicit SSRF/scheme/host/redirect policy to server-side fetches.
+- Browser state-changing operations use explicit CSRF protection appropriate to the session model; SameSite is defense in depth rather than the sole CSRF control.
+- Never invent cryptographic/password/token protocols. Use maintained libraries and current recognized guidance, preserve algorithm/version parameters with stored credentials where needed, and design migration/rehash paths before parameters become stale.
+- Expected bad input/authentication/authorization failures remain safe and bounded; they must not panic, leak internal details or create unbounded CPU/memory/log/audit work.
+- Security-sensitive concurrency/state transitions (session rotation/revocation, permission changes, password changes, recovery, lifecycle updates) define atomicity and stale/replay behavior explicitly.
+- HIGH/CRITICAL changes to credentials, sessions, authorization, sensitive data, untrusted file/network boundaries or update trust require independent security/correctness review and discriminating tests. A green static/vulnerability scanner never waives code review.
+
+Use OWASP guidance such as [Secure Code Review](https://cheatsheetseries.owasp.org/cheatsheets/Secure_Code_Review_Cheat_Sheet.html), [Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html), [CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html) and [Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) as current implementation references where applicable; verify current recommendations when coupling security-sensitive code.
+
 ## Product accounts and optional SSO
 
 Products remain independent owners/operators of their account namespace/data and authorization; single sign-on (SSO) is optional. The reusable [Identity Module](../architecture/module-model.md#identity) may implement generic account/authentication/session mechanics inside each product without creating shared central account ownership.
 
 Identity may own generic local account status, credential/session lifecycle and external-identity mapping where composed. Each product/domain still owns product-specific profile semantics, domain data, permission grants and release boundary. Reusing Foundation identity capabilities does not imply one shared user table or one central AChrix runtime.
+
+For first-party browser administration, the starting authentication direction is an **opaque server-side session**, not a long-lived bearer/JWT credential stored in browser Web Storage. Generate high-entropy session identifiers, keep server-side revocation/expiry, rotate at authentication/privilege-sensitive transitions as required, and exchange the session only through HTTPS cookies with explicit `Secure`, `HttpOnly` and deliberate `SameSite`/host/path scope. Do not accept session identifiers through URLs. State-changing browser requests also use explicit CSRF defense. Exact schema, hash-at-rest strategy, expiry/concurrency policy and cookie semantics are owned and tested by the Identity implementation.
+
+For new local password storage, Argon2id is the preferred starting algorithm unless a documented deployment/compliance constraint requires another maintained option. Choose and record current parameters from maintained guidance at implementation time, keep per-credential algorithm/parameter identity so stronger settings can migrate, and rehash deliberately after successful verification when policy advances. Never use fast general-purpose hashes as password storage.
 
 Where a product actually needs SSO, integrate a maintained identity provider through a standard such as OpenID Connect. Keep the provider identity and its explicit mapping to the local product account separate from product authorization. Do not merge accounts merely because email addresses match, or treat successful SSO as permission to access another product's resources.
 
@@ -106,11 +126,13 @@ Sensitive/admin/financial/security actions may require a durable audit trail.
 
 Audit should capture enough to answer who/what/when/target/outcome/authority without storing secrets or excessive sensitive payloads.
 
-Operational debug logs are not the audit source of truth.
+Operational debug logs are not the audit source of truth. Repetitive invalid/denied traffic is not automatically an audit event; retain only the accountable/security evidence the product actually needs and bound attacker-controlled event volume.
 
 ## Dependencies
 
 Security-sensitive protocol/crypto/auth implementations should normally use established maintained libraries rather than custom cryptography/protocol code.
+
+Prefer a small, reviewed dependency graph. Verify source/license/checksums and use low-noise vulnerability analysis that understands reachable Go code (for example maintained `govulncheck`) where it improves signal. Static/vulnerability tools complement focused tests and review; do not stack overlapping scanners merely to increase tool count.
 
 ## Vulnerability reporting and response
 

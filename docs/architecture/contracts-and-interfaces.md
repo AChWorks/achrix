@@ -4,7 +4,7 @@
 
 Commands express a mutation intent with an authoritative result; queries provide authoritative reads; events describe completed facts for independent reactions. Events do not replace ordinary calls. UI/API/MCP/CLI/jobs reuse one Application capability and authorization boundary; there is no separate AI-only business path.
 
-AI-first means explicit contracts and common permissions, not a dependency on any AI provider/model or a universal agent orchestration framework.
+AI-first means explicit contracts and common permissions, not a dependency on any AI provider/model or a universal agent orchestration framework. Important machine-usable capabilities should expose stable semantic identity, structured inputs/outputs/errors and effect/permission metadata when a real client needs them, while humans and AI still traverse the same Application behavior. Keep repository/module structure, examples and contract naming predictable enough that automation can discover and reason about supported paths without importing internals or relying on chat history; do not create an AI-only bypass or opaque generated control plane.
 
 Only intentionally published interfaces are compatibility contracts: APIs/MCP, webhooks, durable messages, import/export formats, extension contracts and automation-stable CLI behavior. Internal methods are not automatically public.
 

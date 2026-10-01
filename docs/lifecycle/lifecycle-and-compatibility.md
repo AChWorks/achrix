@@ -8,7 +8,7 @@ Products own activation/deployment. Foundation/Modules provide their compatibili
 
 ## Install and upgrade
 
-Installation is reproducible, explicit about runtime/database/extensions, writable paths and secrets, safe to re-enter where practical, and verified by local health/readiness. Reject unsupported environments.
+Installation is reproducible, explicit about runtime/database/extensions, writable paths and secrets, safe to re-enter where practical, and verified by local health/readiness. Reject unsupported environments. The supported install path should have one obvious documented entry, perform bounded preflight/compatibility checks before mutation, distinguish generated/default configuration from secrets, and fail with actionable recovery guidance rather than partial hidden state. Routine operators should not need to understand AChrix internals to determine whether setup succeeded.
 
 Distinguish compatible updates, feature evolution, breaking upgrades, schema migrations, module lifecycle and runtime/dependency changes. Before a stateful change, check only relevant target compatibility, environment/extension versions, enabled capabilities, migration prerequisites, storage, keys, maintenance needs and recoverability. Module enable/disable/removal has explicit dependency, migration and data-retention semantics; dynamic plugin lifecycle waits for a real need.
 
@@ -48,7 +48,7 @@ The proving consumer installs its one immutable SQL migration through an explici
 
 For products with an administration UI, routine compatible Core/Module installation/update is a simple authorized action without user-run server commands or compilation. [Consumption](../architecture/consumption-and-packaging.md#module-installation) owns prepared composition; choosing independently available latest versions is insufficient.
 
-Check compatibility/impact; authorize the exact candidate; verify/stage it and establish recovery; serialize migration/activation; verify active identity/health. Preserve configuration, secrets and data. Show durable progress and actionable failures; retries/resume must not duplicate effects. Breaking, downtime or destructive changes require the relevant explicit decision.
+Check compatibility/impact; authorize the exact candidate; verify/stage it and establish recovery; serialize migration/activation; verify active identity/health. Preserve configuration, secrets and data. Show durable progress, current component/version identity and actionable failures; retries/resume must not duplicate effects. A user returning after interruption must be able to distinguish active/succeeded/failed/recovery-required state instead of guessing from a spinner or process exit. Breaking, downtime or destructive changes require the relevant explicit decision.
 
 The deployment profile supplies bounded activation that survives application replacement/restart, using an appropriate platform API or narrowly authorized local mechanism. Core and Gateway Bridge gain no generic shell/root/OS authority. Initial provisioning may be operator-owned; routine updates are product-driven only for validated profiles.
 
