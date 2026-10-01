@@ -22,15 +22,15 @@ Roles may be convenient permission bundles; policies/capabilities own enforcemen
 
 ## Product accounts and optional SSO
 
-Products keep independently owned accounts and authorization; single sign-on (SSO) is optional.
+Products remain independent owners/operators of their account namespace/data and authorization; single sign-on (SSO) is optional. The reusable [Identity Module](../architecture/module-model.md#identity) may implement generic account/authentication/session mechanics inside each product without creating shared central account ownership.
 
-Each product owns its account/profile lifecycle, domain data, permission grants, and release boundary. Reusing Foundation identity capabilities does not imply one shared user table or one central AChrix runtime.
+Identity may own generic local account status, credential/session lifecycle and external-identity mapping where composed. Each product/domain still owns product-specific profile semantics, domain data, permission grants and release boundary. Reusing Foundation identity capabilities does not imply one shared user table or one central AChrix runtime.
 
 Where a product actually needs SSO, integrate a maintained identity provider through a standard such as OpenID Connect. Keep the provider identity and its explicit mapping to the local product account separate from product authorization. Do not merge accounts merely because email addresses match, or treat successful SSO as permission to access another product's resources.
 
 Cross-product data sharing requires explicit authorization and a defined data boundary. Define session, account-linking, deactivation, and provider-unavailability behavior for the real integration.
 
-A public/self-hosted consumer must remain independently operable without an AChWorks identity service. This policy neither selects an identity provider nor requires an SSO adapter or central identity service in Issue #1.
+A public/self-hosted consumer must remain independently operable without an AChWorks identity service. Reusable Identity/OIDC support does not require a company identity service or central authentication dependency.
 
 ## Module boundaries
 
