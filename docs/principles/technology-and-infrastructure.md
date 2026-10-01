@@ -4,13 +4,13 @@
 
 Technology is an implementation choice, not Foundation identity.
 
-The initial executable implementation may use PHP/Laravel today and another component/runtime may be introduced tomorrow without changing the Foundation mission.
+Go is the accepted primary implementation language; another justified component/runtime may be introduced without changing the Foundation mission. See [ADR-0002](../decisions/ADR-0002-go-primary-implementation.md).
 
 ## Initial implementation path
 
 Initial intended executable path:
 
-- PHP/Laravel;
+- Go, using fit standard-library and maintained ecosystem components;
 - relational database, with MariaDB as the primary implementation target;
 - server-rendered web where applicable;
 - minimal JavaScript by default;
@@ -41,7 +41,6 @@ Use a specialized runtime only for a real workload.
 
 Examples:
 
-- Go for high-concurrency network/service workloads;
 - Python for AI/data/ML;
 - Rust for low-level/CPU/security-sensitive processing;
 - Node/TypeScript for specific realtime/frontend/server workloads.

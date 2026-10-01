@@ -6,7 +6,7 @@ AChrix is shared executable software and an AChWorks Foundation for web-connecte
 
 A suitable product should be able to consume Foundation behavior through an explicit versioned boundary, upgrade that boundary deliberately, and keep product/domain-specific behavior outside the Foundation.
 
-This document owns the durable **consumption and packaging constraints**. Exact PHP/Laravel package layout remains an implementation ADR decision until executable work begins.
+This document owns the durable **consumption and packaging constraints**. Go is selected by [ADR-0002](../decisions/ADR-0002-go-primary-implementation.md). Exact Go module/package layout remains an implementation ADR decision until executable work begins.
 
 ## Target consumer shape
 
@@ -128,7 +128,7 @@ Do not claim safe downgrade/rollback when data or public contracts make it impos
 
 ## First implementation boundary
 
-Before executable code is coupled to PHP/Laravel, Issue #1 requires an implementation ADR that selects the smallest supported packaging/consumption shape from current official compatibility evidence.
+Before executable Go code is coupled to a public package/dependency layout, Issue #1 requires an implementation ADR that selects the smallest supported packaging/consumption shape from current official compatibility evidence.
 
 That decision must:
 

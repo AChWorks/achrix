@@ -6,6 +6,8 @@
 
 AChrix is designed to reduce repeated engineering decisions while keeping product logic and future technology choices open.
 
+Go is the accepted primary implementation language; see [ADR-0002](docs/decisions/ADR-0002-go-primary-implementation.md). Exact supported versions, dependencies, and executable consumption mechanics are established by Issue #1.
+
 It is intentionally **not** a new framework, mandatory monorepo, mandatory database, plugin marketplace, or microservice platform.
 
 ## Project Map
