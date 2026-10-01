@@ -20,7 +20,50 @@ Before serving traffic, reject missing/incompatible required capabilities, ambig
 
 ## Placement and extraction
 
-Product-specific behavior starts product-local unless already a proven Foundation concern. Keep a cheap clean boundary when reuse is credible. A second real consumer triggers comparison of semantics, ownership, lifecycle, compatibility and total cost; promote only when shared ownership is better. Independent packaging is a separate decision in [Consumption](consumption-and-packaging.md).
+Choose ownership before choosing packaging:
+
+1. **Core** is reserved for broadly required Foundation primitives whose optionalization would distort normal consumers: composition, capability/application/authorization boundaries and lifecycle primitives.
+2. **Reusable AChrix Module from the start** is appropriate when current product knowledge makes use across multiple product classes more likely than product-specific use, the capability has coherent shared semantics/data/lifecycle ownership, products can consume it without importing one product's business policy, and shared ownership is expected to reduce duplicate implementation/maintenance. The owner's rough 50–60% reuse threshold is a directional “more likely than not” heuristic, not a statistical gate.
+3. **Product-local behavior** remains correct when semantics are differentiating/product-specific, reuse is genuinely uncertain, or a shared contract would require speculative generic behavior.
+
+An accepted reusable placement does not require immediate implementation. Implement the real behavior when a current/near-term consumer needs it; do not create empty packages/interfaces merely to reserve a future Module. A second materially different consumer validates and may refine or reverse a placement, but is not a mandatory prerequisite when strong current evidence already supports shared ownership.
+
+Packaging is a separate decision in [Consumption](consumption-and-packaging.md). Reusable Modules default to the existing AChrix repository/Go module/process unless independent versioning, ownership/security isolation, deployment/runtime needs or lower total lifetime cost justify extraction.
+
+## Initial accepted reusable Modules
+
+These are accepted **ownership boundaries**, not claims that every listed behavior is already implemented or that final package/capability identifiers are fixed. GitHub Issues own implementation scope and evidence.
+
+### Identity
+
+Identity owns reusable authentication/account/session mechanics inside each consuming product:
+
+- local account identity/status and authentication lifecycle;
+- credential/password authentication using maintained security libraries rather than custom cryptography;
+- session lifecycle and the authentication principal supplied to normal Application authorization;
+- external-identity mapping and OIDC/SSO adapters when required.
+
+Products remain independently operable and own their account namespace/data, product profile/business meanings and permission grants. Domain roles such as author, customer, staff, seller or member belong to the owning product/domain unless separately proven generic. Successful login/SSO establishes identity only; Core's/product policy authorization still decides allowed actions. Identity does not imply a shared central AChWorks account service or cross-product user table.
+
+### Admin
+
+Admin owns a reusable administration presentation shell and Module-facing admin-surface composition boundary, including the common layout/navigation/routing integration and user-facing conventions needed across products.
+
+Admin interactions must enter normal Application contracts and authorization; the shell is not a privileged business path. It should support applicable accessibility, localization and RTL/LTR behavior under [Web](../web/seo-and-semantic-web.md). Product/Module-specific admin screens, forms, validation and business semantics remain owned by their capability. Admin does not own direct database access, generic server/root control or another Module's state.
+
+### Media
+
+Media owns reusable asset/upload/storage lifecycle mechanics:
+
+- asset identity and generic media metadata;
+- bounded upload/input validation and access through supported Application contracts;
+- storage-provider integration;
+- derivative/variant lifecycle when real consumers require it;
+- delete/retention semantics and declared recovery dependencies.
+
+Products/other Modules own the business relationship to a Media asset, such as featured image, product gallery, avatar or content-specific meaning. Provider-specific capabilities stay explicit rather than forcing one storage/processing mega-interface.
+
+Identity, Admin and Media are the current initial accepted reusable placements. Content/taxonomy, notifications, commerce, payments, search, AI/provider behavior, Multi-Site and Gateway Bridge remain case-by-case until their own evidence/decision establishes placement; a familiar feature name alone is not reuse evidence.
 
 ## External functionality and trust
 
