@@ -60,6 +60,8 @@ A module must not gain another module's authority by importing its Infrastructur
 
 Cross-module operations use an authorized Application boundary.
 
+Derived/search/cache projections do not acquire authority by copying data. Permission/deletion changes must propagate with an explicit freshness/reconciliation contract, and query results/counts/snippets/facets must not reveal state the principal could not read through the authoritative Application boundary. Provider-native search/cache security may be defense in depth, not a substitute for product authorization.
+
 ## Machine/AI access
 
 AI/MCP/API access is never more privileged merely because it is automated.
