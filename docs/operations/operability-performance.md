@@ -6,6 +6,12 @@ Simple applications run without mandatory auxiliary services. [ADR-0003](../deci
 
 Separate business configuration, runtime/deployment configuration, secrets and domain data. Configuration has an owner, meaningful defaults, validation and explicit environment behavior. Shutdown is graceful; readiness probes only dependencies necessary for local readiness, not every external service synchronously.
 
+## Supported environment
+
+This document owns the runtime/database support matrix; manifests own pins and Git/CI own proof. Begin with one upstream-supported Go line and PostgreSQL major, using maintained patches. Verify exact versions before implementation; expand only for real consumers and tested compatibility. No executable matrix exists yet.
+
+Releases declare maintained lines and upgrade/retirement paths. Older lines need explicit support; there is no permanent LTS promise. Validate dependency/security updates before consumer activation under [Lifecycle](../lifecycle/lifecycle-and-compatibility.md).
+
 ## Diagnosis and audit
 
 Diagnostic logs use meaningful severity/context and request/job/operation correlation where useful. Never log credentials, keys, tokens or unnecessary sensitive payloads. Model/provider telemetry must not retain sensitive prompts/responses by default.

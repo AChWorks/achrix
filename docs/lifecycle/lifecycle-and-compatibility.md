@@ -14,6 +14,8 @@ Distinguish compatible updates, feature evolution, breaking upgrades, schema mig
 
 Migrations are production behavior: preserve domain invariants, consider overlapping old/new code, use expand/migrate/contract where safer, handle interruptions/re-entry, expose failure state and verify postflight invariants. Database-specific migrations are allowed for deliberately required capabilities.
 
+Modules own immutable published migrations with unambiguous identity; product composition selects their compatible set/order. Serialize execution for the database scope as an explicit install/deploy step, rather than racing requests/replicas. Prove the ledger/locking mechanism; no new migration service is required.
+
 ## Compatibility and recovery
 
 Prefer additive public contract change. Breaking versions define migration and an appropriate compatibility/retirement window with supported-combination tests. Durable async payloads stay readable for their required lifetime.
@@ -21,6 +23,18 @@ Prefer additive public contract change. Breaking versions define migration and a
 Choose activation/rollback mechanics for the actual deployment risk; versioned artifacts and reversible activation may help but are not universal. Identify rollback, roll-forward, restore, compensation or manual reconciliation. Reverting files alone does not make data or external effects reversible.
 
 Backup existence is not restore evidence. Material recovery includes database/files/object data, encryption/signing keys, runtime configuration, version identity and a credible restore procedure.
+
+## Product update experience
+
+For products with an administration UI, routine compatible Core/Module installation/update is a simple authorized action without user-run server commands or compilation. [Consumption](../architecture/consumption-and-packaging.md#module-installation) owns prepared composition; choosing independently available latest versions is insufficient.
+
+Check compatibility/impact; authorize the exact candidate; verify/stage it and establish recovery; serialize migration/activation; verify active identity/health. Preserve configuration, secrets and data. Show durable progress and actionable failures; retries/resume must not duplicate effects. Breaking, downtime or destructive changes require the relevant explicit decision.
+
+The deployment profile supplies bounded activation that survives application replacement/restart, using an appropriate platform API or narrowly authorized local mechanism. Core and Gateway Bridge gain no generic shell/root/OS authority. Initial provisioning may be operator-owned; routine updates are product-driven only for validated profiles.
+
+Reject activation on delivery/trust failure. Verify publisher/artifact identity, component compatibility and metadata safety under the artifact rules below, including stale metadata/older vulnerable candidates. Automatic rollback requires compatibility with current data; otherwise retain evidence and use declared recovery. Source rollback is not data rollback.
+
+Prove this on the first real product before sharing updater tooling. Only this contract exists now. Evaluate maintained mechanisms against the [TUF threat model](https://theupdateframework.io/docs/security/) when implementing update trust; no TUF service, registry, helper or UI is built today.
 
 ## Official artifacts and future tooling
 

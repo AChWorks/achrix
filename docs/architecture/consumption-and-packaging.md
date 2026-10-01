@@ -8,6 +8,14 @@ The consumer must identify/pin its Foundation version, deliberately review updat
 
 Generated bootstrap files may transfer to the product. Shared runtime is not an unmanaged permanent source copy. A justified fork has explicit independent ownership/maintenance and follows [Trademark Policy](../../TRADEMARKS.md); ordinary dependency consumption remains the default shared path.
 
+## Module installation
+
+Compose trusted Modules at build time through public contracts into a pinned, tested product executable/image. Core and internal Modules in one Go module share its dependency version; separately packaged Modules have their own versions.
+
+Installing/updating code selects or builds a compatible product artifact. An already packaged optional Module may be enabled/disabled through configuration under dependencies, authorization and data-lifecycle rules. Code presence, activation, permission and data removal are distinct.
+
+Standard distributions offer prepared compatible combinations; custom compositions use a trusted publisher/build pipeline. A UI may identify a Core/Module change while applying a coherent product artifact. [Lifecycle](../lifecycle/lifecycle-and-compatibility.md#product-update-experience) owns the simple user-facing update flow and activation/recovery. External integration remains available under Module model; Core needs no source/archive loader, marketplace or build service.
+
 ## Module versus distribution
 
 Core and internal Modules can share repository, dependency module, process, deployment and relational database indefinitely. Promote product-local behavior only under the [Module model](module-model.md); independent packaging then needs additional value, such as:

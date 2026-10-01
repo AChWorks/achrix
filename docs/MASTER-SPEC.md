@@ -58,6 +58,8 @@ The first executable outcome proves minimal Core, a necessary extension, real Po
 
 Success means products start faster, shared fixes reach deliberately upgraded consumers, optional infrastructure stays optional, product semantics remain independently owned, and important compatibility/security/data/recovery boundaries can be verified. Reuse must reduce total delivery and maintenance cost. Humans and AI must recover the intended behavior and current work without chat history.
 
+For products with an administration UI, routine compatible Core/Module installation and upgrades should be simple product actions without user-run server commands. Products own prepared composition and safe activation/recovery; this does not make Core an updater or host administrator.
+
 ## Documentation authority
 
 This specification owns mission, non-goals, durable boundaries and success criteria. Topic documents own detailed rules; active ADRs own accepted choice/rationale; Git/PR/CI/release evidence owns implementation and delivery facts; Issues own live work. README is the entry point and the Project Map is the index.

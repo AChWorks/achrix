@@ -6,7 +6,9 @@ Start from current main, the relevant Issue/PR and [Project Map](docs/PROJECT-MA
 
 Use a focused branch and Pull Request for tracked changes to intent, architecture, implementation, CI, lifecycle, metadata or working rules. Link the existing outcome when applicable; keep one meaningful change reviewable together. Canonical integration targets main. Do not overwrite unrelated work or force-push.
 
-Validate the exact candidate with change-appropriate checks and review the full diff. Issue #1 introduces executable checks and the strongest suitable enforceable policy supported by the current plan; until then PR review plus relevant validation is the boundary.
+Validate the exact candidate with change-appropriate checks and review the full diff. The active `main` ruleset requires PRs, squash merges and resolved review threads, blocks force pushes/deletion, and has no bypass actors. It requires zero approval votes so a sole maintainer can integrate reviewed low/medium-risk work; this does not waive risk-required independent review or owner decisions. Never describe self-review as independent.
+
+Issue #1 adds executable CI and binds its actual checks to this existing ruleset once they run reliably. Until then there are no required CI checks; documentation validation and recorded PR review remain necessary. Inspect effective GitHub rules before integration rather than relying on this text alone.
 
 Done means the accepted behavior is implemented, required checks pass, compatibility/state/recovery implications are handled and affected canonical docs are current. Integration and production delivery are separate facts. Current documents contain rules still in force; obsolete decisions remain in Git history.
 
