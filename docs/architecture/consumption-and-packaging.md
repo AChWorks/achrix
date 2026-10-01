@@ -16,13 +16,18 @@ Installing/updating code selects or builds a compatible product artifact. An alr
 
 Standard distributions offer prepared compatible combinations; custom compositions use a trusted publisher/build pipeline. A UI may identify a Core/Module change while applying a coherent product artifact. [Lifecycle](../lifecycle/lifecycle-and-compatibility.md#product-update-experience) owns the simple user-facing update flow and activation/recovery. External integration remains available under Module model; Core needs no source/archive loader, marketplace or build service.
 
-## Module versus distribution
+## Module ownership versus distribution
 
-Core and internal Modules can share repository, dependency module, process, deployment and relational database indefinitely. Promote product-local behavior only under the [Module model](module-model.md); independent packaging then needs additional value, such as:
+The [Module model](module-model.md) decides whether a capability belongs in Core, a reusable AChrix Module or the product. That ownership decision is deliberately separate from packaging/distribution.
+
+A reusable Module normally begins in the existing AChrix repository and Foundation Go module, and may share process, deployment and relational database with Core/other Modules indefinitely. This captures reuse before the first product duplicates the behavior without prematurely creating repository/module/service overhead.
+
+Independent packaging/versioning needs additional value, such as:
 
 - consumers needing selective independent versions/dependencies;
 - materially different release/compatibility cadence;
 - independent ownership/security boundary;
+- deployment/runtime isolation that is worth the distributed-system cost;
 - lower total migration, coupling and maintenance cost.
 
 A Distribution is an optional curated product-class composition, such as content/CMS or API/headless. It consumes the Foundation and keeps product delivery/domain ownership; it is not a permanent source fork or a constraint on other products.
