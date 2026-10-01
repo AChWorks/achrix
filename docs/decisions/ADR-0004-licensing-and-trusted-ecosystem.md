@@ -13,7 +13,7 @@ AChrix is a reusable versioned Go Foundation for independently owned products. T
 ## Decision and canonical owners
 
 - [Licensing policy](../legal/licensing.md) owns artifact scope: MPL-2.0 Core and default official open-source Modules; explicitly scoped Apache-2.0 extension/integration artifacts where appropriate; compatible independently licensed commercial/third-party Modules.
-- [CLA policy and draft](../legal/cla.md) owns additional incoming contribution rights. The policy is accepted; the draft remains non-operative until the actual legal recipient, terms and consent process are resolved. No agreement is signed by this ADR.
+- [Contribution Agreement](../legal/cla.md) owns additional incoming contribution rights. Version 1.0 identifies the individual recipient and manual consent process. Adoption of the template supplies no signed consent; covered external contributions still need verified acceptance.
 - [Trademark Policy](../../TRADEMARKS.md) separates code permissions from representation as official AChrix/AChWorks.
 - [Governance](../../GOVERNANCE.md) reserves canonical merge/release stewardship to AChWorks without denying lawful forks.
 - Existing [contracts](../architecture/contracts-and-interfaces.md), [module model](../architecture/module-model.md), [packaging](../architecture/consumption-and-packaging.md), [reuse principles](../principles/reuse-and-evolution.md) and [lifecycle](../lifecycle/lifecycle-and-compatibility.md) own the corresponding engineering constraints.
@@ -38,7 +38,7 @@ No thirty-year compatibility or zero-cost technology replacement is promised. Pr
 
 Issue #1 remains the minimal executable/versioned Foundation proof. Add only the public extension/consumer and artifact-license evidence it needs; do not absorb the full future ecosystem.
 
-Legal-recipient/CLA activation is actionable work in [Issue #15](https://github.com/AChWorks/achrix/issues/15). Release verification is implemented when publishable artifacts exist; registries/certification/marketplace services need real consumer economics.
+Legal-recipient/CLA adoption and its validation evidence are recorded in [Issue #15](https://github.com/AChWorks/achrix/issues/15). Release verification is implemented when publishable artifacts exist; registries/certification/marketplace services need real consumer economics.
 
 ## Evidence
 

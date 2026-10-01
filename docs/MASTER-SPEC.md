@@ -119,13 +119,15 @@ Preserve credible low-cost evolution options in today's ownership, public contra
 
 The Foundation's identity is not a language or framework.
 
-Go is the accepted primary implementation language for AChrix and the default path for suitable new products consuming its shared implementation; see [ADR-0002](docs/decisions/ADR-0002-go-primary-implementation.md). This supersedes the earlier PHP/Laravel expectation without changing the Foundation mission or Core/Module/product boundaries.
+Go is the accepted primary implementation language for AChrix and the default path for suitable new products consuming its shared implementation; see [ADR-0002](decisions/ADR-0002-go-primary-implementation.md). This supersedes the earlier PHP/Laravel expectation without changing the Foundation mission or Core/Module/product boundaries.
+
+The starting Go dependency/consumer shape is selected by [ADR-0005](decisions/ADR-0005-initial-go-consumption.md); public APIs and supported versions still require executable proof in Issue #1.
 
 Prefer Go's standard library and maintained ecosystem components for commodity capabilities. AChrix is a reusable application Foundation, not a custom replacement for general-purpose infrastructure.
 
 Domain/application semantics should avoid unnecessary infrastructure coupling where that coupling would materially hinder testing, reuse, extraction, or future evolution. Use fit standard-library/ecosystem capabilities directly where appropriate; do not wrap every facility for hypothetical portability.
 
-PostgreSQL is the primary relational implementation target. Use ordinary PostgreSQL without mandatory TimescaleDB or other specialized extensions. MariaDB or another engine may be added when a real consumer or capability warrants it. Official support requires real migration, semantic, and CI/compatibility evidence; architectural portability does not equal support for every database. Defaults are recorded in [ADR-0003](docs/decisions/ADR-0003-postgresql-and-optional-infrastructure.md); optional infrastructure stays outside Core and is introduced only for a concrete workload or correctness/operational requirement.
+PostgreSQL is the primary relational implementation target. Use ordinary PostgreSQL without mandatory TimescaleDB or other specialized extensions. MariaDB or another engine may be added when a real consumer or capability warrants it. Official support requires real migration, semantic, and CI/compatibility evidence; architectural portability does not equal support for every database. Defaults are recorded in [ADR-0003](decisions/ADR-0003-postgresql-and-optional-infrastructure.md); optional infrastructure stays outside Core and is introduced only for a concrete workload or correctness/operational requirement.
 
 ## 6. Architecture model
 
@@ -225,7 +227,7 @@ An internal module boundary does **not** require an independent package. Keep Co
 
 Product-specific capabilities should begin in the product when they are not yet proven Foundation concerns. Design a clean local boundary when future reuse is credible and cheap; promote only after real consumer convergence.
 
-See [Consumption and packaging](docs/architecture/consumption-and-packaging.md).
+See [Consumption and packaging](architecture/consumption-and-packaging.md).
 
 ## 9. Composition and integration
 
@@ -539,9 +541,9 @@ For every proposed capability:
 
 ### 26.1 Licensing and trusted ecosystem
 
-AChrix is genuine open-source software with a minimal, maintainable Core. The accepted artifact licensing and contribution-rights policy is owned by [Licensing](docs/legal/licensing.md) and [ADR-0004](docs/decisions/ADR-0004-licensing-and-trusted-ecosystem.md).
+AChrix is genuine open-source software with a minimal, maintainable Core. The accepted artifact licensing and contribution-rights policy is owned by [Licensing](legal/licensing.md) and [ADR-0004](decisions/ADR-0004-licensing-and-trusted-ecosystem.md).
 
-The project should be easy to extend while official identity remains verifiable. Long-term value also accumulates in supported compatibility, official Modules, security lifecycle, tooling, documentation and ecosystem trust. [Governance](GOVERNANCE.md) and [Trademark Policy](TRADEMARKS.md) own canonical authority and representation.
+The project should be easy to extend while official identity remains verifiable. Long-term value also accumulates in supported compatibility, official Modules, security lifecycle, tooling, documentation and ecosystem trust. [Governance](../GOVERNANCE.md) and [Trademark Policy](../TRADEMARKS.md) own canonical authority and representation.
 
 Do not pursue this goal with obfuscation, confusing code, license checks in Core, mandatory company services, deliberate incompatibility or restrictions that contradict published open-source rights. Future registries, signing, certification and update channels must earn their implementation cost.
 
@@ -549,7 +551,7 @@ Do not pursue this goal with obfuscation, confusing code, license checks in Core
 
 | Truth | Owner |
 | --- | --- |
-| project mission, durable principles, non-goals | `MASTER-SPEC.md` |
+| project mission, durable principles, non-goals | `docs/MASTER-SPEC.md` |
 | generic cross-project AChWorks contracts/governance | `AChWorks/koinon` |
 | architecture and engineering rules | `docs/` |
 | current work/priority/dependencies | GitHub Issues/Milestones/Projects when used |
@@ -559,6 +561,10 @@ Do not pursue this goal with obfuscation, confusing code, license checks in Core
 | release/deployment state | release/deployment system |
 | runtime health | runtime/monitoring/control plane |
 | secrets | approved secret/runtime mechanism |
+
+Paths in this table are repository-relative. README introduces the project and points to this specification and the Project Map; it does not own a competing specification or full document catalog.
+
+Topic documents own detailed rules; ADRs record accepted decisions, rationale and explicit supersession. When a lasting decision changes, update its affected canonical rules in the same change rather than maintaining conflicting copies. A superseded ADR is history, not a current implementation instruction. Unresolved material contradictions must be reconciled before affected work proceeds; chat recency is not authority.
 
 Do not duplicate live work state into docs.
 

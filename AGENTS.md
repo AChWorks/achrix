@@ -10,7 +10,7 @@ Do not mutate any other repository because it is related, referenced, or may bec
 
 ## Authoritative sources
 
-- Project-level mission and durable constraints: `MASTER-SPEC.md`
+- Project-level mission and durable constraints: `docs/MASTER-SPEC.md`
 - Architecture/engineering rules: `docs/`
 - Current actionable work: GitHub Issues and PRs
 - Lasting architecture decisions: `docs/decisions/`
@@ -51,7 +51,7 @@ Before first executable coupling, follow `docs/architecture/consumption-and-pack
 
 ## Initial implementation technology
 
-Go is the accepted primary implementation language for AChrix; see `docs/decisions/ADR-0002-go-primary-implementation.md`. PostgreSQL is the initial primary relational target; see `docs/decisions/ADR-0003-postgresql-and-optional-infrastructure.md` for database and optional infrastructure defaults. Technology is an implementation decision rather than Foundation identity. Exact supported versions, dependencies, package layout, and consumer proof remain part of Issue #1 before executable coupling.
+Go is the accepted primary implementation language for AChrix; see `docs/decisions/ADR-0002-go-primary-implementation.md`. PostgreSQL is the initial primary relational target; see `docs/decisions/ADR-0003-postgresql-and-optional-infrastructure.md` for database and optional infrastructure defaults. Technology is an implementation decision rather than Foundation identity. The starting Go module/consumer shape is selected by `docs/decisions/ADR-0005-initial-go-consumption.md`. Exact supported versions, dependencies, public packages/APIs and executable consumer proof remain part of Issue #1 before executable coupling.
 
 Do not add SQLite to the primary implementation/test path without an explicit accepted architecture change.
 
@@ -81,6 +81,6 @@ Preserve unrelated contributor work. Avoid force pushes, destructive cleanup, or
 
 ## Licensing and extension work
 
-Follow [Licensing](docs/legal/licensing.md), [Governance](GOVERNANCE.md) and the [CLA policy](docs/legal/cla.md) when changing artifact scope or accepting external code. Never treat the non-operative CLA draft as signed consent, invent a legal entity, or silently relicense Core exports as an SDK.
+Follow [Licensing](docs/legal/licensing.md), [Governance](GOVERNANCE.md) and the [CLA policy](docs/legal/cla.md) when changing artifact scope or accepting external code. Never treat a published CLA template as signed consent, invent a legal entity, or silently relicense Core exports as an SDK.
 
 Preserve small versioned public contracts and private implementation boundaries. Go internal/unexported APIs are not a sandbox or copy protection. Keep provider/registry/signing/certification services optional and outside Core until a real requirement justifies them.

@@ -39,7 +39,7 @@ Strong copyleft, network copyleft, source-available or paid-provider terms can c
 
 ## Incoming contributions and rights
 
-[GOVERNANCE.md](../../GOVERNANCE.md) owns canonical authority; [CONTRIBUTING.md](../../CONTRIBUTING.md) owns the PR workflow; [CLA policy and draft](cla.md) owns additional contribution rights.
+[GOVERNANCE.md](../../GOVERNANCE.md) owns canonical authority; [CONTRIBUTING.md](../../CONTRIBUTING.md) owns the PR workflow; [Contribution Agreement](cla.md) owns additional contribution rights.
 
 A CLA can grant rights only in contributions the signer is authorized to license. It does not relicense unrelated third-party dependencies or remove obligations from previously distributed copies. Future relicensing/dual licensing remains a separate AChWorks decision with an actual rights/dependency audit; it is not performed by this policy.
 

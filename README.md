@@ -1,79 +1,25 @@
 # AChrix
 
-**AChrix** (pronounced `ATCH-riks`; Persian: `اَچ‌ریکس`) is an executable, reusable, versioned, AI-first application base for building evolvable web-connected products with a minimal Core and composable Modules.
+**AChrix** (pronounced `ATCH-riks`; Persian: `اَچ‌ریکس`) is an AChWorks Foundation being built as a reusable, versioned application base for web-connected products. A minimal Core and optional Modules share useful engineering capabilities while products own their business behavior.
 
-`AChrix` is the project and technology name. Architecturally, AChrix is an AChWorks **Foundation** specialized for web-connected applications; `Foundation` is the generic architectural category, not a second product name.
+The accepted starting stack is Go and ordinary PostgreSQL. Optional infrastructure is introduced for real workloads; see [ADR-0002](docs/decisions/ADR-0002-go-primary-implementation.md) and [ADR-0003](docs/decisions/ADR-0003-postgresql-and-optional-infrastructure.md).
 
-AChrix is designed to reduce repeated engineering decisions while keeping product logic and future technology choices open.
+## Start here
 
-Go is the accepted primary implementation language; see [ADR-0002](docs/decisions/ADR-0002-go-primary-implementation.md). PostgreSQL is the primary relational target; [ADR-0003](docs/decisions/ADR-0003-postgresql-and-optional-infrastructure.md) records the default paths and optional infrastructure boundaries. Exact supported versions, dependency pins, and executable consumption mechanics are established by Issue #1.
+- [Master Specification](docs/MASTER-SPEC.md): mission, durable constraints and success criteria.
+- [Project Map](docs/PROJECT-MAP.md): the authoritative document and work navigation.
+- [Contributing](CONTRIBUTING.md) and [Agent instructions](AGENTS.md): how to work in this repository.
+- [GitHub Issues](https://github.com/AChWorks/achrix/issues) and [Pull Requests](https://github.com/AChWorks/achrix/pulls): current work and review evidence.
+- [achworks.yaml](achworks.yaml): machine-readable Foundation identity and discovery metadata.
 
-It is intentionally **not** a new framework, mandatory monorepo, mandatory database, plugin marketplace, or microservice platform.
+## Implementation status
 
-## Project Map
+This repository currently contains architecture and policy documents. No executable runtime, installation procedure or CI checks are published yet. [Issue #1](https://github.com/AChWorks/achrix/issues/1) owns the first executable Core and independent consumer proof; inspect that Issue for its current execution gate.
 
-### Canonical intent
-
-- [MASTER-SPEC.md](MASTER-SPEC.md) — project mission, durable principles, boundaries, non-goals, lifecycle expectations, and success criteria.
-- [docs/PROJECT-MAP.md](docs/PROJECT-MAP.md) — where each kind of durable project truth lives.
-- [achworks.yaml](achworks.yaml) — machine-readable Foundation identity/capability metadata for AChWorks discovery; not a live backlog/runtime-state store.
-
-### Architecture
-
-- [Architecture overview](docs/architecture/overview.md)
-- [Module model](docs/architecture/module-model.md)
-- [Contracts and interfaces](docs/architecture/contracts-and-interfaces.md)
-- [Consumption and packaging](docs/architecture/consumption-and-packaging.md) — how products consume/upgrade shared Foundation code without permanent copy divergence.
-
-### Engineering principles
-
-- [Engineering principles](docs/principles/engineering-principles.md)
-- [Reuse and evolutionary architecture](docs/principles/reuse-and-evolution.md)
-- [Technology and infrastructure selection](docs/principles/technology-and-infrastructure.md)
-
-### Lifecycle
-
-- [Install, update, upgrade, migration, and recovery](docs/lifecycle/lifecycle-and-compatibility.md)
-
-### AI / Web / Data / Security / Operations
-
-- [AI-first and machine readability](docs/ai/ai-first-and-machine-readability.md)
-- [SEO and semantic web](docs/web/seo-and-semantic-web.md)
-- [Data and persistence](docs/data/data-and-persistence.md)
-- [Security and authorization](docs/security/security-and-authorization.md)
-- [Operability, performance, and cost](docs/operations/operability-performance.md)
-
-### Development
-
-- [Development roadmap](docs/development/roadmap.md)
-- [ADR-0001 — AChrix Foundation shape](docs/decisions/ADR-0001-foundation-shape.md)
-- [CONTRIBUTING.md](CONTRIBUTING.md)
-- [AGENTS.md](AGENTS.md)
+Suitable products will consume a versioned AChrix dependency rather than permanently copy its shared source. Product-specific behavior stays with the product. [Koinon](https://github.com/AChWorks/koinon) owns ecosystem governance/discovery and is not an AChrix runtime dependency.
 
 ## Licensing and participation
 
-First-party repository content defaults to [MPL-2.0](LICENSE). Official reusable open-source Modules share that default; explicitly scoped extension/integration artifacts may use Apache-2.0. Independently licensed commercial/third-party Modules are possible subject to dependency terms. See the [Licensing policy](docs/legal/licensing.md).
+First-party repository content defaults to [MPL-2.0](LICENSE). Compatible independent commercial/third-party Modules are possible; any Apache-2.0 SDK designation requires an explicit artifact scope. [Licensing](docs/legal/licensing.md) owns the details.
 
-[Governance](GOVERNANCE.md), [Trademark Policy](TRADEMARKS.md), [Contributing](CONTRIBUTING.md) and the [CLA policy/draft](docs/legal/cla.md) separate canonical authority, honest representation, code reuse and incoming contribution rights. The CLA draft is not an active/signed agreement.
-
-## Current state
-
-The repository currently owns the durable AChrix intent, architecture, and development rules. The next accepted implementation outcome introduces the first executable/versioned AChrix Core and proves a real consumer boundary rather than creating a reference-only application or starter copy.
-
-GitHub Issues own current actionable work. Documentation must not mirror live task status.
-
-## Core philosophy
-
-```text
-reuse -> configure -> extend -> adapt -> extract -> replace/build when justified
-```
-
-Build the smallest correct thing today while preserving credible paths for tomorrow.
-
-## AChWorks ecosystem relationship
-
-**Koinon** (`AChWorks/koinon`) is the ecosystem-level governance/discovery/intake layer. This repository is AChrix, an executable Foundation owned independently from Koinon.
-
-Suitable products may consume the versioned AChrix Core and reusable AChrix Modules, while keeping their own product/domain behavior, Issues, PRs, CI, releases, deployment truth, and runtime state.
-
-Koinon generic contracts remain authoritative at the cross-project level; this Foundation specializes them for application products. Koinon is not a runtime dependency of the Foundation.
+[Governance](GOVERNANCE.md), [Trademark Policy](TRADEMARKS.md) and the [Contribution Agreement](docs/legal/cla.md) cover canonical authority, honest representation and incoming rights. Publishing the agreement or opening a PR does not constitute signed consent.

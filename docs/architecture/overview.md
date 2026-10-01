@@ -64,7 +64,7 @@ Go application binary
 + local filesystem/session/cache where adequate
 ```
 
-and later add Redis, object storage, search engines, queues, specialized services, or other runtimes only from evidence.
+and later add shared caching, object storage, search engines, queues, specialized services, or other runtimes only from evidence. [ADR-0003](../decisions/ADR-0003-postgresql-and-optional-infrastructure.md) owns concrete infrastructure defaults.
 
 ## Consumer relationship
 

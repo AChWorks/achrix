@@ -35,7 +35,7 @@ Use these boundaries:
 - evidence-driven infrastructure and extraction;
 - a supported versioned consumer boundary so shared Foundation runtime code is not permanently copied/forked into each product.
 
-The initial executable implementation path is expected to use PHP/Laravel with MariaDB as the primary relational implementation engine, subject to implementation-time verification.
+Historical implementation expectation (superseded): PHP/Laravel and MariaDB were the original candidates. Current implementation defaults are owned by ADR-0002 and ADR-0003; this paragraph is decision history, not implementation guidance.
 
 These technologies are initial implementation choices, not Foundation identity.
 

@@ -17,6 +17,14 @@ Completion evidence:
 - initial ADR;
 - current next implementation outcome represented in GitHub.
 
+## Readiness and the start boundary
+
+The documentation baseline is sufficient when a contributor can find the accepted intent, current decisions, safety rules and next bounded task without relying on chat. Public source publication is not an executable release and does not by itself authorize starting implementation.
+
+For the first baseline, [ADR-0005](../decisions/ADR-0005-initial-go-consumption.md) fixes the inexpensive consumption choice. Exact supported versions, dependency pins and public API shape are resolved and tested in [Issue #1](https://github.com/AChWorks/achrix/issues/1) before coupling code to them. Untested compatibility, performance, security and reuse remain claims to prove, not completed capabilities.
+
+Do not extend documentation planning into a speculative framework. Registry/signing infrastructure, every delivery adapter, multi-database CI and extraction of product candidates wait for their concrete triggers. GitHub Issues own any owner start gate and current readiness state.
+
 ## Outcome 1 — Minimal executable reusable Foundation
 
 Goal: prove the smallest useful executable/versioned Foundation Core and a real consumer boundary without building speculative modules.
@@ -24,11 +32,11 @@ Goal: prove the smallest useful executable/versioned Foundation Core and a real 
 Expected work:
 
 - confirm implementation/consumption ADR from current official compatibility evidence;
-- bootstrap the chosen framework/runtime as reusable Foundation implementation rather than a reference-only application;
+- bootstrap Go as a reusable Foundation dependency rather than a reference-only application;
 - prove a separate minimal consumer can use a versioned Foundation path without permanent shared-source copying;
 - minimal module registration/composition;
 - capability identity/metadata model;
-- application boundary conventions;
+- one real Application capability exercised through the independent consumer and one necessary delivery adapter, sharing authorization; no need to implement every possible UI/API/MCP/CLI/job adapter in this baseline;
 - authorization primitives only as needed by the proving product;
 - relational persistence baseline;
 - root `achworks.yaml` Foundation descriptor;

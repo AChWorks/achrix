@@ -30,16 +30,16 @@ Preserve the accepted Foundation shape:
 
 Prefer the standard library and maintained existing components for commodity infrastructure. Choosing Go does not authorize building a replacement general-purpose framework, a mandatory shared runtime/database for all products, or dynamic binary plugins.
 
-MariaDB remains the initial primary relational target. SQLite remains outside the primary implementation/test path. Choosing Go does not itself select PostgreSQL or change accepted database ownership/support constraints.
+Historical database position (superseded by ADR-0003): this language-only decision originally retained MariaDB. PostgreSQL is now the accepted relational target. SQLite remains outside the primary implementation/test path; database ownership/support constraints remain explicit.
 
 A justified product or external integration may use another runtime through an explicit contract. Existing repositories are not migrated by this decision.
 
 ## Implementation follow-through
 
-Issue #1 still requires an implementation ADR and executable evidence for:
+The starting module/consumer shape is now selected by [ADR-0005](ADR-0005-initial-go-consumption.md). Issue #1 still requires current implementation evidence for:
 
 - the supported Go/toolchain and database/driver versions;
-- the smallest Go module/package/public API layout;
+- exact supported public packages/APIs within the selected starting module shape;
 - separate-consumer installation, composition, and versioned upgrade behavior;
 - dependency selection, lifecycle behavior, meaningful tests, and CI.
 
