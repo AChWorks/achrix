@@ -17,11 +17,11 @@ AChrix must be a versioned reusable dependency with a small extension surface, r
 - Start published development releases in `v0.x`, with explicit compatibility/change notes; this is not a promise of a stable `v1` API. Choose `v1` only when the tested contract deserves it. Future breaking major versions follow Go's module-path rules, including `/v2` and later suffixes when applicable.
 - Record exact supported Go/PostgreSQL/dependency versions and the necessary public package/API choices with the implementation evidence in Issue #1 before coupling executable code. A preferred path is not verified compatibility or performance evidence.
 
-## Alternatives and consequences
+## Consequences
 
-A permanent source copy would repeat security fixes and let products diverge invisibly. A required central service would add deployment/availability coupling before any workload needs it. Multiple SDK/Core/Module repositories or Go modules would create premature version/release coordination. A vanity import domain would create a new domain/control commitment before ownership and migration value are established.
+One repository-aligned module avoids premature multi-package release coordination and a vanity-domain ownership commitment. It provides a cheap normal dependency path; changing that path later requires an explicit compatibility/migration decision.
 
-The repository-aligned path is a cheap starting commitment, not a 30-year immutability guarantee. If ownership, an independent SDK or distribution economics later justify a path change, make an explicit compatibility/migration decision; do not silently change consumer imports. Maintained boundaries and deliberate upgrades preserve future options better than unused abstractions.
+Supported external contracts and deliberate upgrades preserve future options; this does not promise immutable imports or third-party compatibility for thirty years.
 
 ## Canonical owners and proof
 

@@ -40,7 +40,7 @@ Owner-authorized work may proceed when the owner has sufficient rights. An agent
 
 A DCO alone does not supply the additional sublicensing/relicensing grant above. A signed CLA does not establish dependency compatibility, security approval or rights in another party's code. [Licensing](licensing.md) owns artifact terms; [Governance](../../GOVERNANCE.md) and [Contributing](../../CONTRIBUTING.md) own integration authority and review.
 
-These are project-specific terms derived from the accepted project rights policy, not an ASF agreement or a representation that enforceability has been determined for every jurisdiction. The previous draft was non-operative; its publication supplied no consent. Finalization work and adoption evidence are recoverable in [Issue #15](https://github.com/AChWorks/achrix/issues/15).
+These are project-specific terms derived from the accepted project rights policy, not an ASF agreement or a representation that enforceability has been determined for every jurisdiction. Finalization work and adoption evidence are recoverable in [Issue #15](https://github.com/AChWorks/achrix/issues/15).
 
 ## References
 

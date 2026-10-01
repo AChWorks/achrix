@@ -1,121 +1,42 @@
-# ADR-0003 — PostgreSQL and Optional Infrastructure Defaults
+# ADR-0003 — PostgreSQL and Infrastructure Defaults
 
-Status: Accepted
-Date: 2026-10-01
-Decision authority: owner direction to use PostgreSQL as the default and finalize technical infrastructure choices when they offer a development advantage.
-
-## Context
-
-AChrix should accelerate suitable products of different sizes while allowing independent product operation, release, and data ownership. The repository remains pre-executable: selecting defaults neither deploys infrastructure nor establishes tested support.
-
-A common supported path can reduce repeated integration choices. Making every product run the same auxiliary services would also create resource, failure, upgrade, and support costs before there is product value. No AChrix workload benchmark or measured cost saving supports that commitment.
+Status: Accepted. Date: 2026-10-01. Defaults select an integration path; support exists only after versioned compatibility/failure evidence.
 
 ## Decision
 
-### Relational persistence
+Use ordinary PostgreSQL for the first implementation and integration tests. Auxiliary services stay optional so small products avoid unnecessary resource, failure and operational cost. Choose maintained components; do not build a universal ORM/provider framework.
 
-Use ordinary PostgreSQL as the first primary relational implementation and integration-test target, replacing the MariaDB expectation retained by ADR-0001 and ADR-0002.
+| Need | Starting choice | Adoption boundary |
+| --- | --- | --- |
+| Relational store | [PostgreSQL](https://www.postgresql.org/support/versioning/) | Baseline; another engine needs real migrations/semantic tests; SQLite is excluded |
+| PostgreSQL access | [pgx](https://github.com/jackc/pgx), explicit SQL; [sqlc](https://docs.sqlc.dev/en/latest/reference/language-support.html) when useful | Pin compatibility; keep driver/schema details in owned Infrastructure |
+| SQL migrations | [golang-migrate v4](https://github.com/golang-migrate/migrate) | Application schema; lifecycle/recovery rules still apply |
+| HTTP and diagnostics | Go `net/http`, `log/slog` | Explicit composition and shared Application authorization |
+| Simple search | PostgreSQL FTS; optional [pg_trgm](https://www.postgresql.org/docs/current/pgtrgm.html) | Prove normalization/relevance on representative Persian/multilingual queries |
+| Advanced search | [OpenSearch](https://docs.opensearch.org/latest/analyzers/language-analyzers/index/); compare a simpler engine where fit warrants it | Actual relevance/filtering/volume/latency needs; no universal adapter now |
+| Shared cache | [Valkey](https://valkey.io/topics/migration/) | Real cache workload; verify commands/client/topology/version, not all Redis features |
+| Durable jobs | [River with PostgreSQL](https://riverqueue.com/docs) as first candidate | Transactional enqueue, bounded workers/retries, cancellation/recovery/retention and compatible arguments |
+| Long durable workflows | [Temporal](https://docs.temporal.io/workflows) | Durable progress/waits/recovery justify service, replay and versioning costs |
+| Durable messaging | [NATS JetStream](https://docs.nats.io/concepts/jetstream) | Independent consumers/replay/delivery needs justify a broker |
+| Observability | [OpenTelemetry](https://opentelemetry.io/docs/languages/go/); [SigNoz](https://signoz.io/docs/install/docker/) as initial backend candidate | Select mature signals; collection/ClickHouse/storage/retention fit the operational budget |
+| Delivery | Optional OCI/container packaging; Go binary/systemd also valid | Products own deployment/secrets; a Foundation dependency does not require Docker |
+| Orchestration | [Kubernetes](https://kubernetes.io/docs/setup/production-environment/) later | Concrete multi-node scheduling, isolation, rollout/availability and operator requirements |
+| Interactive frontend | TypeScript | Product selects framework and any Node production need |
+| AI/data runtime | Python where ecosystem value warrants it | Calling a model API from Go alone requires no Python service |
+| Time-series profile | [TimescaleDB](https://github.com/timescale/timescaledb) when justified | Check extension/PG compatibility, hypertable constraints, [license](https://github.com/timescale/timescaledb/blob/main/LICENSE), migrations/restore and exit path |
 
-Use pgx for the PostgreSQL adapter. Prefer explicit SQL, with sqlc for query code generation where it removes meaningful manual mapping. Use golang-migrate v4 as the default application SQL migration mechanism. Pin and verify exact compatible versions before executable coupling; these selections do not establish a universal public persistence API.
+## Correctness and operating constraints
 
-Module-owned infrastructure contains queries, database-specific types, migrations, and optimizations. Public/application contracts should not leak driver types or private schemas where that impairs reuse. Do not create a universal ORM or lowest-common-denominator SQL abstraction.
+Keep vendor optimizations and required database capabilities explicit under [Data](../data/data-and-persistence.md); ordinary transactional tables need no specialized extension.
 
-Additional engines require real migrations and evidence for supported behavior, concurrency, constraints, and consumer compatibility. SQLite remains excluded from the primary implementation/test path.
+Caches hold disposable derived state unless the capability explicitly chooses another durability role. Define TTL, invalidation, eviction/memory bounds and failures; sessions, permission decisions, quotas, locks or job state must not silently adopt best-effort semantics. [Valkey's license](https://github.com/valkey-io/valkey/blob/unstable/COPYING) is part of its fit; verify actual dependency terms when adopting it.
 
-TimescaleDB is optional for a concrete time-series workload. Keep ordinary transactional tables ordinary. Its hypertable constraints, PostgreSQL/extension compatibility, license/features, migrations, backup/restore, and exit path need explicit evaluation. Another PostgreSQL extension is also a module/profile requirement, not automatically a Core dependency.
+At-least-once jobs/workflows require idempotent or reconcilable effects under [Contracts](../architecture/contracts-and-interfaces.md). Do not run the same owned workflow in River and Temporal. Messaging defines acknowledgments, persistence, retention/replication and any necessary PostgreSQL-to-broker outbox. A broker is not a workflow engine or cross-system exactly-once guarantee. Kafka can be evaluated for concrete event-stream/CDC/replay/throughput needs, not ordinary jobs.
 
-### HTTP and diagnostics
+Search is a rebuildable projection: preserve authorization, deletion propagation and acceptable freshness; it is not authoritative inventory/payment/security state. Telemetry has bounded access/retention/resources and its outage must not stop normal application operation.
 
-Use Go net/http and explicit composition as the initial HTTP path; use log/slog for structured diagnostic logs. Keep Application authorization/behavior shared across HTTP, UI, CLI, MCP, and jobs.
+Keep configuration external, shutdown graceful, resources bounded and schema activation deliberate. Binary/systemd or Compose alone does not provide high availability. Shared infrastructure may host isolated product databases; shared Foundation code does not require shared account/data ownership or a central router. [Security](../security/security-and-authorization.md#product-accounts-and-optional-sso) owns independent accounts/optional SSO.
 
-When metrics/traces are justified, prefer OpenTelemetry instrumentation/export conventions. Select and pin mature signal-specific components; do not assume all Go SDK signals have the same stability. Collectors, dashboards, telemetry vendors, and a central monitoring service are optional operational choices. Following owner acceptance of the stack review, SigNoz is the preferred initial backend to evaluate when its operational budget is justified; it is not merely a UI and brings ClickHouse/collection infrastructure. Bound retention/access/resource use and keep application operation resilient to telemetry outages.
+## Proof and revisit trigger
 
-### Shared cache
-
-Valkey is the preferred optional shared-cache target for newly implemented cache workloads. Its BSD-3-Clause license and Redis OSS lineage fit a potentially public/self-hosted Foundation without requiring a Redis server in every consumer.
-
-Compatibility must be verified for the commands, client, scripts, topology, and versions actually used. This does not promise compatibility with every Redis release, module, or feature.
-
-A cache stores disposable derived data unless the owning capability explicitly defines another durability role. Define TTL, invalidation, memory/eviction bounds, and failure behavior for the real use case. Do not silently treat authorization, sessions, quotas, locks, or job durability as best-effort cache semantics. Do not implement an adapter before a consumer needs it.
-
-### Jobs and events
-
-For a product that needs durable background work, begin with a maintained PostgreSQL-backed job implementation, evaluated against transactional enqueueing, bounded concurrency/retries, cancellation, recovery, retention, and compatible job arguments. River's PostgreSQL path is the first candidate to validate; it is not selected as an implemented dependency or a mandatory worker.
-
-At-least-once execution requires idempotent or reconcilable effects. A committed job, a transaction, or a broker does not by itself make an external payment/email/provider mutation happen exactly once. Define ambiguous-outcome reconciliation rather than blindly retrying an unknown mutation.
-
-For recoverable long-lived multi-step workflows, Temporal is the preferred optional candidate. Adopt it only when durable waiting/progress/recovery justifies the service and deterministic replay/versioning cost. Activities still require idempotent or reconcilable external effects. If Temporal owns a workload, do not duplicate its execution in River merely because both are available.
-
-NATS JetStream is the preferred optional durable-messaging candidate when independent consumers, replay or delivery requirements justify a broker. Define acknowledgments, persistence, retention and replication; use a PostgreSQL-to-broker outbox/delivery boundary where required. It does not replace a workflow engine or provide a cross-system exactly-once mutation guarantee.
-
-Use direct Application calls for immediate in-process results. Across products, use explicit authenticated HTTPS APIs/webhooks with bounded calls and attributable authorization. Add a transactional outbox or broker only when the actual delivery/consistency model requires it.
-
-Kafka is not an initial runtime requirement or a pre-built Foundation adapter. Revisit it for durable replayable event streams, independent consumers, CDC/stream processing, or concrete throughput/retention requirements that justify broker operation. An ordinary background job does not alone select Kafka.
-
-### Search
-
-Start with product/module-owned PostgreSQL search for needs it actually satisfies. Evaluate indexing and normalization on representative Persian/multilingual queries; pg_trgm is an optional extension when similarity/indexed matching is useful, not a complete search relevance solution.
-
-Do not select or build a universal dedicated search adapter without the first real search contract. OpenSearch is the preferred advanced-search candidate to evaluate when required relevance, filtering/facets, language behavior, volume or latency warrants one. Compare a simpler maintained engine such as Meilisearch where fit/operation favors it; owner acceptance of the review does not establish tested search support.
-
-A search index is a rebuildable projection. Explicitly preserve resource/tenant authorization, deletion propagation, and acceptable freshness; search results must not become the authoritative payment/inventory/security state.
-
-### Deployment and central services
-
-Prefer reproducible OCI/container packaging for suitable product delivery/development when it reduces operational friction. The initial Linux reference path also allows a Go application binary supervised by systemd. Products own deployment and secrets; containers remain optional for consuming the Foundation as a Go dependency.
-
-Keep configuration external, shutdown graceful, resource use bounded, readiness local to necessary dependencies, and schema activation deliberate. These properties ease later orchestration without implementing Kubernetes APIs or charts now.
-
-Kubernetes is not an initial deployment dependency. Revisit it for concrete multi-node scheduling, rollout, isolation, availability, or operating-team requirements; the availability of managed/lightweight Kubernetes can change the comparison. Binary/systemd or Compose alone does not provide high availability.
-
-Sharing a Foundation dependency does not require one running AChrix service or one database for every product. Products retain separately owned data and release boundaries; several product databases may share infrastructure where isolation and resource budgets allow it.
-
-Extract or consume a central service only for a demonstrated capability and explicit owner, failure, authorization, lifecycle, and operational boundary. Do not create a central router/service through which every product operation must pass.
-
-## Owner decisions and related boundaries
-
-The owner accepted independently owned product accounts with optional SSO on 2026-10-01; see [Security and Authorization](../security/security-and-authorization.md#product-accounts-and-optional-sso). This policy does not select an identity provider or require a central identity service.
-
-The owner accepted the licensing/ecosystem policy on 2026-10-01; [ADR-0004](ADR-0004-licensing-and-trusted-ecosystem.md) and [Licensing](../legal/licensing.md) now own that decision. CLA legal-recipient/activation work remains explicit; it does not reopen the accepted outbound licenses.
-
-Multi-Site and Gateway Bridge placement gates remain unchanged. No consumer or other repository is migrated by this decision.
-
-### Frontend and specialized runtimes
-
-TypeScript is the preferred language for interactive web frontend code. Product requirements choose the framework and whether Node is needed in production; preserve semantic/server-rendered lightweight web paths where appropriate. Python is optional for AI/data capabilities whose ecosystem value justifies a separate runtime. A Go call to an external model API alone does not require a Python service.
-
-## Implementation and support
-
-Issue #1 still proves the smallest versioned Foundation plus an independent consumer on real PostgreSQL, supported toolchain/dependency pins, authorization behavior, and CI. Do not expand it to implement cache, queue, search, TimescaleDB, identity, or orchestration modules solely because paths are named here.
-
-For each later optional profile, support requires real compatibility and failure/recovery evidence. Configuration metadata or an interface alone is not proof.
-
-Before adding infrastructure, identify the required behavior and representative resource/cost constraints. Test the smallest mechanism that satisfies them; revisit a default when evidence changes the result. Total cost includes integration, operations, RAM/CPU, disk/I/O, connections, network, telemetry, retention, backup, upgrades, and recovery.
-
-## Evidence
-
-- [PostgreSQL support and upgrade policy](https://www.postgresql.org/support/versioning/)
-- [PostgreSQL transaction isolation](https://www.postgresql.org/docs/current/transaction-iso.html)
-- [PostgreSQL pg_trgm](https://www.postgresql.org/docs/current/pgtrgm.html)
-- [pgx driver and standard database/sql adapter](https://github.com/jackc/pgx)
-- [sqlc database/language support](https://docs.sqlc.dev/en/latest/reference/language-support.html)
-- [golang-migrate drivers and versioned migrations](https://github.com/golang-migrate/migrate)
-- [TimescaleDB extension and analytics capabilities](https://github.com/timescale/timescaledb)
-- [TimescaleDB license boundaries](https://github.com/timescale/timescaledb/blob/main/LICENSE)
-- [Valkey license](https://github.com/valkey-io/valkey/blob/unstable/COPYING)
-- [Valkey migration and Redis OSS compatibility scope](https://valkey.io/topics/migration/)
-- [Current Redis license options](https://redis.io/legal/licenses/)
-- [River PostgreSQL integration](https://riverqueue.com/docs)
-- [River worker execution and idempotency](https://riverqueue.com/docs/reliable-workers)
-- [River transactional enqueueing](https://riverqueue.com/docs/transactional-enqueueing)
-- [Temporal workflow/replay constraints](https://docs.temporal.io/workflows)
-- [Temporal activity side effects](https://docs.temporal.io/activities)
-- [NATS JetStream persistence and delivery](https://docs.nats.io/concepts/jetstream)
-- [SigNoz installation and operational components](https://signoz.io/docs/install/docker/)
-- [Kafka event-streaming model](https://kafka.apache.org/intro/)
-- [Kubernetes production considerations](https://kubernetes.io/docs/setup/production-environment/)
-- [OpenSearch language analyzers](https://docs.opensearch.org/latest/analyzers/language-analyzers/index/)
-- [Meilisearch Persian support update](https://www.meilisearch.com/blog/september-2025-updates)
-- [OpenTelemetry Go signal status](https://opentelemetry.io/docs/languages/go/)
-
-These sources establish capabilities and constraints. Expected development benefits are recommendations from those facts, not measured AChrix speed, capacity, availability, or cost results.
+Pin current supported Go/PostgreSQL/dependency versions in the executable work, not from chat assumptions. Verify the smallest mechanism against its real correctness/failure workload and total delivery/operating/upgrade/recovery cost. Optional interfaces, metadata or this table do not establish implementation or official support. Do not expand Issue #1 to install these optional services just because their paths are named.

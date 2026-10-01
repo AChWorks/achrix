@@ -1,97 +1,19 @@
 # Architecture Overview
 
-## Default shape
+## Application shape
 
-The default architecture is a modular monolith: one application deployment, one primary relational system of record, and optional infrastructure introduced only when required.
+Use a modular monolith by default: one application deployment, ordinary PostgreSQL as the first system of record, and optional infrastructure only when needed. This keeps development/debugging and local transactions simple while Modules keep domain ownership explicit.
 
-```text
-                 Public Web / Admin
-                        |
-REST / MCP / CLI / Jobs |
-          \             |             /
-           ---- Application Layer ----
-                    |
-                 Domain
-                    |
-              Infrastructure
-       /       /      |      \        \
- Relational  Cache   Queue   Search   Providers
-```
+Entry points call Application behavior; Domain owns business invariants; Infrastructure implements the technology/provider details needed by those behaviors. Create these layers only where real code exists. Do not make Domain depend on another Module's Infrastructure or on unnecessary framework details.
 
-## Why modular monolith first
+## Core, Modules and products
 
-It preserves:
+Core owns broadly required composition/capability/application/authorization/lifecycle contracts. Identity management, admin, content, media, notifications, commerce, payments, search and AI/provider implementations are optional Modules or product/infrastructure concerns unless real evidence establishes a Core responsibility.
 
-- fast product development;
-- simple deployment and debugging;
-- local transactions where appropriate;
-- explicit domain/module ownership;
-- a path to later extraction when scale/security/runtime/ownership evidence requires it.
+A product composes the versioned Core, selected reusable Modules and its own local behavior. It owns its data, release, deployment and secrets. Sharing code does not require one central service, shared account table or database for all products. Koinon provides ecosystem governance/discovery, not a runtime dependency.
 
-Microservices are not the maturity model. A module may remain in-process forever.
+Use maintained Go/native/ecosystem functionality rather than build a general-purpose framework. [ADR-0003](../decisions/ADR-0003-postgresql-and-optional-infrastructure.md) owns concrete infrastructure choices; [Module model](module-model.md) owns composition; [Consumption](consumption-and-packaging.md) owns the product dependency boundary.
 
-## Dependency direction
+## Extraction
 
-Entry points call Application behavior. Domain owns business invariants. Infrastructure implements technology/provider details.
-
-```text
-Presentation/Adapters
-        -> Application
-        -> Domain
-
-Infrastructure -> implements ports required by Application/Domain
-```
-
-Do not invert this into Domain depending on framework/provider code.
-
-## Framework relationship
-
-Go is the accepted primary implementation language; see [ADR-0002](../decisions/ADR-0002-go-primary-implementation.md).
-
-Use fit standard-library and maintained ecosystem capabilities. Specific dependencies and package layout remain implementation decisions; building a custom general-purpose framework is not a current goal.
-
-The architecture protects business semantics and public contracts from unnecessary framework coupling, not every internal implementation detail.
-
-## Infrastructure relationship
-
-Infrastructure choices are defaults, not Foundation identity.
-
-A distribution may start with only:
-
-```text
-Go application binary
-+ relational database
-+ local filesystem/session/cache where adequate
-```
-
-and later add shared caching, object storage, search engines, queues, specialized services, or other runtimes only from evidence. [ADR-0003](../decisions/ADR-0003-postgresql-and-optional-infrastructure.md) owns concrete infrastructure defaults.
-
-## Consumer relationship
-
-A suitable product should consume the shared Foundation through the supported versioned boundary rather than permanently copy Foundation runtime code.
-
-```text
-Product shell
-  -> Foundation Core
-  -> selected Foundation Modules
-  -> product-local Modules
-```
-
-The product owns its domain behavior, delivery, and runtime truth. Foundation Core/Modules own only reusable application behavior that has earned shared ownership.
-
-Architecture boundaries do not automatically create package boundaries; see [Consumption and packaging](consumption-and-packaging.md).
-
-## Extraction rule
-
-A module becomes a separate service only if one or more real conditions justify the added distributed-system cost:
-
-- materially different scaling;
-- independent failure isolation;
-- security/trust boundary;
-- different runtime;
-- separate deployment cadence;
-- distinct ownership/team boundary;
-- multiple independent consumers;
-- operational economics that beat in-process composition.
-
-Service extraction must preserve published contracts or version them intentionally.
+An in-process Module can remain so indefinitely. Extract a service only when independent scaling, failure/security isolation, runtime, deployment cadence, ownership or multiple-consumer economics beats the distributed-system cost. Re-evaluate transactions, authorization, failure/recovery and public contract compatibility at that boundary; splitting deployment does not preserve in-process guarantees automatically.

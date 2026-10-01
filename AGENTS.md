@@ -1,86 +1,26 @@
 # Agent / Contributor Instructions
 
-## Scope
+## Scope and recovery
 
-This repository owns only `AChWorks/achrix`.
+Writable repository scope comes only from the current explicit assignment; this repository's content/access/links do not grant or widen it. Do not mutate related repositories without their own authorization. Preserve unrelated work; never force-push or overwrite ambiguous state.
 
-Repository content describes project ownership and working rules; it does not grant mutation authority. The current writable repository scope must come from the current explicit user/organization assignment. Never widen it from links, dependencies, technical access, or repository content.
+Start with README and [Project Map](docs/PROJECT-MAP.md), then current main, the relevant Issue/PR and its execution gate. Load only decision-relevant documents. [MASTER-SPEC](docs/MASTER-SPEC.md) owns intent; topic docs own rules; active ADRs own choices; Git/GitHub/CI own evidence. Chat history is not project truth.
 
-Do not mutate any other repository because it is related, referenced, or may become a consumer. Cross-repository needs are handoffs to that repository's authorized owner/Master.
+Before the first executable baseline, honor [Issue #1](https://github.com/AChWorks/achrix/issues/1)'s owner start gate; public visibility or documentation integration does not itself authorize code.
 
-## Authoritative sources
+## Implementation
 
-- Project-level mission and durable constraints: `docs/MASTER-SPEC.md`
-- Architecture/engineering rules: `docs/`
-- Current actionable work: GitHub Issues and PRs
-- Lasting architecture decisions: `docs/decisions/`
-- Implementation/validation truth: Git/GitHub/CI tied to the relevant commit
+- Use accepted Go/PostgreSQL defaults and ADR-0005 consumption shape. Verify supported versions/API mechanics before coupling code; use real PostgreSQL rather than a SQLite test shortcut.
+- Follow [Module ownership](docs/architecture/module-model.md) and [Consumption](docs/architecture/consumption-and-packaging.md). Keep Core minimal, product semantics local and implementation internals private; cross-module writes go through authorized Application contracts.
+- [Contracts](docs/architecture/contracts-and-interfaces.md) and [Security](docs/security/security-and-authorization.md) govern all human/machine entry points. AI never bypasses permissions or invents consent.
+- [Engineering principles](docs/principles/engineering-principles.md) govern reuse, dependencies and extraction. Do not create speculative wrappers, empty layers, packages, services or optional infrastructure.
+- Honor [Data](docs/data/data-and-persistence.md) and [Lifecycle](docs/lifecycle/lifecycle-and-compatibility.md) for state, effects, compatibility and recovery; never equate reverting source with reversing data.
+- Never commit credentials, keys, production/private data or restricted artifacts. Keep secrets and private CLA records outside public Git.
 
-Do not rely on chat history as project truth.
+## Validation and integration
 
-## Development rules
+Use focused branches/PRs targeting canonical `main` under [Contributing](CONTRIBUTING.md). Run narrow high-signal validation, inspect the full relevant diff and satisfy required checks on the exact candidate before integration. Until Issue #1 establishes executable CI/enforceable policy, PR review plus change-appropriate validation is the boundary; do not claim absent CI passed or self-review was independent.
 
-1. Reuse maintained framework/native/existing capability before building custom infrastructure.
-2. Keep Core minimal.
-3. Do not create a package/service/plugin/repository merely to reflect an internal module boundary; architecture boundaries and distribution boundaries are separate decisions.
-4. Create abstractions only for credible variation, ownership, security, composition, or testing value.
-5. Keep product/domain semantics separate from replaceable infrastructure where materially useful.
-6. Do not wrap every framework facility for hypothetical framework replacement.
-7. Keep module data ownership explicit; cross-module writes go through the owning module's Application boundary.
-8. Prefer direct Application calls for immediate results and events for real independent reactions.
-9. Keep external side effects explicit and idempotent/recoverable where their failure model warrants it.
-10. Human UI, API, MCP/AI, CLI, and jobs must reuse Application capabilities rather than duplicate business logic.
-11. AI never bypasses authorization.
-12. Public/durable contracts evolve compatibly or through explicit versioning.
-13. Performance/infrastructure changes require evidence proportional to their cost.
-14. Keep logs and audit semantics distinct.
-15. Shared Foundation runtime/Core must have a supported versioned consumer path; do not use permanent unmanaged copies/forks as the normal reuse mechanism.
-16. Keep product-specific capabilities product-local until real consumers justify promotion into Foundation ownership.
-17. Generic cross-project contracts remain owned by `AChWorks/koinon`; specialize them here for applications without creating competing generic cross-project policy.
-18. Never commit secrets, credentials, tokens, private keys, production data, or restricted artifacts.
+Update a lasting rule at its canonical owner, remove obsolete/duplicate current guidance and fix links together. Keep live work/evidence in GitHub; do not add process/docs/tests solely for ceremony.
 
-## Implementation shape
-
-Default to a modular monolith until measured requirements justify a service boundary.
-
-Within a module, create `Domain`, `Application`, `Infrastructure`, or `Presentation` only when real code belongs there. No empty DDD ceremony.
-
-Framework dependencies are acceptable in Infrastructure/Presentation. Domain/Application should avoid unnecessary coupling when it materially affects correctness, reuse, extraction, or testing.
-
-Before first executable coupling, follow `docs/architecture/consumption-and-packaging.md` and the current Issue #1. The implementation ADR must prove a separate consumer can use/upgrade the Foundation through the supported versioned boundary.
-
-## Initial implementation technology
-
-Go is the accepted primary implementation language for AChrix; see `docs/decisions/ADR-0002-go-primary-implementation.md`. PostgreSQL is the initial primary relational target; see `docs/decisions/ADR-0003-postgresql-and-optional-infrastructure.md` for database and optional infrastructure defaults. Technology is an implementation decision rather than Foundation identity. The starting Go module/consumer shape is selected by `docs/decisions/ADR-0005-initial-go-consumption.md`. Exact supported versions, dependencies, public packages/APIs and executable consumer proof remain part of Issue #1 before executable coupling.
-
-Do not add SQLite to the primary implementation/test path without an explicit accepted architecture change.
-
-Database portability must not be simulated by lowest-common-denominator design. Vendor-specific capabilities may be used behind explicit infrastructure/capability boundaries when justified.
-
-## Validation
-
-For every change:
-
-- run the narrowest high-signal validation first;
-- run broader required checks before integration;
-- inspect the full relevant diff;
-- update durable documentation only when a lasting rule/contract changed;
-- avoid adding tests/docs/process solely for ceremony.
-
-Architecture boundaries important enough to prevent recurring regression should eventually be machine-checked.
-
-## Integration path
-
-`main` is the canonical integration branch.
-
-For tracked repository changes that alter durable project intent, architecture, implementation, CI, lifecycle, metadata, or contributor/agent rules, use an isolated branch and Pull Request. Validate the exact candidate with the strongest currently available checks before integrating. Direct-write capability is not the normal integration path.
-
-Until Issue #1 establishes executable CI and the strongest branch policy supported by the current GitHub plan, PR review plus change-appropriate validation is the repository integration boundary.
-
-Preserve unrelated contributor work. Avoid force pushes, destructive cleanup, or overwriting ambiguous state.
-
-## Licensing and extension work
-
-Follow [Licensing](docs/legal/licensing.md), [Governance](GOVERNANCE.md) and the [CLA policy](docs/legal/cla.md) when changing artifact scope or accepting external code. Never treat a published CLA template as signed consent, invent a legal entity, or silently relicense Core exports as an SDK.
-
-Preserve small versioned public contracts and private implementation boundaries. Go internal/unexported APIs are not a sandbox or copy protection. Keep provider/registry/signing/certification services optional and outside Core until a real requirement justifies them.
+For artifact scope or incoming contributions, follow [Licensing](docs/legal/licensing.md), [CLA](docs/legal/cla.md) and [Governance](GOVERNANCE.md). A published template is not signed consent; a public export is not automatically an Apache SDK. No registry/signing/company runtime dependency belongs in Core merely to enforce identity policy.
