@@ -19,7 +19,24 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 2
+      - name: Select validation from the complete changed tree
+        id: scope
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] && ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth=1 origin "$BASE_SHA" || true
+          fi
+          python3 scripts/validation_scope.py "$BASE_SHA" | tee -a "$GITHUB_OUTPUT"
+      - name: Validate changed routing and shell entry points
+        if: steps.scope.outputs.routing_tests == 'true'
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_validation_scope.py'
+          bash -n scripts/validate.sh scripts/setup-validation-postgres.sh
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: steps.scope.outputs.scope != 'docs'
         with:
           go-version: '1.27.1'
           cache: false
@@ -27,6 +44,7 @@ jobs:
       # checksum, exact version and build options; never restore a prefix match.
       - name: Restore exact PostgreSQL validation tools
         id: postgres-tools
+        if: steps.scope.outputs.scope == 'full'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         timeout-minutes: 3
         env:
@@ -35,22 +53,23 @@ jobs:
           path: ${{ runner.temp }}/achrix-postgres/install
           key: postgres-ubuntu-24.04-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/setup-validation-postgres.sh') }}
       - name: Native validation prerequisites
-        if: steps.postgres-tools.outputs.cache-hit != 'true'
+        if: steps.scope.outputs.scope == 'full' && steps.postgres-tools.outputs.cache-hit != 'true'
         timeout-minutes: 4
         run: |
           sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq
           sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends build-essential bison flex m4 bzip2
       - name: Exact supported PostgreSQL tools
-        if: steps.postgres-tools.outputs.cache-hit != 'true'
+        if: steps.scope.outputs.scope == 'full' && steps.postgres-tools.outputs.cache-hit != 'true'
         run: scripts/setup-validation-postgres.sh "$RUNNER_TEMP/achrix-postgres"
-      - name: Foundation, isolated consumer and real PostgreSQL proof
+      - name: Run the selected validation
+        if: steps.scope.outputs.scope != 'docs'
         env:
           ACHRIX_PG_BIN: ${{ runner.temp }}/achrix-postgres/install/bin
-        run: scripts/validate.sh
+        run: scripts/validate.sh "${{ steps.scope.outputs.scope }}"
       # Publish only after successful full validation of trusted integrated main.
       # PRs can consume main's cache or build cold; they never publish it here.
       - name: Save verified PostgreSQL validation tools
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.postgres-tools.outputs.cache-hit != 'true'
+        if: steps.scope.outputs.scope == 'full' && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.postgres-tools.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         timeout-minutes: 3
         with:

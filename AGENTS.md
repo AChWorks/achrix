@@ -19,7 +19,7 @@ Before the first executable baseline, honor [Issue #1](https://github.com/AChWor
 
 ## Validation and integration
 
-Use focused branches/PRs targeting canonical `main` under [Contributing](CONTRIBUTING.md), which owns the integration policy. Run narrow high-signal validation, inspect the full relevant diff, and satisfy effective GitHub rules/checks on the exact candidate. Issue #1 introduces executable CI; do not claim absent checks passed.
+Use focused branches/PRs targeting canonical `main` under [Contributing](CONTRIBUTING.md), which owns the integration policy. Apply [validation selection](CONTRIBUTING.md#validation-selection): inspect the full relevant diff, reuse unaffected evidence and satisfy effective GitHub rules/checks on the exact candidate. Report only the checks actually performed.
 
 Update a lasting rule at its canonical owner, remove obsolete/duplicate current guidance and fix links together. Keep live work/evidence in GitHub; do not add process/docs/tests solely for ceremony.
 
