@@ -14,7 +14,7 @@ The document index, not a status report. Start from README/AGENTS and the releva
 | Application/public extension contracts, AI schemas and safe mutations | [Contracts](architecture/contracts-and-interfaces.md) |
 | Data, consistency, time/money and privacy | [Data](data/data-and-persistence.md) |
 | Authorization, product accounts/SSO, AI access, secrets, abuse and vulnerability reporting | [Security](security/security-and-authorization.md); GitHub entry: [SECURITY](../SECURITY.md) |
-| Install/upgrade/restore, compatibility and official artifact evidence | [Lifecycle](lifecycle/lifecycle-and-compatibility.md) |
+| Install/upgrade, backup/restore, compatibility and official artifact evidence | [Lifecycle](lifecycle/lifecycle-and-compatibility.md) |
 | Configuration, diagnosis, bounded resources and cost | [Operations](operations/operability-performance.md) |
 | Semantic web, SEO, localization and machine content representations | [Web](web/seo-and-semantic-web.md) |
 | Outcome sequence | [Roadmap](development/roadmap.md) |

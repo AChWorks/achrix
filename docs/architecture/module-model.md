@@ -2,7 +2,7 @@
 
 ## Ownership
 
-A Module owns one coherent capability: its business semantics, Application operations, intentionally public contracts, durable domain data, mutations, provider adapters and compatibility/migrations. Other Modules do not write its tables or import its Infrastructure implementation; they use authorized Application contracts.
+A Module owns one coherent capability: its business semantics, Application operations, intentionally public contracts, durable domain data/assets, mutations, provider adapters, compatibility/migrations and [recovery dependencies](../lifecycle/lifecycle-and-compatibility.md#backup-and-recovery). Other Modules do not write its tables or import its Infrastructure implementation; they use authorized Application contracts.
 
 Create Domain, Application, Infrastructure and Presentation only when actual behavior belongs there. A Module boundary is not automatically a dependency package, plugin, repository, process, service or database.
 

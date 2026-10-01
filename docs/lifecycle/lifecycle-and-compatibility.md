@@ -22,7 +22,21 @@ Prefer additive public contract change. Breaking versions define migration and a
 
 Choose activation/rollback mechanics for the actual deployment risk; versioned artifacts and reversible activation may help but are not universal. Identify rollback, roll-forward, restore, compensation or manual reconciliation. Reverting files alone does not make data or external effects reversible.
 
-Backup existence is not restore evidence. Material recovery includes database/files/object data, encryption/signing keys, runtime configuration, version identity and a credible restore procedure.
+## Backup and recovery
+
+Core supplies only the necessary lifecycle/composition identity and readiness contracts. Modules identify actual durable assets and recovery dependencies; the product owns backup scope, consistency, policy, authorization and restore coordination. Maintained [database](https://www.postgresql.org/docs/current/backup.html), storage and deployment tools perform capture and restoration. A shared Backup Module/tool needs real reusable mechanics before promotion; no backup engine or host authority is required in Core.
+
+Support whole-product and database-only/files-or-object-data-only backups when the declared profile can restore them safely. Record coverage/exclusions, source product/Core/Module/schema identities, capture point/consistency method, integrity evidence and required configuration, database roles/extensions and protected key references. A data export is not automatically a complete disaster-recovery backup. Cache/search projections may be rebuilt only when their authoritative source survives.
+
+Separate component schedules/formats are valid, but combining captures taken near the same time does not prove consistency. Use a demonstrated snapshot/write-quiescence/versioning or reconciliation strategy for cross-store references. Reject unsupported partial/Module restore unless its owned restore contract preserves relationships and domain invariants; shared tables do not imply independently restorable Modules.
+
+Choose logical, physical, continuous/WAL or managed-provider mechanisms against product recovery objectives: acceptable data loss (RPO), restore time (RTO), scale, compatible tooling and total cost. Do not copy a running database's data directory as a generic file backup. No universal tool, schedule or recovery-time promise is selected here.
+
+Protect backup access and transport/storage, keep recoverable key material separately controlled, and retain usable copies beyond the production host's failure scope. Define retention, resource bounds and actionable failure status; backups are not publicly served files. Verify trusted input, integrity, coverage and target compatibility before destructive restore.
+
+Rehearse restoration into an isolated supported target, verifying schema, critical data/file relationships, application identity and readiness; record achieved recovery limits. Restore operations obey normal authorization/audit and serialize with conflicting lifecycle operations. Reconcile credentials/revocations and external effects before resuming jobs; restoring old local state must not blindly replay completed payments/messages or erase retained audit evidence.
+
+Backup existence is not restore evidence. Prove the needed profile on real persisted behavior, then on the first product, before claiming supported recovery.
 
 ## Product update experience
 
