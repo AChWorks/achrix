@@ -8,7 +8,7 @@ Use a focused branch and Pull Request for tracked changes to intent, architectur
 
 Validate the exact candidate with change-appropriate checks and review the full diff. The active `main` ruleset requires PRs, squash merges and resolved review threads, blocks force pushes/deletion, and has no bypass actors. It requires zero approval votes so a sole maintainer can integrate reviewed low/medium-risk work; this does not waive risk-required independent review or owner decisions. Never describe self-review as independent.
 
-Issue #1 adds executable CI and binds its actual checks to this existing ruleset once they run reliably. Until then there are no required CI checks; documentation validation and recorded PR review remain necessary. Inspect effective GitHub rules before integration rather than relying on this text alone.
+The existing ruleset binds the actual `baseline` check to GitHub Actions (integration ID `15368`) and requires it to pass against the current base before integration. This check runs the documented Foundation, isolated consumer and PostgreSQL validation. Recorded review remains necessary. Inspect effective GitHub rules before integration rather than relying on this text alone.
 
 Done means the accepted behavior is implemented, required checks pass, compatibility/state/recovery implications are handled and affected canonical docs are current. Integration and production delivery are separate facts. Current documents contain rules still in force; obsolete decisions remain in Git history.
 

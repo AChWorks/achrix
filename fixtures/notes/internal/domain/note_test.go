@@ -9,7 +9,7 @@ import (
 )
 
 func TestNoteInvariants(t *testing.T) {
-	for _, v := range []string{"", "  \t\n", strings.Repeat("ا", 201), "text\x00", string([]byte{0xff})} {
+	for _, v := range []string{"", "  \t\n", "\u00a0\u2003\u3000", strings.Repeat("ا", 201), "text\x00", string([]byte{0xff})} {
 		if domain.ValidateText(v) == nil {
 			t.Fatal("invalid text accepted")
 		}

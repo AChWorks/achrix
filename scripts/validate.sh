@@ -51,6 +51,8 @@ export PGHOST="$validation_root/socket" PGPORT=5432 PGUSER
 PGUSER=$(id -un)
 createdb -T template0 achrix_test_notes
 createdb -T template0 achrix_test_restore
+createdb -T template0 -E LATIN1 achrix_test_latin1
+createdb -T template0 -E SQL_ASCII achrix_test_sqlascii
 
 # Copy consumer-owned source only. Foundation source is downloaded as a pinned
 # normal Go module into a cold module cache; no replacement/workspace is used.

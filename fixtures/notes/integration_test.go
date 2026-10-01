@@ -15,6 +15,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode"
 
 	"example.com/achrix-notes/internal/application"
 	"example.com/achrix-notes/internal/diagnosis"
@@ -46,9 +47,8 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	if err := p.Ping(ctx); err != nil {
 		t.Fatal(err)
 	}
-	var version int
-	if err := p.QueryRow(ctx, "SELECT current_setting('server_version_num')::int").Scan(&version); err != nil || version < 180000 || version >= 190000 {
-		t.Fatal("PostgreSQL 18 required", version, err)
+	if err := infrastructure.CheckEnvironment(ctx, p); err != nil {
+		t.Fatal(err)
 	}
 	return p
 }
@@ -64,6 +64,58 @@ func migrate(t *testing.T, p *pgxpool.Pool) {
 	defer cancel()
 	if err := infrastructure.Migrate(ctx, p, infrastructure.Migrations()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestUnsupportedDatabaseEncoding(t *testing.T) {
+	// These databases are created only inside validate.sh's owned cluster.
+	_ = testPool(t)
+	for name, encoding := range map[string]string{"achrix_test_latin1": "LATIN1", "achrix_test_sqlascii": "SQL_ASCII"} {
+		t.Run(encoding, func(t *testing.T) {
+			c, err := pgxpool.ParseConfig(os.Getenv("NOTES_TEST_DATABASE_URL"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			c.ConnConfig.Database = name
+			c.MaxConns = 2
+			c.ConnConfig.ConnectTimeout = time.Second
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			p, err := pgxpool.NewWithConfig(ctx, c)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer p.Close()
+			var actual string
+			if err := p.QueryRow(ctx, "SHOW server_encoding").Scan(&actual); err != nil || actual != encoding {
+				t.Fatal(actual, err)
+			}
+			if err := infrastructure.Migrate(ctx, p, infrastructure.Migrations()); err == nil {
+				t.Fatal("unsupported installation accepted")
+			}
+			logger := diagnosis.New(io.Discard)
+			s, err := infrastructure.New(c.ConnString(), logger)
+			if err != nil {
+				t.Fatal(err)
+			}
+			a, err := achrix.New(achrix.Config{StartupTimeout: time.Second, ShutdownTimeout: time.Second, Logger: logger}, achrix.PolicyFunc(application.Policy), s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := a.Start(ctx); err == nil {
+				t.Fatal("unsupported startup accepted")
+			}
+			if err := s.Ready(ctx); !errors.Is(err, domain.ErrUnavailable) {
+				t.Fatal("rejected startup resource survived", err)
+			}
+			if err := a.Shutdown(ctx); err != nil {
+				t.Fatal(err)
+			}
+			var present bool
+			if err := p.QueryRow(ctx, "SELECT EXISTS (SELECT FROM pg_namespace WHERE nspname='notes')").Scan(&present); err != nil || present {
+				t.Fatal("rejection changed database state", present, err)
+			}
+		})
 	}
 }
 
@@ -226,10 +278,32 @@ func TestPostgresMigrationAndSharedBehavior(t *testing.T) {
 			t.Fatal("unauthorized/invalid state change", count, err)
 		}
 		// Database constraints preserve durable invariants even outside Application.
-		for _, text := range []string{"", strings.Repeat("ا", 201)} {
-			if _, err := p.Exec(ctx, "INSERT INTO notes.entries(id,body,created_at) VALUES($1,$2,now())", rand.Text(), text); err == nil {
-				t.Fatal("SQL constraint missing")
+		invalid := []string{"", strings.Repeat("ا", 201), " \t\n\u00a0\u2003\u3000"}
+		// Use Go's independent Unicode property as the invariant oracle, rather
+		// than reproducing the SQL trim-character list in the test.
+		for r := rune(0); r <= unicode.MaxRune; r++ {
+			if unicode.IsSpace(r) {
+				invalid = append(invalid, string(r))
 			}
+		}
+		for _, text := range invalid {
+			if _, err := p.Exec(ctx, "INSERT INTO notes.entries(id,body,created_at) VALUES($1,$2,now())", rand.Text(), text); err == nil {
+				t.Fatalf("SQL constraint accepted invalid text %q", text)
+			}
+		}
+		for _, text := range []string{"یادداشت ساده", strings.Repeat("ا", 200), "\u2003متن\u3000"} {
+			tx, err := p.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, insertErr := tx.Exec(ctx, "INSERT INTO notes.entries(id,body,created_at) VALUES($1,$2,now())", rand.Text(), text)
+			rollbackErr := tx.Rollback(ctx)
+			if insertErr != nil || rollbackErr != nil {
+				t.Fatal("valid multilingual SQL boundary", insertErr, rollbackErr)
+			}
+		}
+		if err := p.QueryRow(ctx, "SELECT count(*) FROM notes.entries").Scan(&count); err != nil || count != 2 {
+			t.Fatal("invariant probes changed persisted fixture", count, err)
 		}
 		w = request("GET", "/ready", "", "")
 		if w.Code != 200 {

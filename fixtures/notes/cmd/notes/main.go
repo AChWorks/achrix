@@ -65,11 +65,6 @@ func run() int {
 			return 1
 		}
 		defer p.Close()
-		var version int
-		if err := p.QueryRow(ctx, "SELECT current_setting('server_version_num')::int").Scan(&version); err != nil || version < 180000 || version >= 190000 {
-			logger.Error("migration rejected", "component", "notes.migrations", "reason", "unsupported_database")
-			return 1
-		}
 		if err := infrastructure.Migrate(ctx, p, infrastructure.Migrations()); err != nil {
 			logger.Error("migration failed", "component", "notes.migrations", "reason", "migration_failed")
 			return 1

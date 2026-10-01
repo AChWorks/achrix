@@ -68,12 +68,8 @@ func (s *Store) Start(ctx context.Context) error {
 		s.logFailure(ctx, "connect", err)
 		return errors.New("database connection failed")
 	}
-	var version int
-	if err := p.QueryRow(ctx, "SELECT current_setting('server_version_num')::int").Scan(&version); err != nil {
-		return errors.New("database version unavailable")
-	}
-	if version < 180000 || version >= 190000 {
-		return errors.New("unsupported PostgreSQL major")
+	if err := CheckEnvironment(ctx, p); err != nil {
+		return err
 	}
 	// Installation is explicit, never raced by traffic/startup replicas.
 	if err := CheckSchema(ctx, p); err != nil {
@@ -161,6 +157,20 @@ func (s *Store) logFailure(ctx context.Context, operation string, err error) {
 
 type Migration struct{ ID, SQL string }
 
+// CheckEnvironment enforces the local fixture's PostgreSQL/Unicode support
+// boundary before installation or readiness. Client encoding alone is insufficient.
+func CheckEnvironment(ctx context.Context, p *pgxpool.Pool) error {
+	var version int
+	var encoding string
+	if err := p.QueryRow(ctx, "SELECT current_setting('server_version_num')::int, current_setting('server_encoding')").Scan(&version, &encoding); err != nil {
+		return errors.New("database environment unavailable")
+	}
+	if version < 180000 || version >= 190000 || encoding != "UTF8" {
+		return errors.New("unsupported database environment")
+	}
+	return nil
+}
+
 func Migrations() []Migration {
 	b, err := migrationFiles.ReadFile("migrations/001_notes.sql")
 	if err != nil {
@@ -174,6 +184,9 @@ func Digest(m Migration) string { v := sha256.Sum256([]byte(m.SQL)); return hex.
 // advisory lock. DDL and ledger entries commit atomically; cancellation/connection
 // loss rolls back both. No down/destructive migrations exist in this fixture.
 func Migrate(ctx context.Context, p *pgxpool.Pool, migrations []Migration) error {
+	if err := CheckEnvironment(ctx, p); err != nil {
+		return err
+	}
 	if len(migrations) == 0 {
 		return errors.New("migration set required")
 	}
