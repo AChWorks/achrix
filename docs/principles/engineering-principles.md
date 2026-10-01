@@ -22,10 +22,35 @@ Compare fit, integration effort, authorization/data ownership, failure behavior,
 - Introduce infrastructure or service extraction for actual correctness, failure isolation, security, resource, ownership or operating needs. Benchmarks of an isolated runtime are insufficient.
 - Replace maintained functionality when recurring limitations, security/compatibility, maintenance cost or measured bottlenecks outweigh bounded adaptation.
 
+## Implementation craftsmanship
+
+Professional quality is a property of the code and behavior, not the presence of a framework, scanner or code generator.
+
+- Prefer explicit, idiomatic Go and obvious control flow over clever reflection/metaprogramming, hidden global state or framework magic. Use advanced mechanisms only when their concrete value exceeds the extra review/debugging cost.
+- Keep types, functions and packages cohesive around one ownership/invariant boundary. Refactor because responsibilities or reasoning became unclear, not to satisfy arbitrary file/function-length targets or create empty layers.
+- Choose names and public contracts that communicate domain intent. Comments explain invariants, lifecycle/concurrency/security constraints and non-obvious tradeoffs; do not narrate syntax.
+- Expected, input and operational failures return stable/inspectable errors at the right boundary. Panic is reserved for genuinely impossible programmer/build-time invariants, never untrusted input, dependency failure or recoverable runtime state.
+- Propagate `context.Context` through blocking/external work and place deadlines/cancellation at the boundary that owns the operation. Do not create unbounded goroutines, channels, retries, recursive work or queues.
+- Concurrency ownership must be explicit: who starts work, who can mutate state, who waits/cancels it, and what shutdown guarantees. Race/deadline/cancellation tests are required when those semantics are material.
+- Preserve invariants in code and durable storage rather than relying on call order or UI behavior. Keep unsafe shortcuts harder than the supported path.
+- Make code easy for humans and AI to recover: predictable module structure, stable semantic identifiers, small public surfaces and current nearby documentation. AI-first never justifies opaque generated code or an AI-only business path.
+- Prefer standard formatting/tooling and remove dead/obsolete paths rather than retaining compatibility shims with no supported consumer.
+
+## Developer experience
+
+The supported way should also be the easiest way.
+
+- Keep one obvious documented route for routine build, focused test, full validation, run, migrate and update operations. Minimize mandatory tools/services and hidden environment state.
+- Keep focused development feedback fast; use the broader exact-candidate proof only where the changed surface needs it.
+- Configuration validates early, has safe meaningful defaults where possible and reports actionable errors without leaking secrets.
+- Public APIs/examples should let a product compose a Module without internal imports, boilerplate-heavy framework ceremony or copy/paste runtime source.
+- Changes that make common development/debugging materially harder need an explicit offsetting correctness/security/operational reason.
+- Optimize for repository discoverability: a new contributor or capable AI should be able to locate the owner, public contract, validation path and operational evidence without relying on chat history.
+
 ## Dependencies, proof and documentation
 
 Prefer established libraries for cryptography, protocols, transport, parsers, storage drivers and OAuth/OIDC. A dependency must save enough custom ownership to earn its maintenance, security, compatibility, licensing, upgrade and operational burden.
 
-Test meaningful contracts and risk: domain invariants, Application behavior/authorization, real adapters, versioned consumer composition and supported compatibility. Add architecture checks when recurring boundary regressions justify them; do not test every hypothetical module combination or write tests that merely repeat the implementation.
+Test meaningful contracts and risk: domain invariants, Application behavior/authorization, real adapters, versioned consumer composition and supported compatibility. Add architecture checks when recurring boundary regressions justify them; do not test every hypothetical module combination or write tests that merely repeat the implementation. A scanner/linter is supporting evidence, never a substitute for reviewing the changed control flow, data ownership, failure paths or security boundary.
 
 Keep each durable rule at one canonical owner. Add an ADR for an accepted consequential choice whose rationale will affect later work; add documentation/process only when it changes how someone develops, operates, recovers or extends the system. Current documents explain the current system, not abandoned paths or a speculative future catalog.
