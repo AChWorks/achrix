@@ -26,7 +26,7 @@ From your own Go module, pin the initial development release explicitly:
 go get github.com/AChWorks/achrix@v0.1.0
 ```
 
-[GitHub Releases](https://github.com/AChWorks/achrix/releases) owns availability and exact source/artifact evidence. The [initial release line](docs/lifecycle/lifecycle-and-compatibility.md#initial-development-release-line) defines compatibility/support limits; use the [public contracts](docs/architecture/contracts-and-interfaces.md#initial-go-public-surface) to compose trusted Modules. Products own authentication, policy and business/persistence behavior. [Internationalization](docs/web/seo-and-semantic-web.md#internationalization-and-directionality) covers multilingual and RTL/LTR evolution; this Foundation release includes no UI or translation engine.
+[GitHub Releases](https://github.com/AChWorks/achrix/releases) owns availability and exact source/artifact evidence. The [initial release line](docs/lifecycle/lifecycle-and-compatibility.md#initial-development-release-line) defines compatibility/support limits; use the [public contracts](docs/architecture/contracts-and-interfaces.md#initial-go-public-surface) to compose trusted Modules. Products own their account/profile meaning, permission policy, domain/business semantics and data; accepted reusable Modules such as Identity may supply shared authentication/session mechanics when their real implementation is delivered. [Internationalization](docs/web/seo-and-semantic-web.md#internationalization-and-directionality) covers multilingual and RTL/LTR evolution; the current v0.1.0 Foundation release includes no reusable UI/Identity/Search/Settings/Recovery implementation.
 
 ## Licensing and participation
 
