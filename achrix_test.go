@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"reflect"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -205,5 +207,119 @@ func TestLifecycleDeadlinesAndReadiness(t *testing.T) {
 	}
 	if err := c.Shutdown(context.Background()); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal(err)
+	}
+}
+
+func TestReadAdmissionDuringLifecycle(t *testing.T) {
+	startEntered, stopEntered := make(chan struct{}), make(chan struct{})
+	startRelease, stopRelease := make(chan struct{}), make(chan struct{})
+	releaseStart := sync.OnceFunc(func() { close(startRelease) })
+	releaseStop := sync.OnceFunc(func() { close(stopRelease) })
+	defer releaseStart()
+	defer releaseStop()
+	block := func(entered, release chan struct{}) func(context.Context) error {
+		return func(ctx context.Context) error {
+			close(entered)
+			select {
+			case <-release:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+	var readinessCalls, policyCalls atomic.Int32
+	cfg := config()
+	cfg.StartupTimeout, cfg.ShutdownTimeout = 5*time.Second, 5*time.Second
+	a, err := achrix.New(cfg, achrix.PolicyFunc(func(context.Context, achrix.Principal, string, string) error {
+		policyCalls.Add(1)
+		return nil
+	}), &module{d: descriptor("notes"), start: block(startEntered, startRelease), stop: block(stopEntered, stopRelease), ready: func(context.Context) error {
+		readinessCalls.Add(1)
+		return nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	authorize := func(ctx context.Context) error { return a.Authorize(ctx, "writer", "notes.read", "own") }
+	operations := []struct {
+		name string
+		call func(context.Context) error
+	}{{"Ready", a.Ready}, {"Authorize", authorize}}
+	for _, phase := range []struct {
+		name    string
+		call    func(context.Context) error
+		entered chan struct{}
+		release func()
+		calls   int32
+	}{{"startup", a.Start, startEntered, releaseStart, 0}, {"shutdown", a.Shutdown, stopEntered, releaseStop, 1}} {
+		t.Run(phase.name, func(t *testing.T) {
+			defer phase.release()
+			done := make(chan error, 1)
+			go func() { done <- phase.call(context.Background()) }()
+			select {
+			case <-phase.entered:
+			case <-time.After(time.Second):
+				t.Fatal("lifecycle callback did not start")
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			defer cancel()
+			canceled, cancelNow := context.WithCancel(ctx)
+			cancelNow()
+			type result struct {
+				name      string
+				err, want error
+			}
+			results := make(chan result, 4)
+			for _, operation := range operations {
+				for _, admission := range []struct {
+					name string
+					ctx  context.Context
+					want error
+				}{{"bounded", ctx, achrix.ErrNotReady}, {"canceled", canceled, context.Canceled}} {
+					go func() {
+						results <- result{operation.name + "/" + admission.name, operation.call(admission.ctx), admission.want}
+					}()
+				}
+			}
+			watchdog := time.NewTimer(250 * time.Millisecond)
+			defer watchdog.Stop()
+		admission:
+			for remaining := 4; remaining > 0; remaining-- {
+				select {
+				case got := <-results:
+					if !errors.Is(got.err, got.want) {
+						t.Errorf("%s: got %v, want %v", got.name, got.err, got.want)
+					}
+				case <-watchdog.C:
+					t.Errorf("%d read calls blocked behind lifecycle exclusion", remaining)
+					break admission
+				}
+			}
+			if readinessCalls.Load() != phase.calls || policyCalls.Load() != phase.calls {
+				t.Error("readiness or policy callback ran during lifecycle exclusion")
+			}
+			phase.release()
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("lifecycle did not finish after release")
+			}
+		})
+		if phase.name == "startup" {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			for _, operation := range operations {
+				if err := operation.call(ctx); err != nil {
+					t.Fatalf("%s after startup: %v", operation.name, err)
+				}
+			}
+			cancel()
+			if readinessCalls.Load() != 1 || policyCalls.Load() != 1 {
+				t.Fatal("ordinary readiness or policy callback did not run")
+			}
+		}
 	}
 }
