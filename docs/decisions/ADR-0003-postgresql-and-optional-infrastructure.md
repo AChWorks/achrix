@@ -70,7 +70,9 @@ Extract or consume a central service only for a demonstrated capability and expl
 
 ## Owner decisions still open
 
-This technical decision does not accept an AChrix public license, require shared cross-product user accounts, select an identity provider, or build a central identity service. Preserve current independent product ownership while the owner decides intended SSO and public distribution policy.
+The owner accepted independently owned product accounts with optional SSO on 2026-10-01; see [Security and Authorization](../security/security-and-authorization.md#product-accounts-and-optional-sso). This policy does not select an identity provider or require a central identity service.
+
+The AChrix public license and distribution policy remain open. The owner's request to explain a WordPress-like license is a review direction, not acceptance of a specific license grant.
 
 Multi-Site and Gateway Bridge placement gates remain unchanged. No consumer or other repository is migrated by this decision.
 
