@@ -288,7 +288,11 @@ func TestReadAdmissionDuringLifecycle(t *testing.T) {
 			for remaining := 4; remaining > 0; remaining-- {
 				select {
 				case got := <-results:
-					if !errors.Is(got.err, got.want) {
+					// A bounded call may start after its deadline if scheduling is delayed.
+					boundedExpired := got.want == achrix.ErrNotReady &&
+						errors.Is(ctx.Err(), context.DeadlineExceeded) &&
+						errors.Is(got.err, context.DeadlineExceeded)
+					if !errors.Is(got.err, got.want) && !boundedExpired {
 						t.Errorf("%s: got %v, want %v", got.name, got.err, got.want)
 					}
 				case <-watchdog.C:
