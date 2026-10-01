@@ -2,6 +2,8 @@
 
 Status: Accepted
 
+Technology note: the initial PHP/Laravel expectation below is historical and superseded by [ADR-0002](ADR-0002-go-primary-implementation.md). The Foundation shape and remaining constraints in this decision still apply.
+
 ## Context
 
 AChWorks needs a reusable base that can accelerate many future web-connected products without requiring each idea to repeat common architecture decisions.

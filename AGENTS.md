@@ -51,7 +51,7 @@ Before first executable coupling, follow `docs/architecture/consumption-and-pack
 
 ## Initial implementation technology
 
-The initial executable implementation path is expected to use PHP/Laravel and MariaDB, but technology is an implementation decision rather than Foundation identity.
+Go is the accepted primary implementation language for AChrix; see `docs/decisions/ADR-0002-go-primary-implementation.md`. MariaDB remains the initial primary relational target. Technology is an implementation decision rather than Foundation identity. Exact supported versions, dependencies, package layout, and consumer proof remain part of Issue #1 before executable coupling.
 
 Do not add SQLite to the primary implementation/test path without an explicit accepted architecture change.
 

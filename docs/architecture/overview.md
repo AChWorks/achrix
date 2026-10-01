@@ -46,9 +46,9 @@ Do not invert this into Domain depending on framework/provider code.
 
 ## Framework relationship
 
-The initial executable implementation may use Laravel as the runtime/application framework.
+Go is the accepted primary implementation language; see [ADR-0002](../decisions/ADR-0002-go-primary-implementation.md).
 
-Laravel facilities should be reused where fit. Framework replacement is not a current goal.
+Use fit standard-library and maintained ecosystem capabilities. Specific dependencies and package layout remain implementation decisions; building a custom general-purpose framework is not a current goal.
 
 The architecture protects business semantics and public contracts from unnecessary framework coupling, not every internal implementation detail.
 
@@ -59,7 +59,7 @@ Infrastructure choices are defaults, not Foundation identity.
 A distribution may start with only:
 
 ```text
-PHP/Laravel
+Go application binary
 + relational database
 + local filesystem/session/cache where adequate
 ```

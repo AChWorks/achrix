@@ -75,7 +75,7 @@ Do not create interfaces, packages, providers, services, or plugin systems solel
 
 ### 4.4 A boundary does not imply a deployment unit
 
-An internal module may remain in the same repository, Composer project, process, deployment, and relational database for its entire life.
+An internal module may remain in the same repository, dependency module/package, process, deployment, and relational database for its entire life.
 
 Architectural separation does not by itself justify a package, repository, plugin, process, or service.
 
@@ -117,11 +117,11 @@ The Foundation should make the common path easy without making the uncommon-but-
 
 The Foundation's identity is not a language or framework.
 
-The initial executable implementation is expected to use PHP with Laravel because it provides a mature application stack and strong idea-to-product speed. That choice must be captured as an implementation ADR when executable work begins and may evolve if evidence changes the trade-off.
+Go is the accepted primary implementation language for AChrix and the default path for suitable new products consuming its shared implementation; see [ADR-0002](docs/decisions/ADR-0002-go-primary-implementation.md). This supersedes the earlier PHP/Laravel expectation without changing the Foundation mission or Core/Module/product boundaries.
 
-Laravel is treated as a runtime/application framework, not as the definition of the Foundation.
+Prefer Go's standard library and maintained ecosystem components for commodity capabilities. AChrix is a reusable application Foundation, not a custom replacement for general-purpose infrastructure.
 
-Domain/application semantics should avoid unnecessary framework coupling where that coupling would materially hinder testing, reuse, extraction, or future evolution. Conversely, framework features should be used directly in infrastructure/presentation code when they are fit; do not recreate Laravel behind custom wrappers for hypothetical portability.
+Domain/application semantics should avoid unnecessary infrastructure coupling where that coupling would materially hinder testing, reuse, extraction, or future evolution. Use fit standard-library/ecosystem capabilities directly where appropriate; do not wrap every facility for hypothetical portability.
 
 The primary relational implementation engine is expected to be MariaDB. The architecture must avoid unnecessary MariaDB lock-in. PostgreSQL or another engine may be added when a real consumer or capability warrants it. Official support for an engine requires real CI/compatibility evidence; architectural portability does not equal support for every database.
 
@@ -217,7 +217,7 @@ thin product/application shell
 
 An unmanaged long-lived copy or fork of shared Foundation runtime code is not the default reuse mechanism because it causes fixes, security changes, and lifecycle improvements to diverge across products.
 
-The exact packaging/layout for the initial PHP/Laravel implementation is an implementation decision that must be captured in an ADR before executable coupling. It must provide a deliberate version/update path and must be proven with a separate minimal consumer.
+The exact Go module/package layout and supported implementation versions/dependencies must be captured in an implementation ADR before executable coupling. It must provide a deliberate version/update path and must be proven with a separate minimal consumer.
 
 An internal module boundary does **not** require an independent package. Keep Core and Modules together while that is cheaper and clearer. Extract a module into an independently versioned package/repository only when real consumers, lifecycle cadence, ownership, or compatibility needs make that boundary valuable.
 
