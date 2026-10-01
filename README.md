@@ -18,6 +18,16 @@ The initial executable baseline supplies minimal instance-owned Go composition, 
 
 Suitable products will consume a versioned AChrix dependency rather than permanently copy its shared source. Product-specific behavior stays with the product. [Koinon](https://github.com/AChWorks/koinon) owns ecosystem governance/discovery and is not an AChrix runtime dependency.
 
+## Consume and extend
+
+From your own Go module, pin the initial development release explicitly:
+
+```bash
+go get github.com/AChWorks/achrix@v0.1.0
+```
+
+[GitHub Releases](https://github.com/AChWorks/achrix/releases) owns availability and exact source/artifact evidence. The [initial release line](docs/lifecycle/lifecycle-and-compatibility.md#initial-development-release-line) defines compatibility/support limits; use the [public contracts](docs/architecture/contracts-and-interfaces.md#initial-go-public-surface) to compose trusted Modules. Products own authentication, policy and business/persistence behavior. [Internationalization](docs/web/seo-and-semantic-web.md#internationalization-and-directionality) covers multilingual and RTL/LTR evolution; this Foundation release includes no UI or translation engine.
+
 ## Licensing and participation
 
 First-party repository content defaults to [MPL-2.0](LICENSE). Compatible independent commercial/third-party Modules are possible; any Apache-2.0 SDK designation requires an explicit artifact scope. [Licensing](docs/legal/licensing.md) owns the details.

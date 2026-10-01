@@ -56,6 +56,47 @@ Reject activation on delivery/trust failure. Verify publisher/artifact identity,
 
 Prove this on the first real product before sharing updater tooling. Only this contract exists now. Evaluate maintained mechanisms against the [TUF threat model](https://theupdateframework.io/docs/security/) when implementing update trust; no TUF service, registry, helper or UI is built today.
 
+## Initial development release line
+
+The initial maintained development line is `v0.1.x`, beginning with `v0.1.0`; GitHub Releases own actual publication state. It is a source Foundation dependency for developing a real consumer/extension, not a stable-v1 API or a product deployment distribution. [Contracts](../architecture/contracts-and-interfaces.md#initial-go-public-surface) owns the supported public surface and [Operations](../operations/operability-performance.md#supported-environment) owns the tested environment. PostgreSQL/pgx persistence in Notes is consumer-owned; Core has only standard-library dependencies.
+
+Keep patches within `v0.1.x` compatible with the published public surface/capability semantics. A required breaking development change uses a new `v0` minor line with explicit compatibility/migration notes; capability ABI revision is a distinct contract identity. Maintain the latest patch of this initial line during first-consumer development, and announce a successor or retirement in release notes rather than implying permanent LTS/backports. Never overwrite a published version; correct defects through a new reviewed version.
+
+Consumers pin a reviewed version, inspect the dependency/contract diff, validate affected behavior and deliberately rebuild/deploy. A source release does not activate an installed product. Whole-product recovery, remote deployment, administrator update UI, Multi-Site and Gateway Bridge remain unproven; Issue #19 and their owning product/module decisions retain those obligations. Unicode storage is proven by Notes, while localized UI/RTL rendering follows [Web](../web/seo-and-semantic-web.md#internationalization-and-directionality) when a real renderer exists.
+
+## Source release preparation and verification
+
+`.github/workflows/release.yml` is a manually dispatched preparer on canonical trusted `main`. It requires successful existing `baseline` evidence for that exact source, exports its tracked tree, and produces a source archive, SPDX source inventory, source/run identity metadata, checksums and signed build/SBOM bundles. The archive includes repository documentation, fixtures and tooling; it ships no product executable or vendored dependency implementation. The SBOM catalogs that exported source/declared manifest scope, not a deployed runtime or tested compatibility for every listed dependency.
+
+Preparation has no tag/release publication permission, runs no PostgreSQL or repeated runtime suite and gives Core no signing dependency. A maintainer separately reviews and publishes the exact verified assets/source identity. PR/main checks remain required when preparation inputs change. Official verification expects this repository's hosted `release.yml` on `refs/heads/main`, the independently approved source SHA and GitHub's OIDC issuer `https://token.actions.githubusercontent.com`; a matching checksum alone is insufficient. A changed publisher/workflow trust boundary needs the normal owner decision. Retain downloaded bundles for verification; trust-root/issuer revocation and offline verification follow the maintained GitHub/Sigstore verifier rather than a custom key service.
+
+From a maintainer environment with a GitHub CLI supporting artifact-attestation verification:
+
+```bash
+ACHRIX_RELEASE_VERSION=v0.1.0
+gh workflow run release.yml --repo AChWorks/achrix --ref main -f version="$ACHRIX_RELEASE_VERSION"
+gh run list --repo AChWorks/achrix --workflow release.yml --branch main --limit 5 --json databaseId,headSha,status,conclusion
+```
+
+Identify the successful preparation run and independently reviewed source commit as `ACHRIX_RELEASE_RUN` and `ACHRIX_RELEASE_SHA`; do not trust downloaded metadata to choose its own authorized source. Download into an empty task-owned directory:
+
+```bash
+gh run download "$ACHRIX_RELEASE_RUN" --repo AChWorks/achrix --name "achrix-$ACHRIX_RELEASE_VERSION-release" --dir release-assets
+cd release-assets
+sha256sum -c SHA256SUMS
+for asset in "achrix-$ACHRIX_RELEASE_VERSION-source.tar.gz" "achrix-$ACHRIX_RELEASE_VERSION-source.spdx.json" release.json; do
+  gh attestation verify "$asset" --repo AChWorks/achrix --bundle provenance.sigstore.json \
+    --signer-workflow AChWorks/achrix/.github/workflows/release.yml \
+    --source-ref refs/heads/main --source-digest "$ACHRIX_RELEASE_SHA" --deny-self-hosted-runners
+done
+gh attestation verify "achrix-$ACHRIX_RELEASE_VERSION-source.tar.gz" --repo AChWorks/achrix \
+  --bundle sbom.sigstore.json --predicate-type https://spdx.dev/Document/v2.3 \
+  --signer-workflow AChWorks/achrix/.github/workflows/release.yml \
+  --source-ref refs/heads/main --source-digest "$ACHRIX_RELEASE_SHA" --deny-self-hosted-runners
+```
+
+Verify metadata/source-tree identity against the approved commit and source archive against its Git export. Refresh tag/release absence and source/review/CI identities before publishing; do not overwrite an existing version or blindly repeat an ambiguous write. Create the exact-source tag and stage a draft Release with these assets, matching covered source and compatibility/evidence notes. Prove normal isolated `github.com/AChWorks/achrix@<version>` resolution/checksums and reported `Version()` without replacement/workspace/source copying before publishing the draft. Missing/failed delivery proof keeps the release work open; source publication is separate from any product deployment. After publication, re-download and verify the released assets and tag/source identity. [GitHub attestation verification](https://cli.github.com/manual/gh_attestation_verify) owns the maintained CLI contract.
+
 ## Official artifacts and future tooling
 
 When publishable official artifacts exist, bind artifact digest and source/version, checksums, SBOM and build provenance to cryptographic authenticity evidence. Select standard tooling then; this policy adds no signing service or Core runtime dependency.
