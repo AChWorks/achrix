@@ -16,6 +16,8 @@ Do not make producers know every optional integration. Use direct Application ca
 
 Keep provider-specific features discoverable when implementations vary; do not force attachments, templates, receipts or streaming into one mandatory mega-interface. Build only needed adapters. Start simple registration/composition in code; metadata becomes richer when actual consumers need it, not through a speculative manifest engine.
 
+Before serving traffic, reject missing/incompatible required capabilities, ambiguous identities and unsatisfiable startup dependencies. Optional absence has explicit behavior. Resources and mutable registration belong to the application instance, not process-global state. Startup and bounded shutdown/cleanup handle partial failure for actual components.
+
 ## Placement and extraction
 
 Product-specific behavior starts product-local unless already a proven Foundation concern. Keep a cheap clean boundary when reuse is credible. A second real consumer triggers comparison of semantics, ownership, lifecycle, compatibility and total cost; promote only when shared ownership is better. Independent packaging is a separate decision in [Consumption](consumption-and-packaging.md).

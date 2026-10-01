@@ -111,3 +111,9 @@ Operational debug logs are not the audit source of truth.
 ## Dependencies
 
 Security-sensitive protocol/crypto/auth implementations should normally use established maintained libraries rather than custom cryptography/protocol code.
+
+## Vulnerability reporting and response
+
+Use [GitHub private vulnerability reporting](https://github.com/AChWorks/achrix/security/advisories/new) for suspected AChrix vulnerabilities. Include affected version/commit, impact and minimal safe reproduction; omit live credentials, customer data and unrelated private material. Do not disclose exploitable details in public Issues/PRs. If the private form is unavailable, request a private contact using public-safe details only.
+
+AChWorks maintainers own triage, affected-version assessment, fix review and coordinated advisory/release publication. Enabling reporting is not a response-time SLA, a security certification or authorization to test someone else's systems. [Operations](../operations/operability-performance.md#supported-environment) owns supported environments; [Lifecycle](../lifecycle/lifecycle-and-compatibility.md) owns release/update evidence. Product operators own deployment and credential/incident actions in their own systems.
