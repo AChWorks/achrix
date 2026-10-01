@@ -76,6 +76,8 @@ if go mod edit -json | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.
 fi
 go vet ./...
 export NOTES_TEST_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_test_notes sslmode=disable"
+export NOTES_TEST_LATIN1_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_test_latin1 sslmode=disable"
+export NOTES_TEST_SQL_ASCII_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_test_sqlascii sslmode=disable"
 go test -race -count=1 -timeout=60s ./...
 
 # Native trusted logical backup, no compression required. It covers this fixture's

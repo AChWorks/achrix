@@ -72,11 +72,11 @@ func TestUnsupportedDatabaseEncoding(t *testing.T) {
 	_ = testPool(t)
 	for name, encoding := range map[string]string{"achrix_test_latin1": "LATIN1", "achrix_test_sqlascii": "SQL_ASCII"} {
 		t.Run(encoding, func(t *testing.T) {
-			c, err := pgxpool.ParseConfig(os.Getenv("NOTES_TEST_DATABASE_URL"))
-			if err != nil {
-				t.Fatal(err)
+			dsn := os.Getenv("NOTES_TEST_" + encoding + "_DATABASE_URL")
+			c, err := pgxpool.ParseConfig(dsn)
+			if err != nil || dsn == "" || c.ConnConfig.Database != name {
+				t.Fatal("owned unsupported-encoding database required")
 			}
-			c.ConnConfig.Database = name
 			c.MaxConns = 2
 			c.ConnConfig.ConnectTimeout = time.Second
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -94,7 +94,7 @@ func TestUnsupportedDatabaseEncoding(t *testing.T) {
 				t.Fatal("unsupported installation accepted")
 			}
 			logger := diagnosis.New(io.Discard)
-			s, err := infrastructure.New(c.ConnString(), logger)
+			s, err := infrastructure.New(dsn, logger)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -102,8 +102,8 @@ func TestUnsupportedDatabaseEncoding(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := a.Start(ctx); err == nil {
-				t.Fatal("unsupported startup accepted")
+			if err := a.Start(ctx); err == nil || !strings.Contains(err.Error(), "unsupported database environment") {
+				t.Fatal("unsupported startup not rejected for encoding", err)
 			}
 			if err := s.Ready(ctx); !errors.Is(err, domain.ErrUnavailable) {
 				t.Fatal("rejected startup resource survived", err)
