@@ -50,6 +50,12 @@ It is intentionally **not** a new framework, mandatory monorepo, mandatory datab
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [AGENTS.md](AGENTS.md)
 
+## Licensing and participation
+
+First-party repository content defaults to [MPL-2.0](LICENSE). Official reusable open-source Modules share that default; explicitly scoped extension/integration artifacts may use Apache-2.0. Independently licensed commercial/third-party Modules are possible subject to dependency terms. See the [Licensing policy](docs/legal/licensing.md).
+
+[Governance](GOVERNANCE.md), [Trademark Policy](TRADEMARKS.md), [Contributing](CONTRIBUTING.md) and the [CLA policy/draft](docs/legal/cla.md) separate canonical authority, honest representation, code reuse and incoming contribution rights. The CLA draft is not an active/signed agreement.
+
 ## Current state
 
 The repository currently owns the durable AChrix intent, architecture, and development rules. The next accepted implementation outcome introduces the first executable/versioned AChrix Core and proves a real consumer boundary rather than creating a reference-only application or starter copy.

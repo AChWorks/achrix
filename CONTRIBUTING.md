@@ -36,3 +36,13 @@ Before adding a dependency, compare the cost of owning equivalent custom code wi
 ## Security
 
 Never commit credentials, tokens, private keys, session material, production customer data, or restricted provider payloads.
+
+## Licensing and external contribution rights
+
+Read the [artifact licensing policy](docs/legal/licensing.md), [Governance](GOVERNANCE.md) and [CLA policy/draft](docs/legal/cla.md).
+
+Keep first-party code under its declared artifact license and preserve third-party notices. New source files should identify their actual license with an SPDX header; generated files/templates must retain an unambiguous license scope.
+
+External copyrightable code contributions to covered official artifacts require verified consent to the effective CLA and sufficient contributor/employer rights before merge. The current draft is non-operative; activation is tracked in [Issue #15](https://github.com/AChWorks/achrix/issues/15). A PR checkbox alone does not satisfy this requirement. Signed/private contributor records do not belong in public Git.
+
+For extensions, use intentionally published contracts and the [module/packaging boundaries](docs/architecture/consumption-and-packaging.md). A third-party Module may use its own compatible license and does not become official by submitting metadata or claiming compatibility.

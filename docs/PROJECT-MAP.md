@@ -30,6 +30,15 @@ This file is an index of where durable truth lives. It is not a status report.
 - `docs/security/security-and-authorization.md` — authorization, secrets, trust boundaries, AI safety.
 - `docs/operations/operability-performance.md` — logs/audit, health, diagnostics, performance/cost.
 
+## Licensing and stewardship
+
+- `/LICENSE` — standard MPL-2.0 text.
+- `docs/legal/licensing.md` — first-party/Module/SDK scope and dependency obligations.
+- `docs/legal/cla.md` — incoming-rights policy, non-operative draft and activation boundary.
+- `/TRADEMARKS.md` — honest origin/compatibility references and official branding permission.
+- `/GOVERNANCE.md` — AChWorks canonical merge/release stewardship.
+- Release authenticity/compatibility/advisory boundaries remain in the existing lifecycle document.
+
 ## Development
 
 - `docs/development/roadmap.md` — outcome-oriented development sequence; not live task status.

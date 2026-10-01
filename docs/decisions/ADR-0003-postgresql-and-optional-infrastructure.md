@@ -28,7 +28,7 @@ TimescaleDB is optional for a concrete time-series workload. Keep ordinary trans
 
 Use Go net/http and explicit composition as the initial HTTP path; use log/slog for structured diagnostic logs. Keep Application authorization/behavior shared across HTTP, UI, CLI, MCP, and jobs.
 
-When metrics/traces are justified, prefer OpenTelemetry instrumentation/export conventions. Select and pin mature signal-specific components; do not assume all Go SDK signals have the same stability. Collectors, dashboards, telemetry vendors, and a central monitoring service are optional operational choices.
+When metrics/traces are justified, prefer OpenTelemetry instrumentation/export conventions. Select and pin mature signal-specific components; do not assume all Go SDK signals have the same stability. Collectors, dashboards, telemetry vendors, and a central monitoring service are optional operational choices. Following owner acceptance of the stack review, SigNoz is the preferred initial backend to evaluate when its operational budget is justified; it is not merely a UI and brings ClickHouse/collection infrastructure. Bound retention/access/resource use and keep application operation resilient to telemetry outages.
 
 ### Shared cache
 
@@ -44,6 +44,10 @@ For a product that needs durable background work, begin with a maintained Postgr
 
 At-least-once execution requires idempotent or reconcilable effects. A committed job, a transaction, or a broker does not by itself make an external payment/email/provider mutation happen exactly once. Define ambiguous-outcome reconciliation rather than blindly retrying an unknown mutation.
 
+For recoverable long-lived multi-step workflows, Temporal is the preferred optional candidate. Adopt it only when durable waiting/progress/recovery justifies the service and deterministic replay/versioning cost. Activities still require idempotent or reconcilable external effects. If Temporal owns a workload, do not duplicate its execution in River merely because both are available.
+
+NATS JetStream is the preferred optional durable-messaging candidate when independent consumers, replay or delivery requirements justify a broker. Define acknowledgments, persistence, retention and replication; use a PostgreSQL-to-broker outbox/delivery boundary where required. It does not replace a workflow engine or provide a cross-system exactly-once mutation guarantee.
+
 Use direct Application calls for immediate in-process results. Across products, use explicit authenticated HTTPS APIs/webhooks with bounded calls and attributable authorization. Add a transactional outbox or broker only when the actual delivery/consistency model requires it.
 
 Kafka is not an initial runtime requirement or a pre-built Foundation adapter. Revisit it for durable replayable event streams, independent consumers, CDC/stream processing, or concrete throughput/retention requirements that justify broker operation. An ordinary background job does not alone select Kafka.
@@ -52,13 +56,13 @@ Kafka is not an initial runtime requirement or a pre-built Foundation adapter. R
 
 Start with product/module-owned PostgreSQL search for needs it actually satisfies. Evaluate indexing and normalization on representative Persian/multilingual queries; pg_trgm is an optional extension when similarity/indexed matching is useful, not a complete search relevance solution.
 
-Do not select or build a universal dedicated search adapter without the first real search contract. Compare maintained engines such as OpenSearch and Meilisearch when required relevance, typo tolerance, filtering/facets, language behavior, volume, or latency warrants one.
+Do not select or build a universal dedicated search adapter without the first real search contract. OpenSearch is the preferred advanced-search candidate to evaluate when required relevance, filtering/facets, language behavior, volume or latency warrants one. Compare a simpler maintained engine such as Meilisearch where fit/operation favors it; owner acceptance of the review does not establish tested search support.
 
 A search index is a rebuildable projection. Explicitly preserve resource/tenant authorization, deletion propagation, and acceptable freshness; search results must not become the authoritative payment/inventory/security state.
 
 ### Deployment and central services
 
-The initial Linux reference path should allow a Go application binary supervised by systemd. Products own deployment and secrets. Docker Compose/OCI packaging may provide reproducible development or a product deployment profile, but containers remain optional for Foundation consumption.
+Prefer reproducible OCI/container packaging for suitable product delivery/development when it reduces operational friction. The initial Linux reference path also allows a Go application binary supervised by systemd. Products own deployment and secrets; containers remain optional for consuming the Foundation as a Go dependency.
 
 Keep configuration external, shutdown graceful, resource use bounded, readiness local to necessary dependencies, and schema activation deliberate. These properties ease later orchestration without implementing Kubernetes APIs or charts now.
 
@@ -68,13 +72,17 @@ Sharing a Foundation dependency does not require one running AChrix service or o
 
 Extract or consume a central service only for a demonstrated capability and explicit owner, failure, authorization, lifecycle, and operational boundary. Do not create a central router/service through which every product operation must pass.
 
-## Owner decisions still open
+## Owner decisions and related boundaries
 
 The owner accepted independently owned product accounts with optional SSO on 2026-10-01; see [Security and Authorization](../security/security-and-authorization.md#product-accounts-and-optional-sso). This policy does not select an identity provider or require a central identity service.
 
-The AChrix public license and distribution policy remain open. The owner's request to explain a WordPress-like license is a review direction, not acceptance of a specific license grant.
+The owner accepted the licensing/ecosystem policy on 2026-10-01; [ADR-0004](ADR-0004-licensing-and-trusted-ecosystem.md) and [Licensing](../legal/licensing.md) now own that decision. CLA legal-recipient/activation work remains explicit; it does not reopen the accepted outbound licenses.
 
 Multi-Site and Gateway Bridge placement gates remain unchanged. No consumer or other repository is migrated by this decision.
+
+### Frontend and specialized runtimes
+
+TypeScript is the preferred language for interactive web frontend code. Product requirements choose the framework and whether Node is needed in production; preserve semantic/server-rendered lightweight web paths where appropriate. Python is optional for AI/data capabilities whose ecosystem value justifies a separate runtime. A Go call to an external model API alone does not require a Python service.
 
 ## Implementation and support
 
@@ -100,6 +108,10 @@ Before adding infrastructure, identify the required behavior and representative 
 - [River PostgreSQL integration](https://riverqueue.com/docs)
 - [River worker execution and idempotency](https://riverqueue.com/docs/reliable-workers)
 - [River transactional enqueueing](https://riverqueue.com/docs/transactional-enqueueing)
+- [Temporal workflow/replay constraints](https://docs.temporal.io/workflows)
+- [Temporal activity side effects](https://docs.temporal.io/activities)
+- [NATS JetStream persistence and delivery](https://docs.nats.io/concepts/jetstream)
+- [SigNoz installation and operational components](https://signoz.io/docs/install/docker/)
 - [Kafka event-streaming model](https://kafka.apache.org/intro/)
 - [Kubernetes production considerations](https://kubernetes.io/docs/setup/production-environment/)
 - [OpenSearch language analyzers](https://docs.opensearch.org/latest/analyzers/language-analyzers/index/)

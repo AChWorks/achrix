@@ -130,6 +130,18 @@ A second consumer triggers comparison, not automatic promotion or package extrac
 
 An internal Foundation Module may remain in the same repository and package indefinitely.
 
+## External capabilities and extension trust
+
+A maintained external library, application or service need not become AChrix-owned to be useful. Integrate through the smallest suitable Module/Provider/Adapter or standard API; use it directly when an extra wrapper has no ownership/security/compatibility value.
+
+The owning Module preserves authorization, data semantics, external failure/recovery and licensing obligations. A foreign plugin is not automatically compatible; verify the actual contract rather than promise universal importing.
+
+Third-party Modules may be independently licensed, including proprietary/commercial, subject to [artifact/dependency licensing](../legal/licensing.md). Official status, license, compatibility and runtime trust are distinct properties.
+
+In-process extensions share process authority and must be treated as trusted code. A signature or Go internal package is not an execution sandbox; untrusted code may need a real process/service isolation boundary when justified. An extension must not obtain another Module's permissions by using an official badge.
+
+Where metadata is actually needed for composition, keep module identity/version, provided/required capabilities and compatibility requirements explicit. Source/license/publisher/artifact evidence belongs with the package/release; exact schema and optional fields follow real consumers rather than a speculative manifest engine.
+
 ## Plugin system
 
 Install/enable/disable lifecycle may eventually justify a formal plugin/module runtime.
