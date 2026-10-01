@@ -10,12 +10,15 @@ Compare fit, integration effort, authorization/data ownership, failure behavior,
 
 ## Boundaries and evolution
 
-- Keep Core minimal and product behavior product-local; [Module model](../architecture/module-model.md) owns placement rules.
+- Keep Core minimal. Put coherent cross-product mechanics in reusable Modules when current evidence makes reuse more likely than product-specific use; keep differentiating/product-specific semantics local. [Module model](../architecture/module-model.md) owns the placement rule and accepted initial reusable Modules.
+- The owner's rough 50–60% reuse threshold is a directional decision heuristic, not a measured probability requirement. Treat it as “more likely than not across anticipated product classes,” then require coherent shared semantics/ownership and lower expected lifetime cost before choosing reusable Module ownership.
+- Reuse-first **placement** does not authorize speculative **implementation**. Establish the Module boundary early when justified, but implement only behavior needed by current/near-term consumers; do not create empty packages, interfaces or generic feature catalogs merely to reserve future reuse.
+- A second materially different consumer is valuable validation of shared semantics and may expose a placement mistake, but it is not a mandatory prerequisite when strong current evidence already supports a reusable Module. Conversely, a second consumer does not automatically justify sharing when semantics/ownership diverge.
 - Create ports/contracts only for credible variation, ownership, security, composition or testing value. Do not hide every standard library/framework facility.
 - Separate business semantics from infrastructure coupling where it materially helps testing, reuse or future change. Let infrastructure use useful vendor capabilities.
-- A boundary does not itself require a package, repository, process, service or database. Choose distribution separately using [Consumption](../architecture/consumption-and-packaging.md).
+- A Module boundary does not itself require a package, repository, process, service or database. Choose distribution separately using [Consumption](../architecture/consumption-and-packaging.md).
 - Prefer reversible choices under uncertainty. A clean cheap local boundary can preserve a likely future option without implementing it now; avoid scattered hardcoded single-tenant, all-users-at-once or one-language assumptions where a small choice keeps evolution feasible. Do not build tenancy/feature-flag/translation systems without a product need.
-- Duplication can be cheaper than a premature abstraction. Compare a second real consumer's semantics, lifecycle, ownership and costs before promotion; it does not automatically justify sharing. Another converged consumer strengthens evidence but is not a fixed threshold.
+- Duplication can still be cheaper than a premature shared abstraction when reuse/semantics are genuinely uncertain. Do not use the reuse-first rule to force product-specific behavior into a generic Module.
 - Introduce infrastructure or service extraction for actual correctness, failure isolation, security, resource, ownership or operating needs. Benchmarks of an isolated runtime are insufficient.
 - Replace maintained functionality when recurring limitations, security/compatibility, maintenance cost or measured bottlenecks outweigh bounded adaptation.
 
