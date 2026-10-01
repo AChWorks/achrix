@@ -12,6 +12,10 @@ Issue #1 adds executable CI and binds its actual checks to this existing ruleset
 
 Done means the accepted behavior is implemented, required checks pass, compatibility/state/recovery implications are handled and affected canonical docs are current. Integration and production delivery are separate facts. Current documents contain rules still in force; obsolete decisions remain in Git history.
 
+## Issue classification
+
+Use `type:idea` for unactivated feature/placement proposals awaiting evidence or a decision, matching Koinon's meaning. Activation reconciles scope, evidence and labels; a label never overrides execution gates. Use existing `enhancement` for accepted feature/outcome work and `documentation` for document/policy work. Preserve unrelated labels and update existing work before creating another Issue.
+
 ## Architecture and dependencies
 
 Follow [Engineering principles](docs/principles/engineering-principles.md) and the owning topic document. A lasting consequential choice may need an ADR; small implementation choices do not. Dependencies need maintenance/security/license/compatibility/upgrade/cost justification, not a wrapper by default.
