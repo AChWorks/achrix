@@ -8,7 +8,21 @@ Separate business configuration, runtime/deployment configuration, secrets and d
 
 ## Supported environment
 
-This document owns the runtime/database support matrix; manifests own pins and Git/CI own proof. Begin with one upstream-supported Go line and PostgreSQL major, using maintained patches. Verify exact versions before implementation; expand only for real consumers and tested compatibility. No executable matrix exists yet.
+This document owns the runtime/database support matrix; manifests own pins and Git/CI own proof. The first executable baseline supports one Go line and PostgreSQL major; expand only for real consumers and tested compatibility.
+
+| Component | Baseline support and exact validation pin |
+| --- | --- |
+| Go | 1.27 line; validation 1.27.1, required by both `go.mod` files |
+| PostgreSQL | ordinary 18, UTF-8, no required extensions; server/client proof 18.6 |
+| Driver | consumer-owned pgx/v5; exact direct/transitive versions in `fixtures/notes/go.mod` and `go.sum` |
+| Platform | Linux amd64, local loopback/Unix-socket proving consumer; remote/production profiles remain unproven |
+| Validation tools | Bash, Python 3, native PostgreSQL 18.6 tools, C compiler for Go's race detector; optional source-tool setup requires gcc/make/bison/flex/m4/curl/bzip2 |
+
+Official compatibility was checked before API coupling on 2026-10-01: [Go releases](https://go.dev/doc/devel/release), [Go downloads](https://go.dev/dl/), [pgx v5.11.0 manifest](https://github.com/jackc/pgx/blob/v5.11.0/go.mod)/[changelog](https://github.com/jackc/pgx/blob/v5.11.0/CHANGELOG.md), [PostgreSQL version policy](https://www.postgresql.org/support/versioning/), [pg_dump compatibility](https://www.postgresql.org/docs/18/app-pgdump.html). Driver support is wider than AChrix's tested matrix and does not expand it. Go toolchain/dependency checksums stay enabled; `scripts/validate.sh` rejects a disabled checksum database.
+
+Run `scripts/validate.sh` as a non-root user with the supported tools. CI uses this same command on a hosted disposable runner with read-only repository permission, no persisted checkout credential, no production secrets and no privileged `pull_request_target` execution. It downloads the pinned Foundation into an isolated consumer/cold module cache, tests real PostgreSQL and verifies a trusted database-only restore. The script owns and removes only its temporary cluster/workspace; it does not touch a host PostgreSQL service. [Consumer setup](../../fixtures/notes/README.md) documents normal invocation and deliberate updates; exact candidate/main proof belongs to [Issue #1](https://github.com/AChWorks/achrix/issues/1) and CI.
+
+If native PostgreSQL tools are absent, `scripts/setup-validation-postgres.sh /absolute/new/owned/directory` builds the checksum-pinned official 18.6 source without ICU/readline/zlib. Set `ACHRIX_PG_BIN` to that directory's `install/bin`. This is test tooling, not a product installer or a system package/service change. The dump proof uses uncompressed custom archives and needs no compression library.
 
 Releases declare maintained lines and upgrade/retirement paths. Older lines need explicit support; there is no permanent LTS promise. Validate dependency/security updates before consumer activation under [Lifecycle](../lifecycle/lifecycle-and-compatibility.md).
 
@@ -26,9 +40,13 @@ Use metrics/traces/alerts for demonstrated detection or cross-component diagnosi
 
 Logs explain operational failure. Durable audit answers who/what/when/target/outcome/authority for accountable actions; [Security](../security/security-and-authorization.md#audit) owns those requirements. Debug logs are not the audit record and sampling/disposable log storage must not silently become audit policy.
 
+The proving consumer emits JSON `slog` to stderr. Its handler propagates a generated request ID into Core authorization, Notes Application, PostgreSQL and HTTP failure records. Database SQLSTATE/cancellation categories are logged, not driver exception messages, SQL, tokens, DSNs or note text. Public failures carry stable safe codes and `X-Request-ID`. There is no debug endpoint, collector, durable audit system or product log-retention claim. Operators own stderr access/rotation; the benign fixture creates no sensitive/admin/financial audit requirement.
+
 ## Bounds, scale and cost
 
 Apply relevant pagination, query/payload/upload/memory/concurrency bounds, external-call timeouts, retry budgets and queue/backlog limits. Use representative workload evidence before optimization or service/infrastructure extraction; scale the demonstrated bottleneck.
+
+Fixture bounds: 200 Unicode characters per immutable note, 1 KiB HTTP body, 8 KiB headers, 32 active adapter requests, four runtime DB connections, one-second Application/connect deadlines, 200 ms readiness, three-second startup and two-second HTTP/Core shutdown. Startup validates configuration/schema before traffic. No query lists, automatic retries, unbounded payload logging or background job queues exist. Trusted in-process extensions must honor context cancellation; Core does not pretend to forcibly sandbox or terminate arbitrary Go code. No throughput/capacity/RPO/RTO guarantee follows from these bounds.
 
 Total cost includes integration/maintenance and operations, CPU/RAM, storage/I/O/connections, network/egress, telemetry/retention, managed services, backups, upgrades and restore.
 

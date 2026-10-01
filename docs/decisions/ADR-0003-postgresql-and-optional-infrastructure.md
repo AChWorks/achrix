@@ -10,7 +10,7 @@ Use ordinary PostgreSQL for the first implementation and integration tests. Auxi
 | --- | --- | --- |
 | Relational store | [PostgreSQL](https://www.postgresql.org/support/versioning/) | Baseline; another engine needs real migrations/semantic tests; SQLite is excluded |
 | PostgreSQL access | [pgx](https://github.com/jackc/pgx), explicit SQL; [sqlc](https://docs.sqlc.dev/en/latest/reference/language-support.html) when useful | Pin compatibility; keep driver/schema details in owned Infrastructure |
-| SQL migrations | [golang-migrate v4](https://github.com/golang-migrate/migrate) | Application schema; lifecycle/recovery rules still apply |
+| SQL migrations | [golang-migrate v4](https://github.com/golang-migrate/migrate) for broader migration needs; native PostgreSQL transaction/lock for the bounded one-file fixture | Owned schema; baseline checksum/atomicity proof is private consumer install behavior under [Lifecycle](../lifecycle/lifecycle-and-compatibility.md#initial-fixture-lifecycle-and-database-scope), not a new shared migration framework |
 | HTTP and diagnostics | Go `net/http`, `log/slog` | Explicit composition and shared Application authorization |
 | Simple search | PostgreSQL FTS; optional [pg_trgm](https://www.postgresql.org/docs/current/pgtrgm.html) | Prove normalization/relevance on representative Persian/multilingual queries |
 | Advanced search | [OpenSearch](https://docs.opensearch.org/latest/analyzers/language-analyzers/index/); compare a simpler engine where fit warrants it | Actual relevance/filtering/volume/latency needs; no universal adapter now |

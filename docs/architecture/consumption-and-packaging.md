@@ -32,3 +32,9 @@ A Distribution is an optional curated product-class composition, such as content
 An independent consumer/extension must compose through intentionally public contracts, without runtime source copying or internal imports. Keep implementation details private and artifact/license scope clear. [Licensing](../legal/licensing.md) owns notices, covered-source obligations and any separately designated Apache-2.0 SDK; an exported symbol alone does not create that SDK or require another repository.
 
 Pinned/local/third-party dependencies must remain usable without a registry account or central runtime service. Registry discovery, signing and update delivery belong to optional release/tooling boundaries in [Lifecycle](../lifecycle/lifecycle-and-compatibility.md). A listing, license, certification and runtime permission are separate evidence.
+
+## Executable consumption proof
+
+[fixtures/notes](../../fixtures/notes/README.md) is a separately composed consumer with its own Go module. It pins a source-backed Foundation pseudo-version in its manifest; no `replace`, `go.work`, Foundation source copying or Foundation internal import is used. `scripts/validate.sh` copies only consumer-owned source into an isolated workspace and downloads Foundation into a new module cache with normal checksums, then builds and uses its public contracts. The build's identity must match the resolved pin.
+
+The fixture is evidence for this boundary, not a real product or authorization to create a product repository. Update its Foundation explicitly with `go get github.com/AChWorks/achrix@<reviewed-commit-or-version>`, `go mod tidy`, validation and a coherent consumer rebuild. A Foundation source update alone never updates an existing consumer executable.

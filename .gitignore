@@ -3,4 +3,4 @@
 *.dump
 *.test
 coverage.out
-notes
+/notes
