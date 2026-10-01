@@ -51,13 +51,27 @@ Keep useful root-cause evidence in restricted diagnostics; public responses expo
 
 Normal diagnosis works locally through supported process/file output without a required central collector. Keep log files/support exports outside public serving, authorize diagnostic access, and redact exported evidence. Control rotation/retention, volume and storage; a telemetry outage must not stop normal application operation.
 
-Where runtime debug control is needed, make it authorized, scoped to the failing component/operation and temporary, with production-safe defaults and a clear reset/expiry. Do not expose stack traces, SQL or verbose debug pages publicly or leave unbounded query/payload capture enabled.
+Diagnostic **volume is also a reliability/security concern**. Public invalid/denied requests, authentication failures and other attacker-controlled inputs must not create unbounded warning/audit/trace cost. Choose severity at the narrowest useful owner, aggregate/rate-limit/sample repetitive diagnostics where needed, and preserve a high-signal correlation path for investigation. Security audit events are retained according to their accountability need; ordinary repetitive denials are not automatically durable audit records.
+
+Where runtime debug control is needed, make it authorized, scoped to the failing component/operation and temporary, with production-safe defaults and a clear reset/expiry. Do not expose stack traces, SQL or verbose debug pages publicly or leave unbounded query/payload capture enabled. Profiling follows the same rule: CPU/heap/mutex/block profiles may be captured in an authorized diagnostic environment when needed, but no unauthenticated/public pprof surface is a default product feature.
 
 Use metrics/traces/alerts for demonstrated detection or cross-component diagnosis needs, following the OpenTelemetry default when appropriate. Avoid unbounded metric labels and pointless telemetry; record the failing component and safe operation identity so humans/AI can reproduce a failure without production secrets.
 
 Logs explain operational failure. Durable audit answers who/what/when/target/outcome/authority for accountable actions; [Security](../security/security-and-authorization.md#audit) owns those requirements. Debug logs are not the audit record and sampling/disposable log storage must not silently become audit policy.
 
 The proving consumer emits JSON `slog` to stderr. Its handler propagates a generated request ID into Core authorization, Notes Application, PostgreSQL and HTTP failure records. Database startup records identify `check_environment` or `check_schema`; migration failures identify `migrate`. Reasons distinguish unsupported environments, missing/incompatible/incomplete schema, invalid/changed/unknown migrations, SQLSTATE, deadlines, cancellation and connection failures. These consumer-owned diagnostics preserve inspectable causes internally and log safe categories, never driver exception messages, SQL, tokens, DSNs or note text. Public failures carry stable safe codes and `X-Request-ID`. There is no debug endpoint, collector, durable audit system or product log-retention claim. Operators own stderr access/rotation; the benign fixture creates no sensitive/admin/financial audit requirement.
+
+## Code-level performance engineering
+
+Performance starts with algorithm, data movement and resource ownership before cache/infrastructure selection.
+
+- Know expected cardinality for loops/maps/graphs and avoid accidental unbounded, N+1 or quadratic work on request/data paths that can grow with users/content. A small bounded startup path may legitimately choose simpler code over a more complex asymptotic implementation.
+- Treat memory allocation/copying, lock contention, goroutine growth, database round trips/query plans, serialization, storage/network I/O and telemetry volume as costs when they can affect the workload.
+- Stream potentially large uploads/downloads/exports and use bounded buffers/backpressure rather than loading whole objects into memory where practical.
+- Database performance is part of code quality: use bounded result sets, intentional indexes and transaction scopes; inspect `EXPLAIN (ANALYZE, BUFFERS)` or equivalent on material query regressions rather than guessing.
+- Add Go benchmarks and allocation checks for real hot paths/regressions. Use CPU/heap/mutex/block profiles to locate actual cost before optimizing. Compare performance-sensitive changes in a controlled environment (for example with `benchstat`); shared hosted-runner wall-clock noise is not a trustworthy hard regression gate.
+- Preserve clarity unless measurement demonstrates a meaningful benefit. Any lower-level optimization that obscures ownership/control flow needs evidence and focused tests.
+- First real products establish representative latency/throughput/resource budgets for their workloads. Foundation benchmarks prove only the measured path/environment, never universal capacity.
 
 ## Bounds, scale and cost
 
