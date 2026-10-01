@@ -20,6 +20,18 @@ Do not encode business authorization only as UI visibility or role-name conditio
 
 Roles may be convenient permission bundles; policies/capabilities own enforcement semantics.
 
+## Product accounts and optional SSO
+
+Owner accepted on 2026-10-01: products keep independently owned accounts and authorization; single sign-on (SSO) is optional.
+
+Each product owns its account/profile lifecycle, domain data, permission grants, and release boundary. Reusing Foundation identity capabilities does not imply one shared user table or one central AChrix runtime.
+
+Where a product actually needs SSO, integrate a maintained identity provider through a standard such as OpenID Connect. Keep the provider identity and its explicit mapping to the local product account separate from product authorization. Do not merge accounts merely because email addresses match, or treat successful SSO as permission to access another product's resources.
+
+Cross-product data sharing requires explicit authorization and a defined data boundary. Define session, account-linking, deactivation, and provider-unavailability behavior for the real integration.
+
+A public/self-hosted consumer must remain independently operable without an AChWorks identity service. This policy neither selects an identity provider nor requires an SSO adapter or central identity service in Issue #1.
+
 ## Module boundaries
 
 A module must not gain another module's authority by importing its Infrastructure internals or writing its tables.
