@@ -147,6 +147,20 @@ Module lifecycle must eventually account for:
 
 Do not build dynamic plugin lifecycle until real products need runtime install/enable/disable behavior.
 
+## Official release and ecosystem evidence
+
+For future publishable official artifacts, the release/tooling path should bind immutable artifact identity/digest to source/version, include checksums, an SBOM and build provenance, and provide cryptographic authenticity verification. Select the smallest standard formats/tooling when artifacts exist; no signing service or new Core dependency is required by this policy.
+
+The verification boundary must support an explicit authorized signer/issuer, trusted-key or certificate policy, rotation/revocation and offline/pinned verification where appropriate. A checksum alone proves neither official origin nor trust. Keep private signing material in an approved secret system, never in module metadata or Git.
+
+Official Modules may publish the same evidence. Preserve separate compatibility-test/certification evidence and security advisory/affected-version information. Authenticity does not establish safety, authorization or compatibility.
+
+Keep future official registry, advisory feed and update-channel locations in release/discovery tooling. Do not make one URL/provider a business invariant or require a company network call to boot/use Core. Define failure, stale metadata and revocation behavior when an actual updater exists; preserve the existing no-unsafe-downgrade and recovery rules.
+
+A registry listing or self-declared “official” metadata is not proof of origin. Independently maintained/unsigned third-party artifacts remain usable under an explicit consumer trust policy and their licenses; they cannot acquire official identity or bypass Application authorization.
+
+Forks may reuse licensed public release tooling and documentation but must represent their own publisher, trust/signing identity, supported compatibility and security maintenance. Do not intentionally break protocols to impose that separation.
+
 ## Updater extraction trigger
 
 A shared updater/installer implementation becomes justified only after multiple real distributions converge on the same mechanics and centralization lowers total risk/maintenance cost.

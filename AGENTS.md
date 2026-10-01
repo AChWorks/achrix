@@ -78,3 +78,9 @@ For tracked repository changes that alter durable project intent, architecture, 
 Until Issue #1 establishes executable CI and the strongest branch policy supported by the current GitHub plan, PR review plus change-appropriate validation is the repository integration boundary.
 
 Preserve unrelated contributor work. Avoid force pushes, destructive cleanup, or overwriting ambiguous state.
+
+## Licensing and extension work
+
+Follow [Licensing](docs/legal/licensing.md), [Governance](GOVERNANCE.md) and the [CLA policy](docs/legal/cla.md) when changing artifact scope or accepting external code. Never treat the non-operative CLA draft as signed consent, invent a legal entity, or silently relicense Core exports as an SDK.
+
+Preserve small versioned public contracts and private implementation boundaries. Go internal/unexported APIs are not a sandbox or copy protection. Keep provider/registry/signing/certification services optional and outside Core until a real requirement justifies them.

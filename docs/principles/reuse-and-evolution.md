@@ -62,6 +62,16 @@ Examples:
 - keep module boundaries extractable without deploying microservices now;
 - keep AI access explicit without building an agent orchestration platform now.
 
+## External integration and lifetime cost
+
+Compare direct use, configuration, extension, an adapter, product-local residual code and a maintained external service before adopting new ownership. Internal discovery order is not a reason to reject a better external solution.
+
+For a real candidate, evaluate fit, integration effort, authorization/data ownership, failure behavior, support/upgrade burden, license/commercial limits, resource cost, and a credible export/replacement path. A simple local port or standard API is worthwhile when it preserves a likely option cheaply; a universal importer/provider abstraction is not.
+
+Technology evolution and scale may refine one boundary at a time. Keep existing domain contracts and owned data stable where valuable, measure the actual bottleneck and preserve documented recovery/migration semantics. Do not imply that modularity removes migration cost or creates support for every future runtime.
+
+Use maintained external functionality in the ecosystem without relabeling it as official AChrix-owned code. Promotion and independent packaging still require the existing real-consumer evidence.
+
 ## Replace last
 
 Replacement is justified by evidence such as:

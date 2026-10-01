@@ -113,6 +113,8 @@ A product may diverge when its workload, domain, security, compatibility, or ope
 
 The Foundation should make the common path easy without making the uncommon-but-valid path impossible.
 
+Preserve credible low-cost evolution options in today's ownership, public contracts, data formats and deployment boundaries. Judge external reuse and future extraction by total delivery, operations, upgrade and exit cost. This is not a guarantee that every future technology is supported or interchangeable.
+
 ## 5. Initial executable implementation strategy
 
 The Foundation's identity is not a language or framework.
@@ -534,6 +536,14 @@ For every proposed capability:
 6. when behavior starts product-local, observe a real additional consumer before promoting it into the Foundation;
 7. observe real second/third consumers before independent package/service extraction;
 8. promote only when shared ownership/versioning reduces total delivery/maintenance risk and cost.
+
+### 26.1 Licensing and trusted ecosystem
+
+AChrix is genuine open-source software with a minimal, maintainable Core. The accepted artifact licensing and contribution-rights policy is owned by [Licensing](docs/legal/licensing.md) and [ADR-0004](docs/decisions/ADR-0004-licensing-and-trusted-ecosystem.md).
+
+The project should be easy to extend while official identity remains verifiable. Long-term value also accumulates in supported compatibility, official Modules, security lifecycle, tooling, documentation and ecosystem trust. [Governance](GOVERNANCE.md) and [Trademark Policy](TRADEMARKS.md) own canonical authority and representation.
+
+Do not pursue this goal with obfuscation, confusing code, license checks in Core, mandatory company services, deliberate incompatibility or restrictions that contradict published open-source rights. Future registries, signing, certification and update channels must earn their implementation cost.
 
 ## 27. Source-of-truth model
 

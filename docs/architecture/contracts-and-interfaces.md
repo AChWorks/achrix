@@ -121,3 +121,15 @@ Idempotency keys do not replace domain invariants.
 Internal methods are not automatically public APIs.
 
 Only intentionally published contracts become compatibility boundaries.
+
+## Public extension boundary and identity
+
+Publish only the small surface needed by a real external consumer/Module/Provider/Adapter. Prefer additive contracts and capability negotiation where actual implementations vary; avoid mega-interfaces and provider/driver/private-schema types that would unnecessarily couple consumers.
+
+Implementation-only APIs use unexported Go symbols and appropriately placed internal packages. Do not expose internals merely to make an extension work: refine the necessary public contract and prove it with a separate consumer. Exact package layout remains the implementation ADR's responsibility.
+
+Keep stable module/capability identity separate from mutable display branding. Qualify published identifiers by an explicit owning namespace where collision prevention is needed; reserve official publisher identity to AChWorks without preventing third parties from declaring their own identities or truthfully implementing shared contracts. The existing semantic capability examples remain valid local names.
+
+Choose the smallest naming/version convention needed by Issue #1; do not build a namespace registry now. Published IDs are durable contracts: avoid deriving them from transient display/repository names, and version or migrate any later identity change deliberately.
+
+Refer to [Licensing](../legal/licensing.md) for SDK/contract artifact scope and [Trademark Policy](../../TRADEMARKS.md) for official representation. Do not embed marketing brands in business rules or confuse retained protocol/import identifiers with an endorsement.
