@@ -8,12 +8,14 @@ Entry points call Application behavior; Domain owns business invariants; Infrast
 
 ## Core, Modules and products
 
-Core owns broadly required composition/capability/application/authorization/lifecycle contracts. Identity management, admin, content, media, notifications, commerce, payments, search and AI/provider implementations are optional Modules or product/infrastructure concerns unless real evidence establishes a Core responsibility.
+Core owns broadly required composition/capability/application/authorization/lifecycle contracts. Identity, Admin and Media are accepted initial reusable Module ownership boundaries under the [Module model](module-model.md); their implementation remains demand-driven rather than empty prebuilt framework surface.
 
-A product composes the versioned Core, selected reusable Modules and its own local behavior. It owns its data, release, deployment and secrets. Sharing code does not require one central service, shared account table or database for all products. Koinon provides ecosystem governance/discovery, not a runtime dependency.
+Content/taxonomy, notifications, commerce, payments, search, AI/provider behavior and other capabilities remain reusable-Module or product/infrastructure concerns according to the same placement rule; a common feature name alone does not make it Core or automatically shared.
 
-Use maintained Go/native/ecosystem functionality rather than build a general-purpose framework. [ADR-0003](../decisions/ADR-0003-postgresql-and-optional-infrastructure.md) owns concrete infrastructure choices; [Module model](module-model.md) owns composition; [Consumption](consumption-and-packaging.md) owns the product dependency boundary.
+A product composes the versioned Core, selected reusable Modules and its own local behavior. It owns its domain data/semantics, release, deployment and secrets. Reusing Identity does not create one central user table/account service; reusing Admin does not create a privileged business path; reusing Media does not transfer product-specific asset relationships. Sharing code does not require one central service or database for all products. Koinon provides ecosystem governance/discovery, not a runtime dependency.
+
+Use maintained Go/native/ecosystem functionality rather than build a general-purpose framework. [ADR-0003](../decisions/ADR-0003-postgresql-and-optional-infrastructure.md) owns concrete infrastructure choices; [Module model](module-model.md) owns composition/placement; [Consumption](consumption-and-packaging.md) owns the product dependency and packaging boundary.
 
 ## Extraction
 
-An in-process Module can remain so indefinitely. Extract a service only when independent scaling, failure/security isolation, runtime, deployment cadence, ownership or multiple-consumer economics beats the distributed-system cost. Re-evaluate transactions, authorization, failure/recovery and public contract compatibility at that boundary; splitting deployment does not preserve in-process guarantees automatically.
+An in-process Module can remain so indefinitely. Extract a package/repository/service only when independent versioning, scaling, failure/security isolation, runtime, deployment cadence, ownership or multiple-consumer economics beats the added distribution/system cost. Re-evaluate transactions, authorization, failure/recovery and public contract compatibility at that boundary; splitting deployment does not preserve in-process guarantees automatically.
