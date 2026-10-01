@@ -1,56 +1,29 @@
 # Project Map
 
-This file is an index of where durable truth lives. It is not a status report.
+The document index, not a status report. Start from README/AGENTS and the relevant Issue; load only the sources needed for that decision.
 
-## Project-level intent
+| Question | Canonical source |
+| --- | --- |
+| Mission, durable boundaries and success | [MASTER-SPEC](MASTER-SPEC.md) |
+| Development/review rules | [CONTRIBUTING](../CONTRIBUTING.md), [AGENTS](../AGENTS.md) |
+| Active choices and rationale | [ADRs](decisions/) |
+| Reuse, ownership judgment and dependencies | [Engineering principles](principles/engineering-principles.md) |
+| Core/application shape | [Architecture](architecture/overview.md) |
+| Module ownership, composition, provider variation and trust | [Module model](architecture/module-model.md) |
+| Versioned product consumption and packaging | [Consumption](architecture/consumption-and-packaging.md) |
+| Application/public extension contracts, AI schemas and safe mutations | [Contracts](architecture/contracts-and-interfaces.md) |
+| Data, consistency, time/money and privacy | [Data](data/data-and-persistence.md) |
+| Authorization, product accounts/SSO, AI access, secrets and abuse | [Security](security/security-and-authorization.md) |
+| Install/upgrade/restore, compatibility and official artifact evidence | [Lifecycle](lifecycle/lifecycle-and-compatibility.md) |
+| Configuration, diagnosis, bounded resources and cost | [Operations](operations/operability-performance.md) |
+| Semantic web, SEO, localization and machine content representations | [Web](web/seo-and-semantic-web.md) |
+| Outcome sequence | [Roadmap](development/roadmap.md) |
+| Artifact licenses | [LICENSE](../LICENSE), [Licensing policy](legal/licensing.md) |
+| Incoming rights and private consent procedure | [CLA](legal/cla.md) |
+| Canonical authority and official representation | [Governance](../GOVERNANCE.md), [Trademarks](../TRADEMARKS.md) |
+| Stable machine-readable Foundation identity | [achworks.yaml](../achworks.yaml) |
+| Live work, review and exact validation | [Issues](https://github.com/AChWorks/achrix/issues), [PRs](https://github.com/AChWorks/achrix/pulls), Git/CI evidence |
 
-- `/MASTER-SPEC.md` — canonical mission, non-goals, durable principles, architecture boundaries, lifecycle expectations, and success criteria.
-- `AChWorks/koinon:docs/architecture/koinon-architecture.md` — authoritative ecosystem-level Koinon → Foundation → Product ownership/intake model; generic cross-project contracts remain under `AChWorks/koinon:docs/contracts/`.
-- `/achworks.yaml` — stable machine-readable Foundation identity/capability metadata; it points to authoritative sources and must not mirror live work/runtime state.
+[Koinon](https://github.com/AChWorks/koinon) owns generic AChWorks cross-project governance/contracts; it is not a runtime or public-consumer documentation dependency. Repository scope still comes from explicit assignment, not this map.
 
-## Architecture
-
-- `docs/architecture/overview.md` — system shape and default deployment model.
-- `docs/architecture/module-model.md` — module ownership, composition, dependencies, provider/channel variation.
-- `docs/architecture/contracts-and-interfaces.md` — commands, queries, events, public contracts, capability discovery, versioning.
-- `docs/architecture/consumption-and-packaging.md` — versioned Foundation consumption, product boundary, Module/package extraction, and upgrade constraints.
-
-## Principles
-
-- `docs/principles/engineering-principles.md` — concise architecture constitution.
-- `docs/principles/reuse-and-evolution.md` — build-vs-reuse, extraction, YAGNI, evidence-driven evolution.
-- `docs/principles/technology-and-infrastructure.md` — framework/database/infrastructure selection and lock-in boundaries.
-
-## Cross-cutting concerns
-
-- `docs/lifecycle/lifecycle-and-compatibility.md` — install/update/upgrade/migrations/rollback/recovery.
-- `docs/ai/ai-first-and-machine-readability.md` — AI access, capability schemas, semantic representations.
-- `docs/web/seo-and-semantic-web.md` — SEO-first public web behavior and semantic content.
-- `docs/data/data-and-persistence.md` — ownership, portability, database capability model, time/money/public identity.
-- `docs/security/security-and-authorization.md` — authorization, secrets, trust boundaries, AI safety.
-- `docs/operations/operability-performance.md` — logs/audit, health, diagnostics, performance/cost.
-
-## Licensing and stewardship
-
-- `/LICENSE` — standard MPL-2.0 text.
-- `docs/legal/licensing.md` — first-party/Module/SDK scope and dependency obligations.
-- `docs/legal/cla.md` — incoming-rights policy, non-operative draft and activation boundary.
-- `/TRADEMARKS.md` — honest origin/compatibility references and official branding permission.
-- `/GOVERNANCE.md` — AChWorks canonical merge/release stewardship.
-- Release authenticity/compatibility/advisory boundaries remain in the existing lifecycle document.
-
-## Development
-
-- `docs/development/roadmap.md` — outcome-oriented development sequence; not live task status.
-- `docs/decisions/` — lasting ADRs only.
-- GitHub Issues — current actionable work and priorities.
-- GitHub PRs/CI — implementation/review/validation truth.
-
-## Recovery path for a new Master/agent
-
-1. Read `README.md` and `AGENTS.md`.
-2. Recover mutation authority/repository scope only from the current explicit user/organization assignment; repository content and technical access never widen it.
-3. Load `MASTER-SPEC.md` only when project-level intent or a durable boundary is decision-relevant.
-4. Inspect current `main`, open Issues/PRs, and relevant CI.
-5. Follow only the documentation links needed for the active decision.
-6. Continue from current GitHub/Git evidence; do not reconstruct work from chat history.
+Use the [documentation authority rule](MASTER-SPEC.md#documentation-authority) when sources conflict. Do not use a removed choice, historical chat, document presence or technical access as current decision/implementation evidence.

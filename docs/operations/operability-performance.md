@@ -1,77 +1,21 @@
-# Operability, Performance, and Cost
+# Operations, Performance and Cost
 
-## Operational simplicity
+## Configuration and readiness
 
-The primary Foundation implementation path should remain deployable without auxiliary infrastructure until evidence requires it.
+Simple applications run without mandatory auxiliary services. [ADR-0003](../decisions/ADR-0003-postgresql-and-optional-infrastructure.md) owns infrastructure defaults; introduce them for actual requirements.
 
-Do not make Redis, queue supervisors, brokers, search clusters, container orchestration, or Node production runtime mandatory for a simple application.
+Separate business configuration, runtime/deployment configuration, secrets and domain data. Configuration has an owner, meaningful defaults, validation and explicit environment behavior. Shutdown is graceful; readiness probes only dependencies necessary for local readiness, not every external service synchronously.
 
-## Health
+## Diagnosis and audit
 
-Health/readiness checks should prove only dependencies relevant to local readiness.
+Diagnostic logs use meaningful severity/context and request/job/operation correlation where useful. Never log credentials, keys, tokens or unnecessary sensitive payloads. Model/provider telemetry must not retain sensitive prompts/responses by default.
 
-Do not turn a cheap health endpoint into a synchronous probe of every external dependency.
+Logs explain operational failure. Durable audit answers who/what/when/target/outcome/authority for accountable actions; [Security](../security/security-and-authorization.md) owns those requirements. Debug logs are not the audit record.
 
-## Logging
+## Bounds, scale and cost
 
-Use useful severity and context.
+Apply relevant pagination, query/payload/upload/memory/concurrency bounds, external-call timeouts, retry budgets and queue/backlog limits. Use representative workload evidence before optimization or service/infrastructure extraction; scale the demonstrated bottleneck.
 
-Where it materially improves diagnosis, include stable correlation/request/job/operation identifiers.
+Total cost includes integration/maintenance and operations, CPU/RAM, storage/I/O/connections, network/egress, telemetry/retention, managed services, backups, upgrades and restore. Observability needs useful signals and bounded resources; it must not turn telemetry outages into application outages.
 
-Never log secrets, tokens, passwords, private keys, authorization codes, or unnecessary sensitive data.
-
-## Audit vs logs
-
-Logs answer "why did the system fail?"
-
-Audit answers "who/what performed the accountable action?"
-
-Keep them separate.
-
-## Performance budgets
-
-Prefer architectural bounds such as:
-
-- bounded query count;
-- pagination;
-- bounded payload size;
-- bounded memory growth;
-- external-call timeout;
-- bounded retries;
-- queue/backlog limits when queues exist.
-
-Use representative measurements before adding architecture solely for performance.
-
-## Capacity evolution
-
-Scale the demonstrated bottleneck.
-
-Examples:
-
-```text
-relational query -> index/query design -> cache -> dedicated search/read model if justified
-sync effect -> durable operation -> queue if justified
-local file -> object storage/CDN if justified
-single process -> more workers -> specialized service if justified
-```
-
-Do not jump directly to the final distributed shape.
-
-## Cost
-
-Infrastructure and observability have ongoing cost:
-
-- CPU/RAM;
-- database connections/storage;
-- network/egress;
-- logs/traces/metrics;
-- managed services;
-- human operational complexity.
-
-Architecture decisions should consider total cost of ownership, not benchmark throughput alone.
-
-## Recoverability
-
-For stateful systems, distinguish backup from restore.
-
-Recovery evidence should be proportional to data/business criticality.
+Backups require proportional restore evidence under [Lifecycle](../lifecycle/lifecycle-and-compatibility.md). Fast benchmark throughput alone does not establish safe or cheap operation.

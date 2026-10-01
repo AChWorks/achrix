@@ -1,48 +1,21 @@
 # Contributing
 
-## Workflow
+## Work and review
 
-- Start from current `main`.
-- Work in a focused branch for tracked changes that alter durable project intent, architecture, implementation, CI, lifecycle, metadata, or repository working rules.
-- Keep one meaningful outcome reviewable together; do not split work merely by implementation layer.
-- Use Pull Requests as the normal integration path for those tracked changes; validation depth should match the changed surface. Issue #1 will add executable CI and the strongest enforceable repository policy supported by the current GitHub plan.
-- Link PRs to the Issue/outcome they implement when a durable work item exists.
+Start from current main, the relevant Issue/PR and [Project Map](docs/PROJECT-MAP.md). Read only the specification/rules relevant to the change, inspect existing capabilities, and resolve ownership before creating parallel functionality.
 
-## Before implementation
+Use a focused branch and Pull Request for tracked changes to intent, architecture, implementation, CI, lifecycle, metadata or working rules. Link the existing outcome when applicable; keep one meaningful change reviewable together. Canonical integration targets main. Do not overwrite unrelated work or force-push.
 
-1. Read the relevant part of `MASTER-SPEC.md`.
-2. Follow the Project Map to the narrowest relevant architecture/engineering document.
-3. Check the current Issue/PR state.
-4. Inspect existing code/capabilities before creating a parallel mechanism.
-5. Confirm whether the need belongs in Foundation Core, a reusable internal Foundation Module, a product-local Module, an adapter, an independently versioned package, or a separate service.
-6. For changes that affect how products consume shared Foundation code, read `docs/architecture/consumption-and-packaging.md` and preserve the supported version/update boundary.
+Validate the exact candidate with change-appropriate checks and review the full diff. Issue #1 introduces executable checks and the strongest suitable enforceable policy supported by the current plan; until then PR review plus relevant validation is the boundary.
 
-## Definition of done
+Done means the accepted behavior is implemented, required checks pass, compatibility/state/recovery implications are handled and affected canonical docs are current. Integration and production delivery are separate facts. Current documents contain rules still in force; obsolete decisions remain in Git history.
 
-A change is done when the accepted behavior is implemented, required validation passes, relevant compatibility/lifecycle implications are handled, the diff has been reviewed, and durable documentation is updated only where a lasting rule or contract changed.
+## Architecture and dependencies
 
-Integration and production delivery are separate facts.
+Follow [Engineering principles](docs/principles/engineering-principles.md) and the owning topic document. A lasting consequential choice may need an ADR; small implementation choices do not. Dependencies need maintenance/security/license/compatibility/upgrade/cost justification, not a wrapper by default.
 
-## Architecture changes
+## Rights and sensitive data
 
-Create an ADR only for lasting decisions whose rationale/constraints future maintainers will need.
+[Licensing](docs/legal/licensing.md) owns file/artifact scope; preserve third-party notices and use actual-license SPDX headers for new source. Templates/generated files need unambiguous scope. [CLA](docs/legal/cla.md) requires verified signed versioned consent and sufficient contributor/employer rights before covered external code merges; a PR checkbox or agent assertion is insufficient.
 
-Do not create ADRs for small reversible implementation choices.
-
-## Dependencies
-
-Before adding a dependency, compare the cost of owning equivalent custom code with the dependency's maintenance, security, license, upgrade, compatibility, and operational costs.
-
-## Security
-
-Never commit credentials, tokens, private keys, session material, production customer data, or restricted provider payloads.
-
-## Licensing and external contribution rights
-
-Read the [artifact licensing policy](docs/legal/licensing.md), [Governance](GOVERNANCE.md) and [CLA policy/draft](docs/legal/cla.md).
-
-Keep first-party code under its declared artifact license and preserve third-party notices. New source files should identify their actual license with an SPDX header; generated files/templates must retain an unambiguous license scope.
-
-External copyrightable code contributions to covered official artifacts require verified consent to the effective CLA and sufficient contributor/employer rights before merge. The current draft is non-operative; activation is tracked in [Issue #15](https://github.com/AChWorks/achrix/issues/15). A PR checkbox alone does not satisfy this requirement. Signed/private contributor records do not belong in public Git.
-
-For extensions, use intentionally published contracts and the [module/packaging boundaries](docs/architecture/consumption-and-packaging.md). A third-party Module may use its own compatible license and does not become official by submitting metadata or claiming compatibility.
+Keep signatures, private contributor records, credentials, keys, customer data and restricted payloads out of public Git. [Governance](GOVERNANCE.md) owns merge/release authority. Extensions use published contracts; an independently licensed compatible Module does not become official by claiming compatibility.

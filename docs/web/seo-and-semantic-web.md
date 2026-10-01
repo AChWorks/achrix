@@ -66,23 +66,13 @@ Preview/draft behavior should default to non-indexable and protected where appro
 
 Presentation/theme should not own the only copy of page meaning.
 
-Prefer:
-
-```text
-Structured content
-      |
-      v
-Theme/components
-      |
-      v
-Semantic HTML
-```
+Keep one structured semantic content source; themes/renderers derive presentation from it.
 
 This supports redesign, AI readability, accessibility, and alternate representations.
 
 ## Machine-oriented representations
 
-Derived Markdown or similar machine-readable representations may be exposed when useful.
+One semantic source may derive HTML, JSON, Markdown, JSON-LD or API/MCP resources where useful; do not keep independently editable copies merely for different interfaces. A custom HTML escape hatch may serve exceptional designs without becoming the default content model.
 
 Conventions such as `llms.txt` are optional adapters, not Core architectural requirements.
 

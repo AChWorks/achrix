@@ -22,7 +22,7 @@ Roles may be convenient permission bundles; policies/capabilities own enforcemen
 
 ## Product accounts and optional SSO
 
-Owner accepted on 2026-10-01: products keep independently owned accounts and authorization; single sign-on (SSO) is optional.
+Products keep independently owned accounts and authorization; single sign-on (SSO) is optional.
 
 Each product owns its account/profile lifecycle, domain data, permission grants, and release boundary. Reusing Foundation identity capabilities does not imply one shared user table or one central AChrix runtime.
 
@@ -42,7 +42,7 @@ Cross-module operations use an authorized Application boundary.
 
 AI/MCP/API access is never more privileged merely because it is automated.
 
-Every machine action must execute under an explicit principal/context and permission boundary.
+Every machine action must execute under an explicit principal/context and permission boundary. Discovery is not permission. Use product-required preview/approval boundaries for sensitive mutations; [Contracts](../architecture/contracts-and-interfaces.md) owns concurrency and replay safety.
 
 Do not expose:
 
