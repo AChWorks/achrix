@@ -4,7 +4,7 @@ kind: Foundation
 metadata:
   name: achrix
   title: AChrix
-  description: AChrix is an executable, reusable, versioned AChWorks Foundation for web-connected applications.
+  description: AChrix is being developed as an executable, reusable, versioned AChWorks Foundation for web-connected applications; this repository is currently a pre-implementation architecture and policy baseline.
 
 spec:
   type: application-base
