@@ -23,6 +23,7 @@ import (
 	"example.com/achrix-notes/internal/infrastructure"
 	"example.com/achrix-notes/internal/presentation"
 	"github.com/AChWorks/achrix"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -90,10 +91,11 @@ func TestUnsupportedDatabaseEncoding(t *testing.T) {
 			if err := p.QueryRow(ctx, "SELECT current_database(), current_setting('server_encoding')").Scan(&actualDatabase, &actual); err != nil || actualDatabase != name || actual != encoding {
 				t.Fatal(actualDatabase, actual, err)
 			}
-			if err := infrastructure.Migrate(ctx, p, infrastructure.Migrations()); err == nil || err.Error() != "unsupported database environment" {
+			if err := infrastructure.Migrate(ctx, p, infrastructure.Migrations()); err == nil || err.Error() != "unsupported database environment" || infrastructure.FailureReason(err) != "unsupported_environment" {
 				t.Fatal("installation not rejected for encoding", err)
 			}
-			logger := diagnosis.New(io.Discard)
+			var output safeBuffer
+			logger := diagnosis.New(&output)
 			s, err := infrastructure.New(dsn, logger)
 			if err != nil {
 				t.Fatal(err)
@@ -102,8 +104,12 @@ func TestUnsupportedDatabaseEncoding(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := a.Start(ctx); err == nil || !strings.Contains(err.Error(), "unsupported database environment") {
+			if err := a.Start(ctx); err == nil {
 				t.Fatal("unsupported startup not rejected for encoding", err)
+			}
+			assertDatabaseFailure(t, output.String(), "check_environment", "unsupported_environment")
+			if strings.Contains(output.String(), dsn) {
+				t.Fatal("database configuration leaked")
 			}
 			if err := s.Ready(ctx); !errors.Is(err, domain.ErrUnavailable) {
 				t.Fatal("rejected startup resource survived", err)
@@ -123,7 +129,13 @@ func TestPostgresMigrationAndSharedBehavior(t *testing.T) {
 	p := testPool(t)
 	reset(t, p)
 	t.Run("real partial startup cleans the acquired pool", func(t *testing.T) {
-		logger := diagnosis.New(io.Discard)
+		err := infrastructure.CheckSchema(context.Background(), p)
+		var pgerr *pgconn.PgError
+		if !errors.As(err, &pgerr) || pgerr.Code != "42P01" || infrastructure.FailureReason(err) != "schema_not_installed" || err.Error() != "schema not installed" {
+			t.Fatal("missing schema cause lost", err)
+		}
+		var output safeBuffer
+		logger := diagnosis.New(&output)
 		s, err := infrastructure.New(os.Getenv("NOTES_TEST_DATABASE_URL"), logger)
 		if err != nil {
 			t.Fatal(err)
@@ -135,6 +147,12 @@ func TestPostgresMigrationAndSharedBehavior(t *testing.T) {
 		if err := a.Start(context.Background()); err == nil {
 			t.Fatal("uninstalled schema started")
 		}
+		assertDatabaseFailure(t, output.String(), "check_schema", "schema_not_installed")
+		for _, private := range []string{pgerr.Message, os.Getenv("NOTES_TEST_DATABASE_URL"), "SELECT id,sha256"} {
+			if strings.Contains(output.String(), private) {
+				t.Fatal("schema diagnostic leaked database detail")
+			}
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		if err := s.Ready(ctx); !errors.Is(err, domain.ErrUnavailable) {
@@ -145,12 +163,25 @@ func TestPostgresMigrationAndSharedBehavior(t *testing.T) {
 		}
 	})
 	t.Run("transaction failure and interruption are reenterable", func(t *testing.T) {
-		for _, statement := range []string{"SELECT 1/0;", "SELECT pg_sleep(10);"} {
-			ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+		for _, tc := range []struct {
+			statement string
+			timeout   time.Duration
+			reason    string
+			cause     error
+		}{
+			{"SELECT 1/0;", time.Second, "22012", nil},
+			{"SELECT pg_sleep(10);", 40 * time.Millisecond, "deadline", context.DeadlineExceeded},
+			{"", time.Second, "canceled", context.Canceled},
+		} {
+			ctx, cancel := context.WithTimeout(context.Background(), tc.timeout)
+			if tc.cause == context.Canceled {
+				cancel()
+			}
 			m := infrastructure.Migrations()
-			m[0].SQL += statement
-			if err := infrastructure.Migrate(ctx, p, m); err == nil {
-				t.Fatal("failed/interrupted migration passed")
+			m[0].SQL += tc.statement
+			err := infrastructure.Migrate(ctx, p, m)
+			if err == nil || infrastructure.FailureReason(err) != tc.reason || tc.cause != nil && !errors.Is(err, tc.cause) {
+				t.Fatal("migration cause lost", tc.reason, err)
 			}
 			cancel()
 			var present bool
@@ -185,7 +216,7 @@ func TestPostgresMigrationAndSharedBehavior(t *testing.T) {
 		}
 		changed := infrastructure.Migrations()
 		changed[0].SQL += "\n-- changed immutable content"
-		if err := infrastructure.Migrate(context.Background(), p, changed); err == nil {
+		if err := infrastructure.Migrate(context.Background(), p, changed); err == nil || infrastructure.FailureReason(err) != "migration_changed" {
 			t.Fatal("changed migration accepted")
 		}
 		if err := infrastructure.CheckSchema(context.Background(), p); err != nil {
@@ -195,8 +226,11 @@ func TestPostgresMigrationAndSharedBehavior(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if infrastructure.Migrate(context.Background(), p, infrastructure.Migrations()) == nil || infrastructure.CheckSchema(context.Background(), p) == nil {
-			t.Fatal("unknown schema accepted")
+		if err := infrastructure.Migrate(context.Background(), p, infrastructure.Migrations()); err == nil || infrastructure.FailureReason(err) != "migration_unknown" {
+			t.Fatal("unknown migration cause lost", err)
+		}
+		if err := infrastructure.CheckSchema(context.Background(), p); err == nil || infrastructure.FailureReason(err) != "schema_incompatible" {
+			t.Fatal("incompatible schema cause lost", err)
 		}
 		if _, err := p.Exec(context.Background(), "DELETE FROM notes.migrations WHERE id='999_unknown'"); err != nil {
 			t.Fatal(err)
@@ -400,6 +434,20 @@ func TestPostgresMigrationAndSharedBehavior(t *testing.T) {
 			}
 		}
 	})
+}
+
+func assertDatabaseFailure(t *testing.T, logs, operation, reason string) {
+	t.Helper()
+	for _, line := range strings.Split(strings.TrimSpace(logs), "\n") {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatal("invalid diagnostic JSON", err)
+		}
+		if record["component"] == "notes.postgresql" && record["operation"] == operation && record["reason"] == reason {
+			return
+		}
+	}
+	t.Fatal("missing database diagnostic", operation, reason, logs)
 }
 
 type safeBuffer struct {
