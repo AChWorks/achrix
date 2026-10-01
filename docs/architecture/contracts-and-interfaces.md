@@ -18,7 +18,7 @@ Where clients/composition need it, metadata exposes identity/version, descriptio
 
 ## Errors, concurrency and effects
 
-Give machine clients stable actionable failure semantics when relevant: validation, authentication/permission, missing resource, conflict/precondition, quota/limit, transient/upstream failure and definitive business rejection. Map transports to those semantics; do not leak SQL, provider/framework exceptions, stack traces or secrets. Specify retryability and request/operation correlation when callers need them.
+Give machine clients stable actionable failure semantics when relevant: validation, authentication/permission, missing resource, conflict/precondition, quota/limit, transient/upstream failure and definitive business rejection. Map transports to those semantics; do not leak SQL, provider/framework exceptions, stack traces or secrets. Machine error codes, field names and capability IDs do not change with locale; products may translate user-facing explanations while preserving those contracts. [Internationalization](../web/seo-and-semantic-web.md#internationalization-and-directionality) owns language and presentation guidance. Specify retryability and request/operation correlation when callers need them.
 
 Use expected versions/ETags or equivalent where concurrent human/AI/API edits could lose meaningful work. Use durable idempotency/operation identity for financially important, provisioning or replay-prone effects. These mechanisms do not replace domain invariants and need not decorate every trivial write.
 

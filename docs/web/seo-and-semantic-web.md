@@ -1,6 +1,6 @@
 # SEO and Semantic Web
 
-This document applies to distributions that expose public web content.
+Semantic web/SEO sections apply to distributions exposing public web content. Internationalization and directionality also apply to other user-facing product surfaces, including administration and native clients; HTML/CSS guidance applies to their web renderers.
 
 ## Default delivery
 
@@ -23,11 +23,17 @@ This helps users, assistive technology, search engines, crawlers, and AI extract
 
 ## Internationalization and directionality
 
-Use Unicode/UTF-8 throughout the public content path.
+Preserve Unicode/UTF-8 through accepted text, storage, APIs and export. Do not restrict human text to ASCII or rewrite it merely for display direction. Stable protocol/capability IDs remain separate from translated display text under [Contracts](../architecture/contracts-and-interfaces.md).
 
-When a product needs localization, keep locale/language and presentation direction explicit enough to support both LTR and RTL output, and render semantic language/direction metadata where applicable.
+Products own supported languages, locale selection/fallback, translation resources and presentation. Distinguish interface language, content language/translated content and locale formatting; a user's interface choice must not silently change stored content. A Module owns translations or localized content semantics only when its actual capability needs them. Core needs no global locale registry, translation engine or mandatory locale field.
 
-Do not build a full translation subsystem before a product needs it, but avoid hardcoding one language or text direction into reusable content/domain contracts when a small local choice can preserve future support.
+Keep language/locale and base direction separate: a language declaration does not itself set direction. Web renderers emit meaningful `lang` language tags and `dir="rtl"` or `dir="ltr"` for the document and genuine content-language/direction changes. Use semantic direction markup rather than alignment alone. Prefer CSS logical properties such as `margin-inline-start`, `padding-inline-end` and `text-align: start` where layout should follow direction. Mirror only direction-dependent controls; code, URLs, identifiers and media do not all reverse with the interface.
+
+Isolate inserted mixed-direction text appropriately, for example with `bdi` for inline user text and `dir="auto"` where content direction is unknown. Preserve the stored text and apply normal output escaping; direction metadata does not make HTML safe. Date/number/currency formatting belongs at presentation boundaries and must preserve the [canonical data semantics](../data/data-and-persistence.md#durable-values).
+
+When implementing an actual localized surface, validate a representative supported LTR/RTL path, mixed Persian/Latin text and the affected form/navigation/error behavior. Reuse unchanged evidence and target a corrected component; do not create a locale matrix or visual tests for absent UI. The initial Notes proof covers persisted Persian/Unicode text, not rendered RTL layout or translated UI.
+
+Follow [W3C language declarations](https://www.w3.org/International/questions/qa-html-language-declarations), [HTML directionality](https://www.w3.org/International/questions/qa-html-dir) and [CSS logical properties](https://www.w3.org/TR/css-logical-1/) at renderer boundaries. Introduce translation tooling for real product needs, while keeping reusable contracts free of hardcoded language/direction assumptions.
 
 ## SEO capabilities
 
