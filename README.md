@@ -14,7 +14,7 @@ The accepted starting stack is Go and ordinary PostgreSQL. Optional infrastructu
 
 ## Implementation status
 
-This repository currently contains architecture and policy documents. No executable runtime, installation procedure or CI checks are published yet. [Issue #1](https://github.com/AChWorks/achrix/issues/1) owns the first executable Core and independent consumer proof; inspect that Issue for its current execution gate.
+The initial executable baseline supplies minimal instance-owned Go composition, authorization and lifecycle contracts. The separately composed [Notes consumer](fixtures/notes/README.md) proves a pinned dependency, consumer-owned PostgreSQL persistence/migrations, direct invocation and one HTTP adapter through the same Application policy. [Operations](docs/operations/operability-performance.md#supported-environment) owns the supported matrix and the shared local/CI validation command. [Issue #1](https://github.com/AChWorks/achrix/issues/1) owns full executable acceptance and its exact evidence; this fixture does not establish a production product/deployment profile.
 
 Suitable products will consume a versioned AChrix dependency rather than permanently copy its shared source. Product-specific behavior stays with the product. [Koinon](https://github.com/AChWorks/koinon) owns ecosystem governance/discovery and is not an AChrix runtime dependency.
 

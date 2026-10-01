@@ -29,3 +29,20 @@ Across products, use explicit authenticated APIs/webhooks with bounded calls and
 ## Evolution
 
 Prefer additive change. Breaking public semantics/IDs require explicit versioning, migration guidance and an appropriate retirement path. Persisted events/messages/jobs must remain interpretable for their required lifetime; do not silently reinterpret payloads. [Lifecycle](../lifecycle/lifecycle-and-compatibility.md) owns activation and recovery; [Licensing](../legal/licensing.md) and [Trademark Policy](../../TRADEMARKS.md) own artifact terms and official representation.
+
+## Initial Go public surface
+
+The only shared import is `github.com/AChWorks/achrix`. [Package source](../../achrix.go) and Go documentation own exact signatures; unexported state/helpers are private. This pre-v1 surface is deliberately small:
+
+| Contract | Intended consumer use |
+| --- | --- |
+| `Capability`, `Descriptor`, `Module` | Stable ID and positive capability ABI revision; implementation version; provided/required composition; owned `Start`, `Ready`, `Stop` |
+| `Config`, `New`, `Application` | Explicit instance-owned composition; validate missing/duplicate/incompatible/cyclic dependencies before resources/traffic |
+| `Principal`, `Policy`, `PolicyFunc`, `Application.Authorize` | Product-authenticated principal; consumer policy; fail-closed checks inside typed Application operations before state access |
+| `Application.Start`, `Ready`, `Shutdown` | One-shot startup, caller-bounded local readiness, reverse bounded cleanup including the partially started failing component |
+| `Application.Components`, `Version` | Defensive component metadata and actual source-backed Foundation dependency version; local/replacement builds identify themselves as development |
+| `ErrComposition`, `ErrDenied`, `ErrNotReady` | Inspectable stable Core error categories; raw lifecycle extension errors remain restricted operator-level results |
+
+`achrix.authorization` ABI 1 is Core-owned. The separate consumer provides `example.notes.create`/`example.notes.read` ABI 1. It owns its typed Service, Domain, PostgreSQL schema, migration and HTTP mapping; none is a shared Content/Identity Module or additional Foundation export. Required capabilities match exact ABI revisions; optional dependencies are omitted because this proof needs none. Descriptor registration/configuration never mutates a process-global registry. In-process Module/Policy methods must honor context; callers supply bounded operation deadlines and stop ingress/owned work before shutdown.
+
+The [Notes HTTP contract](../../fixtures/notes/README.md#http-contract) calls the same Service/authorization as direct invocation. Driver types/private SQL do not enter Foundation contracts. The fixture's `internal` packages are product-local, never Foundation internal imports. There is no generic dispatcher, dynamic loader, mandatory central service or AI-specific privilege path.

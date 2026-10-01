@@ -1,6 +1,6 @@
 # ADR-0005 — Initial Go Consumption Shape
 
-Status: accepted starting packaging decision; supported versions/public APIs and executable proof remain pending Issue #1.
+Status: accepted starting packaging decision; Operations and Contracts own implemented support/public APIs, and Issue #1 owns exact executable acceptance evidence.
 Date: 2026-10-01.
 
 ## Context

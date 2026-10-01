@@ -38,6 +38,12 @@ Rehearse restoration into an isolated supported target, verifying schema, critic
 
 Backup existence is not restore evidence. Prove the needed profile on real persisted behavior, then on the first product, before claiming supported recovery.
 
+## Initial fixture lifecycle and database scope
+
+The proving consumer installs its one immutable SQL migration through an explicit `notes -mode migrate` operation before serving traffic. Its private installer uses native PostgreSQL transactional DDL, a transaction advisory lock and an ID/SHA-256 ledger. Schema and ledger commit together; failure/interruption rolls back both, concurrent installers serialize, changed/unknown published identities fail, and repeat execution is harmless. Runtime startup checks the exact ledger; it does not execute migrations from requests or replicas. No down migration, universal migration engine or shared Backup Module is published. The native one-file mechanism is a bounded baseline use of maintained database functionality; reconsider a broader migration tool when real schema evolution needs it.
+
+`scripts/validate.sh` demonstrates trusted `pg_dump`/`pg_restore` into another empty database in a task-owned PostgreSQL 18.6 cluster. It checks dump integrity, exact persisted row equality, migration identity, reconstructed composition, local readiness and authorized Application reads. Scope is this fixture's ordinary relational schema/ledger/notes only. Source Foundation pin, consumer build, Module version and migration digest are identified in the validation output. Runtime configuration/tokens, files/object data, roles/ACLs, external effects, whole-product consistency, off-host retention and recovery-time guarantees are excluded. The dump is generated within the test, never accepted from an untrusted party or restored over user data. Issue #19 retains the real-product/deployment/recovery-profile gate.
+
 ## Product update experience
 
 For products with an administration UI, routine compatible Core/Module installation/update is a simple authorized action without user-run server commands or compilation. [Consumption](../architecture/consumption-and-packaging.md#module-installation) owns prepared composition; choosing independently available latest versions is insufficient.
