@@ -33,7 +33,7 @@ An accepted reusable placement does not require immediate implementation. Implem
 
 Packaging is a separate decision in [Consumption](consumption-and-packaging.md). Reusable Modules default to the existing AChrix repository/Go module/process unless independent versioning, ownership/security isolation, deployment/runtime needs or lower total lifetime cost justify extraction.
 
-## Initial accepted reusable Modules
+## Accepted reusable Modules
 
 These are accepted **ownership boundaries**, not claims that every listed behavior is already implemented or that final package/capability identifiers are fixed. GitHub Issues own implementation scope and evidence.
 
@@ -87,13 +87,42 @@ Notifications owns reusable delivery mechanics when products need outbound human
 
 The owning product/domain decides why/when/to-whom a notification is sent and owns consent/preferences/business meaning. Marketing consent, domain recipient policy and provider-specific semantics do not become generic Core rules. No Notification implementation is required until a real product flow needs it.
 
-Identity, Admin, Media, Audit and Notifications are the current accepted reusable placements. Content/taxonomy, commerce, payments, search, AI/provider behavior, Multi-Site and Gateway Bridge remain case-by-case until their own evidence/decision establishes placement; a familiar feature name alone is not reuse evidence.
+### Search
+
+Search owns reusable **derived search projection/query mechanics** when a product needs search:
+
+- search-document/projection identity, update/delete propagation and rebuild/reconciliation lifecycle;
+- bounded query/result/continuation contracts;
+- provider adapters and provider-specific indexing/query behavior behind a narrow capability boundary;
+- generic freshness/health/diagnostic state needed to operate the search projection.
+
+Source Modules/products remain authoritative for their records, invariants, which fields/documents are searchable, visibility/authorization semantics, business relevance/boosting and domain meaning. Search is never authoritative inventory/payment/security state.
+
+Start with PostgreSQL full-text search and optional `pg_trgm` for ordinary workloads; a dedicated engine such as OpenSearch is optional and must earn its extra service/operations cost from representative relevance, filtering, volume or latency evidence. Permission changes/deletes must propagate without leaking documents, counts, snippets or facets. Provider-native document/field security may add defense in depth, but it does not replace normal Application authorization. Implementation waits for a real product search flow under [Issue #48](https://github.com/AChWorks/achrix/issues/48).
+
+### Settings
+
+Settings owns only **application-level, operator-editable, durable settings** whose semantics belong to the product/application shell rather than a feature Module.
+
+Each accepted setting has typed/versioned semantics, defaults/value-presence rules, validation, authorization, migration/compatibility and relevant concurrency/audit behavior. Settings is not a universal EAV/JSON bag, process-global configuration registry or secret store. Deployment/runtime configuration and secrets remain product/composition-owned; each feature Module continues to own its domain/business settings and may expose them through Admin.
+
+Exact fields are introduced only from a real product need; examples never freeze a generic schema. Admin may render Settings through normal Application contracts. [Issue #50](https://github.com/AChWorks/achrix/issues/50) owns first implementation when concrete application-level fields exist.
+
+### Backup & Recovery
+
+Backup & Recovery is an accepted reusable **operational Module/tooling boundary**, not a Core primitive and not a generic host/root agent.
+
+It may own reusable backup/restore operation identity/progress, manifests binding product/Core/Module/schema identities and integrity evidence, recovery-plan coordination and narrow adapters to maintained database/storage/deployment tools. Products own recovery policy, supported profiles, schedule/destination, RPO/RTO/retention and protected credentials/keys. Modules declare their durable assets, cross-store relationships and recovery constraints.
+
+Use maintained native/provider mechanisms rather than inventing a backup format. Restore/preflight/reconciliation evidence is part of support; backup existence alone is not. The first real-product proof in #19 shapes the minimum reusable mechanics before [Issue #49](https://github.com/AChWorks/achrix/issues/49) implements a general boundary. Core gains no shell/root/filesystem/database-proxy authority from this placement.
+
+Identity, Admin, Media, Audit, Notifications, Search, Settings and Backup & Recovery are the current accepted reusable placements. Content/taxonomy, commerce, payments, AI/provider behavior, Multi-Site and Gateway Bridge remain case-by-case until their own evidence/decision establishes placement; a familiar feature name alone is not reuse evidence.
 
 ## Shared infrastructure candidates
 
 Durable background work is expected to recur, but its **business meaning belongs to the owning Module**. When the first real durable job is needed, prefer a reusable execution boundary (the PostgreSQL/River-first candidate in ADR-0003) with bounded workers/retries/cancellation/retention and domain-owned idempotency/effect semantics. Do not make a broker/queue/job runner a Core dependency or let a generic Jobs Module own product state.
 
-Likewise, do not create a universal Settings Module/table. Products own configuration source/precedence; each Module owns its typed business settings/data and may expose them through Admin. Search, feature flags, backup engines and other familiar infrastructure remain demand/evidence driven.
+Feature flags and other familiar infrastructure remain demand/evidence driven. Search/Settings/Backup & Recovery have accepted ownership boundaries above, but acceptance does not authorize empty implementations, mandatory auxiliary services or provider mega-interfaces.
 
 ## External functionality and trust
 
