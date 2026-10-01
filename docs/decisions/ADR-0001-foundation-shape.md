@@ -2,7 +2,7 @@
 
 Status: Accepted
 
-Technology note: the initial PHP/Laravel expectation below is historical and superseded by [ADR-0002](ADR-0002-go-primary-implementation.md). The Foundation shape and remaining constraints in this decision still apply.
+Technology note: the initial PHP/Laravel expectation below is historical and superseded by [ADR-0002](ADR-0002-go-primary-implementation.md). The initial MariaDB target below is superseded by [ADR-0003](ADR-0003-postgresql-and-optional-infrastructure.md). The Foundation shape and other constraints in this decision still apply.
 
 ## Context
 

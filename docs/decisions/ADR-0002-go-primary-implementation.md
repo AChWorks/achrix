@@ -4,6 +4,8 @@ Status: Accepted
 Date: 2026-10-01
 Decision authority: explicit owner selection of Go for AChrix's shared implementation path.
 
+Database follow-up: the MariaDB target retained at this decision is historical and superseded by [ADR-0003](ADR-0003-postgresql-and-optional-infrastructure.md). This ADR continues to own the Go language decision.
+
 ## Context
 
 AChWorks intends to develop multiple web-connected products and integrations while accumulating reusable implementation, contracts, and development knowledge. The owner selected Go as the common primary backend path after considering PHP/Laravel, PHP/Symfony LTS, Go, and TypeScript/NestJS.

@@ -123,7 +123,7 @@ Prefer Go's standard library and maintained ecosystem components for commodity c
 
 Domain/application semantics should avoid unnecessary infrastructure coupling where that coupling would materially hinder testing, reuse, extraction, or future evolution. Use fit standard-library/ecosystem capabilities directly where appropriate; do not wrap every facility for hypothetical portability.
 
-The primary relational implementation engine is expected to be MariaDB. The architecture must avoid unnecessary MariaDB lock-in. PostgreSQL or another engine may be added when a real consumer or capability warrants it. Official support for an engine requires real CI/compatibility evidence; architectural portability does not equal support for every database.
+PostgreSQL is the primary relational implementation target. Use ordinary PostgreSQL without mandatory TimescaleDB or other specialized extensions. MariaDB or another engine may be added when a real consumer or capability warrants it. Official support requires real migration, semantic, and CI/compatibility evidence; architectural portability does not equal support for every database. Defaults are recorded in [ADR-0003](docs/decisions/ADR-0003-postgresql-and-optional-infrastructure.md); optional infrastructure stays outside Core and is introduced only for a concrete workload or correctness/operational requirement.
 
 ## 6. Architecture model
 

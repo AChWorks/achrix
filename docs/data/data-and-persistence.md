@@ -12,9 +12,11 @@ Shared database access does not make tables shared ownership.
 
 The initial general-purpose persistence model is relational.
 
-MariaDB is the intended primary relational engine for the first executable implementation.
+PostgreSQL is the primary relational target for the first executable implementation, as selected in [ADR-0003](../decisions/ADR-0003-postgresql-and-optional-infrastructure.md).
 
-The Foundation must not encode MariaDB as business identity.
+Ordinary PostgreSQL is the baseline. TimescaleDB is an optional extension profile for a module whose time-series workload and lifecycle justify it; it is not a prerequisite for ordinary transactional modules. Required extensions and their versions, migrations, constraints, and recovery must be verified before claiming support.
+
+The Foundation must not encode PostgreSQL as business identity.
 
 Official support for another engine requires real migrations/tests/compatibility evidence.
 
