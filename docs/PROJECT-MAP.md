@@ -9,13 +9,13 @@ The document index, not a status report. Start from README/AGENTS and the releva
 | Active choices and rationale | [ADRs](decisions/) |
 | Reuse, ownership judgment and dependencies | [Engineering principles](principles/engineering-principles.md) |
 | Core/application shape | [Architecture](architecture/overview.md) |
-| Module ownership, composition, provider variation and trust | [Module model](architecture/module-model.md) |
+| Module ownership, composition, provider variation and trust, including Search/Settings/Backup & Recovery placement | [Module model](architecture/module-model.md) |
 | Versioned product consumption and packaging | [Consumption](architecture/consumption-and-packaging.md) |
 | Application/public extension contracts, AI schemas and safe mutations | [Contracts](architecture/contracts-and-interfaces.md) |
 | Data, consistency, time/money and privacy | [Data](data/data-and-persistence.md) |
 | Authorization, product accounts/SSO, AI access, secrets, abuse and vulnerability reporting | [Security](security/security-and-authorization.md); GitHub entry: [SECURITY](../SECURITY.md) |
-| Install/upgrade, backup/restore, compatibility and official artifact evidence | [Lifecycle](lifecycle/lifecycle-and-compatibility.md) |
-| Configuration, diagnosis, bounded resources and cost | [Operations](operations/operability-performance.md) |
+| Install/upgrade, backup/restore/recovery profile, compatibility and official artifact evidence | [Lifecycle](lifecycle/lifecycle-and-compatibility.md) |
+| Deployment/runtime configuration versus durable Settings, diagnosis, bounded resources and cost | [Operations](operations/operability-performance.md) |
 | Semantic web, SEO, localization and machine content representations | [Web](web/seo-and-semantic-web.md) |
 | Outcome sequence | [Roadmap](development/roadmap.md) |
 | Artifact licenses | [LICENSE](../LICENSE), [Licensing policy](legal/licensing.md) |
