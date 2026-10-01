@@ -11,12 +11,14 @@ Go is the accepted primary implementation language; another justified component/
 Initial intended executable path:
 
 - Go, using fit standard-library and maintained ecosystem components;
-- relational database, with MariaDB as the primary implementation target;
+- ordinary PostgreSQL as the primary relational implementation target;
 - server-rendered web where applicable;
 - minimal JavaScript by default;
 - no mandatory Redis, queue worker, Node production runtime, container orchestration, or search cluster.
 
 SQLite is not part of the primary implementation/test path unless an explicit future architecture decision changes that.
+
+[ADR-0003](../decisions/ADR-0003-postgresql-and-optional-infrastructure.md) owns the concrete default paths and revisit triggers. A preferred implementation target is not implemented or officially supported until its compatibility evidence exists. Selecting a path does not require pre-building unused adapters or installing optional services.
 
 ## Database support
 
@@ -54,8 +56,9 @@ Default to the smallest adequate mechanism.
 Examples:
 
 ```text
-Cache: file/database -> Redis when needed
-Queue: none/sync -> database -> Redis/SQS/etc when needed
+Cache: no shared cache -> optional Valkey when a real cache workload needs it
+Jobs: none/sync -> maintained PostgreSQL-backed jobs when durability is required
+Events: direct/local -> outbox/broker when delivery/replay requirements justify it
 Search: relational -> dedicated search engine when needed
 Storage: local -> object storage when needed
 ```

@@ -6,7 +6,7 @@
 
 AChrix is designed to reduce repeated engineering decisions while keeping product logic and future technology choices open.
 
-Go is the accepted primary implementation language; see [ADR-0002](docs/decisions/ADR-0002-go-primary-implementation.md). Exact supported versions, dependencies, and executable consumption mechanics are established by Issue #1.
+Go is the accepted primary implementation language; see [ADR-0002](docs/decisions/ADR-0002-go-primary-implementation.md). PostgreSQL is the primary relational target; [ADR-0003](docs/decisions/ADR-0003-postgresql-and-optional-infrastructure.md) records the default paths and optional infrastructure boundaries. Exact supported versions, dependency pins, and executable consumption mechanics are established by Issue #1.
 
 It is intentionally **not** a new framework, mandatory monorepo, mandatory database, plugin marketplace, or microservice platform.
 
