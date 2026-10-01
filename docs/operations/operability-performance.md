@@ -4,7 +4,9 @@
 
 Simple applications run without mandatory auxiliary services. [ADR-0003](../decisions/ADR-0003-postgresql-and-optional-infrastructure.md) owns infrastructure defaults; introduce them for actual requirements.
 
-Separate business configuration, runtime/deployment configuration, secrets and domain data. Configuration has an owner, meaningful defaults, validation and explicit environment behavior. The **product/composition boundary owns configuration sources and precedence**; reusable Modules receive typed validated configuration and should not read environment variables, process-global config or secret stores directly. Module-owned business settings remain Module data/contracts rather than a universal settings table.
+Separate runtime/deployment configuration, secrets, application-level operator settings and domain data. Configuration has an owner, meaningful defaults, validation and explicit environment behavior. The **product/composition boundary owns deployment/runtime configuration sources and precedence**; reusable Modules receive typed validated configuration and should not read environment variables, process-global config or secret stores directly.
+
+When composed, the reusable [Settings Module](../architecture/module-model.md#settings) owns only concrete application-level, operator-editable, durable settings that genuinely belong to the product shell. It is not the source for DSNs, credentials, signing keys or deployment toggles, and it does not absorb another Module's business settings into a universal key/value/JSON table. Settings changes use normal Application authorization/concurrency/audit rules; exact fields wait for a real product under #50.
 
 Shutdown is graceful. Readiness probes only dependencies necessary for local readiness, not every external service synchronously. A Module readiness check must be side-effect-free, bounded and cheap enough for repeated probes; shared infrastructure should not be pinged redundantly once per Module merely because several Modules use it. Deep diagnostics belong to explicit operator/debug actions rather than health-probe fan-out.
 
