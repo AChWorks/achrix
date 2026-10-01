@@ -26,7 +26,7 @@ Use `type:idea` for unactivated feature/placement proposals awaiting evidence or
 
 ## Architecture and dependencies
 
-Follow [Engineering principles](docs/principles/engineering-principles.md) and the owning topic document. A lasting consequential choice may need an ADR; small implementation choices do not. Dependencies need maintenance/security/license/compatibility/upgrade/cost justification, not a wrapper by default.
+Follow [Engineering principles](docs/principles/engineering-principles.md) and the owning topic document. Review the actual control flow/data/resource boundary, not only whether a preferred tool or pattern is present. Performance-sensitive changes use representative benchmark/profile/query evidence when material; security-sensitive changes use focused threat-aware tests/review and current dependency/protocol guidance. A lasting consequential choice may need an ADR; small implementation choices do not. Dependencies need maintenance/security/license/compatibility/upgrade/cost justification, not a wrapper by default.
 
 ## Rights and sensitive data
 
