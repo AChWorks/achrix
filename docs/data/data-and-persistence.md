@@ -10,9 +10,9 @@ Use useful vendor capabilities behind the owning Infrastructure boundary without
 
 ## Schema and consistency
 
-Use domain-specific schemas and database constraints for durable invariants. Do not replace unrelated domain models with a universal entity/field/value or settings table.
+Use domain-specific schemas and database constraints for durable invariants. Do not replace unrelated domain models with a universal entity/field/value or settings table. The reusable Settings boundary, when composed, owns only concrete application-level typed settings; feature/domain settings remain in their owning Module rather than being moved into a generic key/value store.
 
-Keep strong invariants in explicit transaction boundaries where practical. Cross-module transactions in the monolith still call authorized owning Application boundaries. Eventual consistency/projections are acceptable only when the product can explain the lag/failure semantics. Re-evaluate consistency when a Module becomes a service; do not assume its old local transaction remains. Distributed transactions/sagas/outboxes require a real topology/failure need.
+Keep strong invariants in explicit transaction boundaries where practical. Cross-module transactions in the monolith still call authorized owning Application boundaries. Eventual consistency/projections are acceptable only when the product can explain the lag/failure semantics. Search indexes/projections are rebuildable derived state: the source Module remains authoritative, and update/delete/permission changes need explicit freshness/reconciliation behavior so stale projection state cannot silently widen access. Re-evaluate consistency when a Module becomes a service; do not assume its old local transaction remains. Distributed transactions/sagas/outboxes require a real topology/failure need.
 
 A shared Audit Module does not make every domain transaction cross-module by default. When an accountable action requires its audit record to have the same commit semantics as domain state, define and prove that coupling explicitly at the owning operation; otherwise persist enough durable intent/outcome to reconcile the audit record without claiming false atomicity.
 
