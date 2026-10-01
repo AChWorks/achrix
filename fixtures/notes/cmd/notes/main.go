@@ -61,12 +61,12 @@ func run() int {
 		poolConfig.ConnConfig.ConnectTimeout = time.Second
 		p, err := pgxpool.NewWithConfig(ctx, poolConfig)
 		if err != nil {
-			logger.Error("migration failed", "component", "notes.migrations", "reason", "connect_failed")
+			logger.ErrorContext(ctx, "migration failed", "component", "notes.migrations", "operation", "initialize", "reason", infrastructure.FailureReason(err))
 			return 1
 		}
 		defer p.Close()
 		if err := infrastructure.Migrate(ctx, p, infrastructure.Migrations()); err != nil {
-			logger.Error("migration failed", "component", "notes.migrations", "reason", "migration_failed")
+			logger.ErrorContext(ctx, "migration failed", "component", "notes.migrations", "operation", "migrate", "reason", infrastructure.FailureReason(err))
 			return 1
 		}
 		return 0
