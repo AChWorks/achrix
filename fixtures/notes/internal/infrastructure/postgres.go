@@ -61,18 +61,21 @@ func (s *Store) Start(ctx context.Context) error {
 	defer s.mu.Unlock()
 	p, err := pgxpool.NewWithConfig(ctx, s.config)
 	if err != nil {
-		return errors.New("database initialization failed")
+		s.logFailure(ctx, "initialize", err)
+		return &diagnosticError{message: "database initialization failed", cause: err}
 	}
 	s.pool = p
 	if err := p.Ping(ctx); err != nil {
 		s.logFailure(ctx, "connect", err)
-		return errors.New("database connection failed")
+		return &diagnosticError{message: "database connection failed", cause: err}
 	}
 	if err := CheckEnvironment(ctx, p); err != nil {
+		s.logFailure(ctx, "check_environment", err)
 		return err
 	}
 	// Installation is explicit, never raced by traffic/startup replicas.
 	if err := CheckSchema(ctx, p); err != nil {
+		s.logFailure(ctx, "check_schema", err)
 		return err
 	}
 	return nil
@@ -142,17 +145,44 @@ func (s *Store) Find(ctx context.Context, id string) (domain.Note, error) {
 	return n, nil
 }
 
-func (s *Store) logFailure(ctx context.Context, operation string, err error) {
-	code := "connection_failure"
-	var pgerr *pgconn.PgError
-	if errors.As(err, &pgerr) {
-		code = pgerr.Code
-	} else if errors.Is(err, context.DeadlineExceeded) {
-		code = "deadline"
-	} else if errors.Is(err, context.Canceled) {
-		code = "canceled"
+// diagnosticError keeps existing safe error text while retaining an inspectable
+// cause or a finite consumer-owned semantic reason. It never formats the cause.
+type diagnosticError struct {
+	message string
+	reason  string
+	cause   error
+}
+
+func (e *diagnosticError) Error() string { return e.message }
+func (e *diagnosticError) Unwrap() error { return e.cause }
+
+// FailureReason returns only a consumer-owned category or a SQLSTATE token for
+// restricted diagnostics. Driver messages and other arbitrary error text stay out.
+func FailureReason(err error) string {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "deadline"
 	}
-	s.logger.ErrorContext(ctx, "database operation failed", "component", "notes.postgresql", "operation", operation, "reason", code)
+	if errors.Is(err, context.Canceled) {
+		return "canceled"
+	}
+	var diagnostic *diagnosticError
+	if errors.As(err, &diagnostic) && diagnostic.reason != "" {
+		return diagnostic.reason
+	}
+	var pgerr *pgconn.PgError
+	if errors.As(err, &pgerr) && len(pgerr.Code) == 5 {
+		for _, c := range pgerr.Code {
+			if !(c >= '0' && c <= '9' || c >= 'A' && c <= 'Z') {
+				return "connection_failure"
+			}
+		}
+		return pgerr.Code
+	}
+	return "connection_failure"
+}
+
+func (s *Store) logFailure(ctx context.Context, operation string, err error) {
+	s.logger.ErrorContext(ctx, "database operation failed", "component", "notes.postgresql", "operation", operation, "reason", FailureReason(err))
 }
 
 type Migration struct{ ID, SQL string }
@@ -163,10 +193,10 @@ func CheckEnvironment(ctx context.Context, p *pgxpool.Pool) error {
 	var version int
 	var encoding string
 	if err := p.QueryRow(ctx, "SELECT current_setting('server_version_num')::int, current_setting('server_encoding')").Scan(&version, &encoding); err != nil {
-		return errors.New("database environment unavailable")
+		return &diagnosticError{message: "database environment unavailable", cause: err}
 	}
 	if version < 180000 || version >= 190000 || encoding != "UTF8" {
-		return errors.New("unsupported database environment")
+		return &diagnosticError{message: "unsupported database environment", reason: "unsupported_environment"}
 	}
 	return nil
 }
@@ -188,7 +218,7 @@ func Migrate(ctx context.Context, p *pgxpool.Pool, migrations []Migration) error
 		return err
 	}
 	if len(migrations) == 0 {
-		return errors.New("migration set required")
+		return &diagnosticError{message: "migration set required", reason: "migration_set_required"}
 	}
 	tx, err := p.Begin(ctx)
 	if err != nil {
@@ -226,17 +256,17 @@ func Migrate(ctx context.Context, p *pgxpool.Pool, migrations []Migration) error
 	last := ""
 	for _, m := range migrations {
 		if m.ID == "" || m.ID <= last || m.SQL == "" {
-			return errors.New("ordered unique migrations required")
+			return &diagnosticError{message: "ordered unique migrations required", reason: "migration_order_invalid"}
 		}
 		last = m.ID
 		known[m.ID] = Digest(m)
 		if d, ok := applied[m.ID]; ok && d != known[m.ID] {
-			return fmt.Errorf("migration %s content changed", m.ID)
+			return &diagnosticError{message: fmt.Sprintf("migration %s content changed", m.ID), reason: "migration_changed"}
 		}
 	}
 	for id := range applied {
 		if _, ok := known[id]; !ok {
-			return errors.New("unknown applied migration")
+			return &diagnosticError{message: "unknown applied migration", reason: "migration_unknown"}
 		}
 	}
 	for _, m := range migrations {
@@ -256,7 +286,12 @@ func Migrate(ctx context.Context, p *pgxpool.Pool, migrations []Migration) error
 func CheckSchema(ctx context.Context, p *pgxpool.Pool) error {
 	rows, err := p.Query(ctx, "SELECT id,sha256 FROM notes.migrations ORDER BY id")
 	if err != nil {
-		return errors.New("schema not installed")
+		failure := &diagnosticError{message: "schema not installed", cause: err}
+		var pgerr *pgconn.PgError
+		if errors.As(err, &pgerr) && pgerr.Code == "42P01" {
+			failure.reason = "schema_not_installed"
+		}
+		return failure
 	}
 	defer rows.Close()
 	expected := Migrations()
@@ -264,15 +299,18 @@ func CheckSchema(ctx context.Context, p *pgxpool.Pool) error {
 	for rows.Next() {
 		var id, d string
 		if err := rows.Scan(&id, &d); err != nil {
-			return errors.New("schema unreadable")
+			return &diagnosticError{message: "schema unreadable", cause: err}
 		}
 		if i >= len(expected) || id != expected[i].ID || d != Digest(expected[i]) {
-			return errors.New("incompatible migration identity")
+			return &diagnosticError{message: "incompatible migration identity", reason: "schema_incompatible"}
 		}
 		i++
 	}
-	if rows.Err() != nil || i != len(expected) {
-		return errors.New("incomplete schema")
+	if err := rows.Err(); err != nil {
+		return &diagnosticError{message: "incomplete schema", cause: err}
+	}
+	if i != len(expected) {
+		return &diagnosticError{message: "incomplete schema", reason: "schema_incomplete"}
 	}
 	return nil
 }

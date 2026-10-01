@@ -247,8 +247,14 @@ func (a *Application) stop(ctx context.Context, components []component) error {
 }
 
 // Ready checks only composed local dependencies, under the caller's deadline.
+// During lifecycle exclusion it returns ErrNotReady without waiting or invoking modules.
 func (a *Application) Ready(ctx context.Context) error {
-	a.mu.RLock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !a.mu.TryRLock() {
+		return ErrNotReady
+	}
 	defer a.mu.RUnlock()
 	if a.state != "ready" {
 		return ErrNotReady
@@ -271,8 +277,14 @@ func (a *Application) Ready(ctx context.Context) error {
 // Authorize fails closed for empty principals, unknown capabilities, stopped
 // applications or policy errors. Call it inside the owning Application operation
 // before validation-dependent reads/writes; transport discovery grants no rights.
+// During lifecycle exclusion it returns ErrNotReady without waiting or invoking policy.
 func (a *Application) Authorize(ctx context.Context, p Principal, capability, resource string) error {
-	a.mu.RLock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !a.mu.TryRLock() {
+		return ErrNotReady
+	}
 	defer a.mu.RUnlock()
 	if a.state != "ready" {
 		return ErrNotReady
