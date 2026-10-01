@@ -8,9 +8,17 @@ Use a focused branch and Pull Request for tracked changes to intent, architectur
 
 Validate the exact candidate with change-appropriate checks and review the full diff. The active `main` ruleset requires PRs, squash merges and resolved review threads, blocks force pushes/deletion, and has no bypass actors. It requires zero approval votes so a sole maintainer can integrate reviewed low/medium-risk work; this does not waive risk-required independent review or owner decisions. Never describe self-review as independent.
 
-The existing ruleset binds the actual `baseline` check to GitHub Actions (integration ID `15368`) and requires it to pass against the current base before integration. This check runs the documented Foundation, isolated consumer and PostgreSQL validation. Recorded review remains necessary. Inspect effective GitHub rules before integration rather than relying on this text alone.
+The existing ruleset binds the actual `baseline` check to GitHub Actions (integration ID `15368`) and requires it to pass against the current base before integration. This check always reports the selected validation scope. Non-runtime documentation changes need no runtime proof; changes only to the existing Core test file use Core checks. Runtime, dependencies, migrations, CI and unknown scope retain the full Foundation, isolated consumer and PostgreSQL proof. [Operations](docs/operations/operability-performance.md#validation-commands) owns commands and the conservative selector. Recorded review remains necessary. Inspect effective GitHub rules before integration rather than relying on this text alone.
 
 Done means the accepted behavior is implemented, required checks pass, compatibility/state/recovery implications are handled and affected canonical docs are current. Integration and production delivery are separate facts. Current documents contain rules still in force; obsolete decisions remain in Git history.
+
+## Validation selection
+
+Choose checks from the behavior, dependencies, invariants and failure modes that the change can actually affect. Explain a non-obvious selection briefly in the PR; no test-plan artifact is needed. A mechanically provable non-behavioral edit may need only inspection/syntax/diff checks. Confidence alone is not proof when interfaces, authorization, persistence, concurrency, dependencies or environment assumptions changed.
+
+Batch coherent edits before one meaningful validation pass. After a localized correction, rerun the discriminating test and directly affected dependants; reuse earlier passing evidence for unchanged inputs and assumptions. A new SHA alone does not invalidate all evidence or require another full local suite. Respect the currently applicable CI/integration gate, report exactly what ran and expand validation only for new failures, unresolved interactions or a required delivery proof. Never label reused evidence as a fresh execution.
+
+Use native targeted commands during development; the default full command remains available for cross-boundary validation. A build/runtime input must never enter the documentation exception; update routing in the same change if a file gains that role. Shard a still-required slow suite only after timing shows test execution is the bottleneck and isolation/completeness can be preserved; do not duplicate setup or create a matrix for short tests.
 
 ## Issue classification
 

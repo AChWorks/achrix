@@ -2,6 +2,12 @@
 # SPDX-License-Identifier: MPL-2.0
 set -euo pipefail
 
+# Default remains the complete proof; focused development/CI may select Core.
+scope=${1:-full}
+if [[ $# -gt 1 || ( $scope != full && $scope != core ) ]]; then
+  echo 'Usage: scripts/validate.sh [full|core]' >&2; exit 2
+fi
+
 repository=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repository"
 export GOWORK=off
@@ -17,6 +23,10 @@ export PATH="$(go env GOROOT)/bin:$PATH"
 go vet ./...
 go test -race -count=1 -timeout=30s ./...
 go mod verify
+if [[ $scope == core ]]; then
+  echo 'Core validation verified; consumer/PostgreSQL proof not selected'
+  exit 0
+fi
 
 if [[ -n ${ACHRIX_PG_BIN:-} ]]; then export PATH="$ACHRIX_PG_BIN:$PATH"; fi
 for tool in initdb pg_ctl psql createdb pg_dump pg_restore; do
