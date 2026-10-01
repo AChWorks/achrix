@@ -8,6 +8,20 @@ Prefer crawlable server-rendered or pre-rendered semantic HTML for content-orien
 
 Client-side JavaScript may enhance interaction but should not be required merely to reveal primary indexable content.
 
+## User experience
+
+User-facing quality is part of correctness, not a cosmetic follow-up.
+
+- Prefer predictable interaction and progressive enhancement. A simple server-rendered flow is preferable to client complexity that adds no material usability value.
+- Every real asynchronous/remote flow provides the states users need to understand it: initial/loading, success, empty/no-result and actionable failure. Long-running operations expose progress/identity when the user may need to leave and return.
+- Consequential/destructive actions distinguish ordinary confirmation from genuinely irreversible/high-impact decisions and do not train users to click through constant modal noise.
+- Forms keep validation close to the affected field/action while preserving safe server-side validation as the authority. Errors explain what the user can do next without exposing internal diagnostics.
+- Support keyboard operation, sensible focus, semantic labels, visible status/error feedback and responsive layouts for the product's actual supported viewport/input classes.
+- Do not disable browser/platform accessibility, selection, zoom, password-manager/autofill or standard navigation behavior merely for visual control.
+- Keep user-perceived performance in scope: avoid unnecessary blocking JavaScript, layout shifts, oversized assets and avoidable round trips; measure real product paths before introducing complex client/cache state.
+- Authentication/session expiry, update/install progress and recovery failures should return users to a clear safe state rather than losing work silently.
+- Validate representative real workflows, including permission denial/error states, rather than proving only ideal screenshots.
+
 ## Semantic output
 
 Use meaningful elements and hierarchy:
