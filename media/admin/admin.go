@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-// Package admin owns Media's private image-library presentation. Every domain
+// Package admin owns Media's private file-library presentation. Every domain
 // operation uses the public Media Service, never storage or database internals.
 package admin
 
@@ -23,6 +23,7 @@ import (
 )
 
 type library interface {
+	Formats() []media.Format
 	Create(context.Context, achrix.Principal, string, io.Reader) (media.Asset, error)
 	List(context.Context, achrix.Principal, string, int) (media.Page, error)
 	Status(context.Context, achrix.Principal, string) (media.Asset, error)
@@ -44,7 +45,7 @@ func New(service *media.Service) (shell.Surface, error) {
 }
 func surface(service library) shell.Surface {
 	h := &handler{service: service, uploads: make(chan struct{}, 2)}
-	return shell.Surface{ID: "media", Title: shell.Text{English: "Image library", Persian: "کتابخانهٔ تصاویر"}, Capability: media.List, Target: media.LibraryTarget, Handler: h.serve}
+	return shell.Surface{ID: "media", Title: shell.Text{English: "File library", Persian: "کتابخانهٔ فایل\u200cها"}, Capability: media.List, Target: media.LibraryTarget, Handler: h.serve}
 }
 
 type asset struct {
@@ -66,10 +67,40 @@ type page struct {
 	NextCursor string `json:"next_cursor"`
 }
 type screen struct {
-	Language  string
-	CanCreate bool
-	Page      page
+	Language      string
+	CanCreate     bool
+	Page          page
+	Accept        string
+	Extensions    string
+	DecodedImages bool
+	MaxDimension  int
+	MaxPixels     int
 }
+
+// The owning public effective inventory supplies browser hints only; Create
+// still validates actual bytes. No duplicated upload type allowlist lives here.
+func uploadHints(formats []media.Format) (accept, extensions string, decodedImages bool) {
+	var choices, names []string
+	for _, format := range formats {
+		choices = append(choices, format.MIME)
+		for _, extension := range format.Extensions {
+			choices = append(choices, "."+extension)
+			names = append(names, strings.ToUpper(extension))
+		}
+		decodedImages = decodedImages || format.MIME == "image/png" || format.MIME == "image/jpeg"
+	}
+	return strings.Join(choices, ","), strings.Join(names, ", "), decodedImages
+}
+
+// Admission can narrow after upload. Retained reads use the owning finite
+// supported inventory, rather than accidentally revoking previously kept bytes.
+var supportedMIMEs = func() map[string]bool {
+	result := make(map[string]bool)
+	for _, format := range media.SupportedFormats() {
+		result[format.MIME] = true
+	}
+	return result
+}()
 
 func present(a media.Asset, view shell.Request) item {
 	return item{asset{a.ID, a.Filename, a.MIME, a.Size, a.Width, a.Height, a.Revision, a.State}, map[string]bool{"read": view.Allowed(media.Read, a.ID), "delete": view.Allowed(media.Delete, a.ID)}}
@@ -94,7 +125,8 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, view shell.Reque
 				fail(w, err, "")
 				return
 			}
-			if err = view.Render(shell.Page{Title: (shell.Text{English: "Image library", Persian: "کتابخانهٔ تصاویر"}).In(view.Language), Template: libraryTemplate, Data: screen{view.Language, view.Allowed(media.Create, media.LibraryTarget), presentPage(p, view)}}); err != nil {
+			accept, extensions, decodedImages := uploadHints(h.service.Formats())
+			if err = view.Render(shell.Page{Title: (shell.Text{English: "File library", Persian: "کتابخانهٔ فایل\u200cها"}).In(view.Language), Template: libraryTemplate, Data: screen{Language: view.Language, CanCreate: view.Allowed(media.Create, media.LibraryTarget), Page: presentPage(p, view), Accept: accept, Extensions: extensions, DecodedImages: decodedImages, MaxDimension: media.MaxDimension, MaxPixels: media.MaxPixels}}); err != nil {
 				fail(w, shell.ErrConfiguration, "")
 			}
 		case r.URL.Path == "/media.js":
@@ -312,7 +344,7 @@ func (h *handler) download(w http.ResponseWriter, r *http.Request, view shell.Re
 		fail(w, media.ErrConflict, "")
 		return
 	}
-	if (a.MIME != "image/png" && a.MIME != "image/jpeg") || a.Size < 1 || a.Size > media.MaxUploadBytes {
+	if !supportedMIMEs[a.MIME] || a.Size < 1 || a.Size > media.MaxUploadBytes {
 		fail(w, media.ErrUnavailable, "")
 		return
 	}
@@ -358,10 +390,10 @@ func fail(w http.ResponseWriter, err error, id string) {
 var assets embed.FS
 var libraryTemplate = template.Must(template.New("library").Parse(`{{define "content"}}
 <script src="/admin/media/media.js" defer></script>
-<p>{{if eq .Language "fa"}}تصاویر خصوصی هستند. مجوز دیدن فهرست به معنی مجوز دانلود یا حذف نیست.{{else}}Images are private. Collection metadata permission does not grant download or deletion.{{end}}</p>
-{{if .CanCreate}}<section aria-labelledby="upload-heading"><h2 id="upload-heading">{{if eq .Language "fa"}}افزودن تصویر{{else}}Add image{{end}}</h2><form data-admin-form data-multipart data-operation="upload" action="/admin/media/upload" method="post" enctype="multipart/form-data"><label for="media-file">{{if eq .Language "fa"}}فایل PNG یا JPEG{{else}}PNG or JPEG file{{end}}</label><input id="media-file" name="file" type="file" accept="image/png,image/jpeg" required aria-describedby="upload-help"><p id="upload-help">{{if eq .Language "fa"}}حداکثر ۱۰ MiB، ضلع ۴۰۹۶ و ۸٬۳۸۸٬۶۰۸ پیکسل. نام فایل یکتا نیست.{{else}}At most 10 MiB, 4096 per dimension and 8,388,608 pixels. Filenames are not unique.{{end}}</p><button type="submit" disabled>{{if eq .Language "fa"}}افزودن{{else}}Upload{{end}}</button></form><p id="upload-result" role="status"></p></section>{{end}}
-<section aria-labelledby="library-heading"><h2 id="library-heading">{{if eq .Language "fa"}}تصاویر آماده{{else}}Ready images{{end}}</h2><form id="media-refresh" data-admin-form data-read-only data-operation="list" action="/admin/media/list" method="post"><input name="cursor" type="hidden" value=""><button type="submit" disabled>{{if eq .Language "fa"}}تازه` + "\u200c" + `سازی فهرست{{else}}Refresh library{{end}}</button></form>
+<p>{{if eq .Language "fa"}}فایل` + "\u200c" + `ها خصوصی هستند. مجوز دیدن فهرست به معنی مجوز دانلود یا حذف نیست.{{else}}Files are private. Collection metadata permission does not grant download or deletion.{{end}}</p>
+{{if .CanCreate}}<section aria-labelledby="upload-heading"><h2 id="upload-heading">{{if eq .Language "fa"}}افزودن فایل{{else}}Add file{{end}}</h2><form data-admin-form data-multipart data-operation="upload" action="/admin/media/upload" method="post" enctype="multipart/form-data"><label for="media-file">{{if eq .Language "fa"}}فایل با فرمت مجاز{{else}}Supported file{{end}}</label><input id="media-file" name="file" type="file" accept="{{.Accept}}" required aria-describedby="upload-help"><p id="upload-help">{{if eq .Language "fa"}}حداکثر ۱۰ MiB. فرمت` + "\u200c" + `های مجاز: <bdi dir="ltr">{{.Extensions}}</bdi>.{{if .DecodedImages}} برای PNG/JPEG: حداکثر {{.MaxDimension}} در هر ضلع و {{.MaxPixels}} پیکسل.{{end}} دانلود با بایت` + "\u200c" + `های اصلی؛ بدون پیش` + "\u200c" + `نمایش یا تبدیل. نام فایل یکتا نیست.{{else}}At most 10 MiB. Allowed extensions: <bdi dir="ltr">{{.Extensions}}</bdi>.{{if .DecodedImages}} PNG/JPEG: at most {{.MaxDimension}} per dimension and {{.MaxPixels}} pixels.{{end}} Original-byte downloads; no previews or conversion. Filenames are not unique.{{end}}</p><button type="submit" disabled>{{if eq .Language "fa"}}افزودن{{else}}Upload{{end}}</button></form><p id="upload-result" role="status"></p></section>{{end}}
+<section aria-labelledby="library-heading"><h2 id="library-heading">{{if eq .Language "fa"}}فایل` + "\u200c" + `های آماده{{else}}Ready files{{end}}</h2><form id="media-refresh" data-admin-form data-read-only data-operation="list" action="/admin/media/list" method="post"><input name="cursor" type="hidden" value=""><button type="submit" disabled>{{if eq .Language "fa"}}تازه` + "\u200c" + `سازی فهرست{{else}}Refresh library{{end}}</button></form>
 <form id="media-next-page" data-admin-form data-read-only data-operation="list" action="/admin/media/list" method="post" {{if not .Page.NextCursor}}hidden{{end}}><input id="media-next-cursor" name="cursor" type="hidden" value="{{.Page.NextCursor}}"><button type="submit" disabled>{{if eq .Language "fa"}}صفحهٔ بعد{{else}}Next page{{end}}</button></form>
-<p id="media-empty" {{if .Page.Assets}}hidden{{end}}>{{if eq .Language "fa"}}در این صفحه تصویری نیست.{{else}}No images on this page.{{end}}</p><table id="media-table" {{if not .Page.Assets}}hidden{{end}}><caption>{{if eq .Language "fa"}}حداکثر ۲۵ تصویر در هر صفحه؛ فهرست snapshot چندصفحه` + "\u200c" + `ای نیست.{{else}}At most 25 images per page; pages are not a shared snapshot.{{end}}</caption><thead><tr><th scope="col">{{if eq .Language "fa"}}نام و شناسه{{else}}Name and ID{{end}}</th><th scope="col">{{if eq .Language "fa"}}مشخصات{{else}}Details{{end}}</th><th scope="col">{{if eq .Language "fa"}}عملیات مجاز{{else}}Permitted actions{{end}}</th></tr></thead><tbody id="assets">{{range .Page.Assets}}<tr data-asset-id="{{.Asset.ID}}"><td><bdi dir="auto">{{.Asset.Filename}}</bdi><br><bdi dir="ltr">{{.Asset.ID}}</bdi></td><td><bdi dir="ltr">{{.Asset.MIME}} · {{.Asset.Size}} B · {{.Asset.Width}}×{{.Asset.Height}}</bdi></td><td>{{if .Permissions.read}}<a data-download href="/admin/media/read/{{.Asset.ID}}">{{if eq $.Language "fa"}}دانلود خصوصی{{else}}Private download{{end}}</a>{{end}}{{if .Permissions.delete}}<form data-admin-form data-operation="delete" action="/admin/media/delete" method="post"><input name="id" type="hidden" value="{{.Asset.ID}}"><input name="revision" type="hidden" value="{{.Asset.Revision}}"><label><input type="checkbox" data-confirm required>{{if eq $.Language "fa"}}حذف همین تصویر را تأیید می` + "\u200c" + `کنم.{{else}}I confirm deletion of this image.{{end}}</label><button type="submit" disabled>{{if eq $.Language "fa"}}حذف تصویر{{else}}Delete image{{end}}</button></form>{{end}}{{if and (not .Permissions.read) (not .Permissions.delete)}}<p>{{if eq $.Language "fa"}}دانلود یا حذف این تصویر مجاز نیست.{{else}}Download or deletion of this image is not permitted.{{end}}</p>{{end}}</td></tr>{{end}}</tbody></table></section>
+<p id="media-empty" {{if .Page.Assets}}hidden{{end}}>{{if eq .Language "fa"}}در این صفحه فایلی نیست.{{else}}No files on this page.{{end}}</p><table id="media-table" {{if not .Page.Assets}}hidden{{end}}><caption>{{if eq .Language "fa"}}حداکثر ۲۵ فایل در هر صفحه؛ فهرست snapshot چندصفحه` + "\u200c" + `ای نیست.{{else}}At most 25 files per page; pages are not a shared snapshot.{{end}}</caption><thead><tr><th scope="col">{{if eq .Language "fa"}}نام و شناسه{{else}}Name and ID{{end}}</th><th scope="col">{{if eq .Language "fa"}}مشخصات{{else}}Details{{end}}</th><th scope="col">{{if eq .Language "fa"}}عملیات مجاز{{else}}Permitted actions{{end}}</th></tr></thead><tbody id="assets">{{range .Page.Assets}}<tr data-asset-id="{{.Asset.ID}}"><td><bdi dir="auto">{{.Asset.Filename}}</bdi><br><bdi dir="ltr">{{.Asset.ID}}</bdi></td><td><bdi dir="ltr">{{.Asset.MIME}} · {{.Asset.Size}} B{{if and (gt .Asset.Width 0) (gt .Asset.Height 0)}} · {{.Asset.Width}}×{{.Asset.Height}}{{end}}</bdi></td><td>{{if .Permissions.read}}<a data-download href="/admin/media/read/{{.Asset.ID}}">{{if eq $.Language "fa"}}دانلود خصوصی{{else}}Private download{{end}}</a>{{end}}{{if .Permissions.delete}}<form data-admin-form data-operation="delete" action="/admin/media/delete" method="post"><input name="id" type="hidden" value="{{.Asset.ID}}"><input name="revision" type="hidden" value="{{.Asset.Revision}}"><label><input type="checkbox" data-confirm required>{{if eq $.Language "fa"}}حذف همین فایل را تأیید می` + "\u200c" + `کنم.{{else}}I confirm deletion of this file.{{end}}</label><button type="submit" disabled>{{if eq $.Language "fa"}}حذف فایل{{else}}Delete file{{end}}</button></form>{{end}}{{if and (not .Permissions.read) (not .Permissions.delete)}}<p>{{if eq $.Language "fa"}}دانلود یا حذف این فایل مجاز نیست.{{else}}Download or deletion of this file is not permitted.{{end}}</p>{{end}}</td></tr>{{end}}</tbody></table></section>
 <section aria-labelledby="asset-status-heading"><h2 id="asset-status-heading">{{if eq .Language "fa"}}بررسی وضعیت یک شناسهٔ معلوم{{else}}Inspect one known asset ID{{end}}</h2><form data-admin-form data-read-only data-operation="status" action="/admin/media/status" method="post"><label for="media-status-id">{{if eq .Language "fa"}}شناسهٔ فایل{{else}}Asset ID{{end}}</label><input id="media-status-id" name="id" dir="ltr" maxlength="26" minlength="26" pattern="[A-Z2-7]{26}" required autocomplete="off"><button type="submit" disabled>{{if eq .Language "fa"}}بررسی وضعیت{{else}}Inspect status{{end}}</button></form><p id="asset-status" role="status"></p><p>{{if eq .Language "fa"}}اگر نتیجهٔ افزودن نامعلوم است، خودکار تکرار نکنید. شناسهٔ معلوم را بررسی کنید. بدون شناسه، فهرست فقط شاهد است: نام` + "\u200c" + `ها یکتا نیستند؛ اپراتور محصول باید کار ناتمام را بررسی کند.{{else}}After an unknown upload outcome, do not replay automatically. Inspect a known ID. Without an ID, library inspection is only evidence: filenames can repeat; the product operator must inspect unfinished work.{{end}}</p></section>
 {{end}}`))

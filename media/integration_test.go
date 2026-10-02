@@ -29,7 +29,7 @@ type fixture struct {
 	root    string
 }
 
-func newFixture(t *testing.T) *fixture {
+func newFixture(t *testing.T, allowed ...[]string) *fixture {
 	t.Helper()
 	dsn := os.Getenv("ACHRIX_MEDIA_TEST_DSN")
 	if dsn == "" {
@@ -61,7 +61,11 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	m, err := NewPostgres(dsn, Config{StorageRoot: root}, logger)
+	config := Config{StorageRoot: root}
+	if len(allowed) != 0 {
+		config.AllowedMIMEs = allowed[0]
+	}
+	m, err := NewPostgres(dsn, config, logger)
 	if err != nil {
 		t.Fatal(err)
 	}

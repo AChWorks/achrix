@@ -51,6 +51,10 @@ func NewPostgres(dsn string, config Config, logger *slog.Logger) (*Module, error
 	if runtime.GOOS != "linux" || config.StorageRoot == "" || len(config.StorageRoot) > 4096 || !strings.HasPrefix(config.StorageRoot, "/") {
 		return nil, ErrConfiguration
 	}
+	config.AllowedMIMEs, err = selectFormats(config.AllowedMIMEs)
+	if err != nil {
+		return nil, err
+	}
 	if config.Now == nil {
 		config.Now = time.Now
 	}
@@ -260,26 +264,78 @@ func migrationIdentity() (string, string) {
 	sum := sha256.Sum256(b)
 	return string(b), hex.EncodeToString(sum[:])
 }
-func checkSchema(ctx context.Context, p *pgxpool.Pool) error {
-	_, checksum := migrationIdentity()
-	var got string
-	var count, version int
-	if err := p.QueryRow(ctx, "SELECT count(*),min(checksum),min(version) FROM media.schema_migrations").Scan(&count, &got, &version); err != nil {
-		return err
+
+type schemaQuery interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+type migration struct {
+	sql, checksum string
+}
+
+func migrationPlan() []migration {
+	plan := make([]migration, 0, 2)
+	for _, name := range []string{"001_media.sql", "002_common_formats.sql"} {
+		b, err := migrations.ReadFile("migrations/" + name)
+		if err != nil {
+			panic("missing embedded Media migration")
+		}
+		sum := sha256.Sum256(b)
+		plan = append(plan, migration{string(b), hex.EncodeToString(sum[:])})
 	}
-	if count != 1 || version != 1 || got != checksum {
-		return ErrConfiguration
+	return plan
+}
+
+// An existing schema must have a nonempty exact ordered prefix of this source's
+// immutable ledger. Unknown, missing, reordered or changed entries fail closed.
+func ledgerVersion(ctx context.Context, q schemaQuery, plan []migration) (int, error) {
+	rows, err := q.Query(ctx, "SELECT version,checksum FROM media.schema_migrations ORDER BY version")
+	if err != nil {
+		return 0, err
 	}
-	rows, err := p.Query(ctx, "SELECT id,state,revision,filename,mime,size,width,height,sha256,created_at FROM media.assets WHERE false")
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		var version int
+		var checksum string
+		if err := rows.Scan(&version, &checksum); err != nil {
+			return 0, err
+		}
+		if count >= len(plan) || version != count+1 || checksum != plan[count].checksum {
+			return 0, ErrConfiguration
+		}
+		count++
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	if count == 0 {
+		return 0, ErrConfiguration
+	}
+	return count, nil
+}
+func checkAssetSchema(ctx context.Context, q schemaQuery) error {
+	rows, err := q.Query(ctx, "SELECT id,state,revision,filename,mime,size,width,height,sha256,created_at FROM media.assets WHERE false")
 	if err != nil {
 		return err
 	}
 	rows.Close()
 	return rows.Err()
 }
+func checkSchema(ctx context.Context, p *pgxpool.Pool) error {
+	plan := migrationPlan()
+	version, err := ledgerVersion(ctx, p, plan)
+	if err != nil {
+		return err
+	}
+	if version != len(plan) {
+		return ErrConfiguration
+	}
+	return checkAssetSchema(ctx, p)
+}
 
-// Migrate explicitly installs immutable PostgreSQL metadata; Start never does DDL.
-// A source rollback does not reverse this ledger or durable filesystem effects.
+// Migrate explicitly installs or advances immutable PostgreSQL metadata under
+// one transactional advisory lock. Start never does DDL. A source rollback
+// cannot reverse the ledger or durable filesystem effects.
 func Migrate(ctx context.Context, dsn string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -315,18 +371,23 @@ func Migrate(ctx context.Context, dsn string) error {
 	if err = tx.QueryRow(ctx, "SELECT to_regnamespace('media') IS NOT NULL").Scan(&exists); err != nil {
 		return ErrUnavailable
 	}
+	plan := migrationPlan()
+	version := 0
 	if exists {
-		_ = tx.Rollback(ctx)
-		if err = checkSchema(ctx, p); err != nil {
+		version, err = ledgerVersion(ctx, tx, plan)
+		if err != nil {
 			return ErrUnavailable
 		}
-		return nil
 	}
-	sql, checksum := migrationIdentity()
-	if _, err = tx.Exec(ctx, sql); err != nil {
-		return ErrUnavailable
+	for i := version; i < len(plan); i++ {
+		if _, err = tx.Exec(ctx, plan[i].sql); err != nil {
+			return ErrUnavailable
+		}
+		if _, err = tx.Exec(ctx, "INSERT INTO media.schema_migrations(version,checksum) VALUES($1,$2)", i+1, plan[i].checksum); err != nil {
+			return ErrUnavailable
+		}
 	}
-	if _, err = tx.Exec(ctx, "INSERT INTO media.schema_migrations(version,checksum) VALUES(1,$1)", checksum); err != nil {
+	if err = checkAssetSchema(ctx, tx); err != nil {
 		return ErrUnavailable
 	}
 	if err = tx.Commit(ctx); err != nil {

@@ -80,6 +80,7 @@ type adminBrowserImages struct {
 }
 type adminBrowserMetadata struct {
 	Images      adminBrowserImages     `json:"images"`
+	Files       map[string]string      `json:"files"`
 	Endpoints   []adminBrowserEndpoint `json:"endpoints"`
 	Login       string                 `json:"login"`
 	Password    string                 `json:"password"`
@@ -217,7 +218,7 @@ func TestAdminBrowserFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mm, err := media.NewPostgres(dsn, media.Config{StorageRoot: assets}, logger)
+	mm, err := media.NewPostgres(dsn, media.Config{StorageRoot: assets, AllowedMIMEs: media.CommonMIMEs()}, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,6 +274,10 @@ func TestAdminBrowserFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	metadata.Images = adminBrowserImages{base64.StdEncoding.EncodeToString(pngData.Bytes()), base64.StdEncoding.EncodeToString(jpegData.Bytes())}
+	metadata.Files = make(map[string]string)
+	for filename, data := range mediaDocumentBytes(t) {
+		metadata.Files[filename] = base64.StdEncoding.EncodeToString(data)
+	}
 	var certificates []byte
 	for _, language := range []string{"en", "fa"} {
 		server := httptest.NewUnstartedServer(http.NotFoundHandler())

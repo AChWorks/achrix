@@ -3,12 +3,13 @@ module example.com/achrix-notes
 go 1.27.1
 
 require (
-	github.com/AChWorks/achrix v0.1.1-0.20261002173516-b0637b24a621
+	github.com/AChWorks/achrix v0.1.1-0.20261002225937-6c3a65aac8ad
 	github.com/jackc/pgx/v5 v5.11.0
 )
 
 require (
 	github.com/alexedwards/argon2id v1.0.0 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
