@@ -3,7 +3,7 @@ module example.com/achrix-notes
 go 1.27.1
 
 require (
-	github.com/AChWorks/achrix v0.1.1-0.20261002172742-c06e6f246031
+	github.com/AChWorks/achrix v0.1.1-0.20261002173516-b0637b24a621
 	github.com/jackc/pgx/v5 v5.11.0
 )
 
