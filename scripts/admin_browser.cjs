@@ -103,7 +103,7 @@ async function main() {
           const headers={"Content-Type":"application/json","X-Identity-Request":"1",...extra};
           if(csrf!==null) headers["X-CSRF-Token"]=csrf;
           const response=await fetch(relative,{method:"POST",credentials:"same-origin",headers,body:JSON.stringify(body),cache:"no-store"});
-          return {status:response.status(),text:await response.text()};
+          return {status:response.status,text:await response.text()};
         },{relative,body,csrf,extra});
       }
       async function csrf() {
