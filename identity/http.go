@@ -221,18 +221,37 @@ func decodeWeb(writer http.ResponseWriter, r *http.Request, target any) error {
 	if len(r.Header.Values("Content-Type")) != 1 || r.Header.Get("Content-Type") != "application/json" {
 		return ErrInvalid
 	}
+	// Context cancellation does not interrupt net/http Body.Read. Apply an
+	// actual transport deadline without a decoder goroutine. Writer wrappers must
+	// expose ResponseController support (normally via Unwrap). Leave this bound
+	// in place through body close/server draining; net/http owns connection reset.
+	readDeadline := time.Now().Add(2 * time.Second)
+	if deadline, ok := r.Context().Deadline(); ok && deadline.Before(readDeadline) {
+		readDeadline = deadline
+	}
+	if err := http.NewResponseController(writer).SetReadDeadline(readDeadline); err != nil {
+		return ErrUnavailable
+	}
 	r.Body = http.MaxBytesReader(writer, r.Body, 2048)
 	defer r.Body.Close()
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
-		return ErrInvalid
+		return decodeError(err)
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
-		return ErrInvalid
+		return decodeError(err)
 	}
 	return nil
+}
+
+func decodeError(err error) error {
+	var network net.Error
+	if errors.As(err, &network) && network.Timeout() {
+		return ErrUnavailable
+	}
+	return ErrInvalid
 }
 func webSession(writer http.ResponseWriter, s Session) {
 	_ = json.NewEncoder(writer).Encode(struct {

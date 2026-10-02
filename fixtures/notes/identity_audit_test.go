@@ -2,11 +2,15 @@
 package notes_test
 
 import (
+	"bufio"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -280,6 +284,48 @@ func identityRequest(t *testing.T, server *httptest.Server, method, path, origin
 	return identityHTTPResult{response.StatusCode, response.Header.Clone(), response.Cookies(), b}
 }
 
+// A request-context deadline alone cannot interrupt a blocked network Body.Read.
+// Keep this incomplete body connection open to prove the actual TLS read deadline;
+// the subsequent valid login confirms normal traffic still works after timeout.
+func fixtureIncompleteLoginDeadline(t *testing.T, server *httptest.Server, origin string) {
+	t.Helper()
+	transport, ok := server.Client().Transport.(*http.Transport)
+	if !ok || transport.TLSClientConfig == nil {
+		t.Fatal("trusted fixture TLS transport unavailable")
+	}
+	conn, err := tls.DialWithDialer(&net.Dialer{Timeout: time.Second}, "tcp", server.Listener.Addr().String(), transport.TLSClientConfig.Clone())
+	if err != nil {
+		t.Fatal("incomplete-body fixture TLS connection failed")
+	}
+	defer conn.Close()
+	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal("incomplete-body fixture I/O bound failed")
+	}
+	// The declared body is small, valid JSON so far, and deliberately incomplete.
+	// Do not close the connection or its write side: only a server I/O deadline
+	// can end the body read and release the occupied authentication admission.
+	started := time.Now()
+	_, err = fmt.Fprintf(conn, "POST /identity/login HTTP/1.1\r\nHost: %s\r\nOrigin: %s\r\nContent-Type: application/json\r\nX-Identity-Request: 1\r\nContent-Length: 256\r\nConnection: close\r\n\r\n{\"login\":\"%s\",\"password\":\"", server.Listener.Addr().String(), origin, stableFixtureLogin)
+	if err != nil {
+		t.Fatal("incomplete-body fixture request failed")
+	}
+	response, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: http.MethodPost})
+	if err != nil {
+		t.Fatal("incomplete body did not produce a bounded HTTP response")
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(response.Body, 4097))
+	if err != nil || len(body) > 4096 || time.Since(started) >= 4*time.Second {
+		t.Fatal("incomplete body exceeded its bounded response deadline")
+	}
+	var result struct {
+		Code string `json:"code"`
+	}
+	if response.StatusCode != http.StatusServiceUnavailable || json.Unmarshal(body, &result) != nil || result.Code != "authentication_unavailable" {
+		t.Fatal("incomplete body timeout did not fail closed with its safe unavailable result", response.StatusCode)
+	}
+}
+
 func fixtureSession(t *testing.T, result identityHTTPResult, principal achrix.Principal) (*http.Cookie, string) {
 	t.Helper()
 	if result.status != http.StatusOK || result.headers.Get("Cache-Control") != "no-store" || result.headers.Get("X-Content-Type-Options") != "nosniff" {
@@ -413,8 +459,15 @@ func TestIdentityAuditPublicConsumer(t *testing.T) {
 		t.Fatal(err)
 	}
 	server.Config.Handler = identityNotesHandler(web, f.notes)
+	server.Config.ReadHeaderTimeout = time.Second
+	server.Config.ReadTimeout = 5 * time.Second
+	server.Config.WriteTimeout = 5 * time.Second
+	server.Config.IdleTimeout = 30 * time.Second
+	server.Config.MaxHeaderBytes = 8 << 10
 	server.StartTLS()
 	t.Cleanup(server.Close)
+	fixtureIncompleteLoginDeadline(t, server, origin)
+	fixtureCounts(t, f.pool, 0, 1, 0)
 	loginBody, _ := json.Marshal(map[string]string{"login": stableFixtureLogin, "password": fixtureInitialPassword})
 	cookie, csrf := fixtureSession(t, identityRequest(t, server, "POST", "/identity/login", origin, "", string(loginBody), nil), principal)
 	if got, err := f.identity.Authenticate(context.Background(), cookie.Value); err != nil || got != principal {

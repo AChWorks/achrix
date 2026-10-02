@@ -137,6 +137,9 @@ func (m *Module) changePassword(parent context.Context, value string, p achrix.P
 		if err := lockAccount(ctx, tx, string(p), revision, true); err != nil {
 			return err
 		}
+		// Waiting for the account fence may outlive the initiating session.
+		// Re-sample trusted time after the lock before authorizing this mutation.
+		now = m.now()
 		if revision == math.MaxInt64 {
 			return ErrConflict
 		}

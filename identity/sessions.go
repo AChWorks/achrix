@@ -53,10 +53,16 @@ func (m *Module) issue(ctx context.Context, c credential, record sessionRecord, 
 		if err := lockAccount(ctx, tx, c.ID, c.Revision, true); err != nil {
 			return err
 		}
+		now = m.now()
+		if !record.expires.After(now) {
+			return ErrAuthentication
+		}
 		// Hash verification happens outside the lock. Revision fences concurrent
 		// password/status/revoke-all changes before this session can be committed.
+		// A parallel policy upgrade may retain the same account revision. The
+		// original PHC compare-and-set preserves any newer hash on stale completion.
 		if rehash != "" {
-			if _, err := tx.Exec(ctx, "UPDATE identity.credentials SET password_hash=$2 WHERE account_id=$1", c.ID, rehash); err != nil {
+			if _, err := tx.Exec(ctx, "UPDATE identity.credentials SET password_hash=$2 WHERE account_id=$1 AND password_hash=$3", c.ID, rehash, c.hash); err != nil {
 				return err
 			}
 		}
@@ -100,6 +106,7 @@ func (m *Module) rotate(ctx context.Context, old []byte, next sessionRecord, now
 		if err := lockAccount(ctx, tx, next.accountID, next.revision, true); err != nil {
 			return err
 		}
+		now = m.now() // Expiry is rechecked after the potentially blocking fence.
 		var expiry time.Time
 		err := tx.QueryRow(ctx, "DELETE FROM identity.sessions WHERE token_hash=$1 AND account_id=$2 AND account_revision=$3 AND expires_at>$4 RETURNING expires_at", old, next.accountID, next.revision, now).Scan(&expiry)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -141,6 +148,7 @@ func (m *Module) refreshCSRF(ctx context.Context, hash, csrf []byte, now time.Ti
 		if err = lockAccount(ctx, tx, id, revision, true); err != nil {
 			return err
 		}
+		now = m.now() // Do not authorize with a pre-lock expiry snapshot.
 		tag, err := tx.Exec(ctx, "UPDATE identity.sessions SET csrf_hash=$2 WHERE token_hash=$1 AND expires_at>$3", hash, csrf, now)
 		if err != nil {
 			return err

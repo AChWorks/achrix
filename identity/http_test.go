@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,6 +25,22 @@ import (
 )
 
 const webProofOrigin = "https://identity.example.test"
+
+// deadlineRecorder models deadline-capable writers only for complete in-memory
+// bodies. Actual connection read interruption is proven by the HTTPS consumer.
+type deadlineRecorder struct {
+	*httptest.ResponseRecorder
+	readDeadline  time.Time
+	deadlineError error
+}
+
+func newDeadlineRecorder() *deadlineRecorder {
+	return &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
+}
+func (r *deadlineRecorder) SetReadDeadline(deadline time.Time) error {
+	r.readDeadline = deadline
+	return r.deadlineError
+}
 
 func webProofRequest(method, path, body string) *http.Request {
 	r := httptest.NewRequest(method, webProofOrigin+path, strings.NewReader(body))
@@ -218,7 +235,7 @@ func TestWebJSONBounds(t *testing.T) {
 			var target struct {
 				Value string `json:"value"`
 			}
-			err := decodeWeb(httptest.NewRecorder(), r, &target)
+			err := decodeWeb(newDeadlineRecorder(), r, &target)
 			if (err == nil) != tt.valid || (err != nil && !errors.Is(err, ErrInvalid)) {
 				t.Fatal("JSON acceptance/bounds", err)
 			}
@@ -489,7 +506,7 @@ func TestWebAndDirectAuthenticationFollowCoreAdmission(t *testing.T) {
 			r := webProofRequest(method, path, `{"login":"fixture","password":"a long test password"}`)
 			r.AddCookie(&http.Cookie{Name: CookieName, Value: value})
 			r.Header.Set("X-CSRF-Token", value)
-			writer := httptest.NewRecorder()
+			writer := newDeadlineRecorder()
 			w.Handler().ServeHTTP(writer, r)
 			if writer.Code != http.StatusServiceUnavailable || writer.Body.String() != "{\"code\":\"authentication_unavailable\"}\n" {
 				t.Fatal("browser authentication bypassed Core lifecycle")
@@ -521,4 +538,66 @@ func TestWebAndDirectAuthenticationFollowCoreAdmission(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkClosed()
+}
+
+func TestWebBodyReadDeadlinePreflight(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		writer http.ResponseWriter
+	}{
+		{"unsupported writer", httptest.NewRecorder()},
+		{"deadline failure", &deadlineRecorder{ResponseRecorder: httptest.NewRecorder(), deadlineError: errors.New("fixture deadline failure")}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			request := webProofRequest(http.MethodPost, "/login", "{\"value\":\"fixture\"}")
+			var target map[string]string
+			if err := decodeWeb(tt.writer, request, &target); !errors.Is(err, ErrUnavailable) {
+				t.Fatal("body decoder did not fail closed on unavailable transport deadline", err)
+			}
+		})
+	}
+	w := webProofBoundary(t)
+	writer := httptest.NewRecorder()
+	w.Handler().ServeHTTP(writer, webProofRequest(http.MethodPost, "/login", "{\"login\":\"fixture\",\"password\":\"a long test password\"}"))
+	if writer.Code != http.StatusServiceUnavailable || writer.Body.String() != "{\"code\":\"authentication_unavailable\"}\n" || len(w.slots) != 0 {
+		t.Fatal("unsupported login transport reached service work or leaked admission")
+	}
+}
+
+func TestWebBodyReadDeadlineRespectsOperationBudget(t *testing.T) {
+	for _, shorter := range []bool{false, true} {
+		request := webProofRequest(http.MethodPost, "/login", "{\"value\":\"fixture\"}")
+		earlier := time.Now().Add(100 * time.Millisecond)
+		if shorter {
+			ctx, cancel := context.WithDeadline(request.Context(), earlier)
+			defer cancel()
+			request = request.WithContext(ctx)
+		}
+		writer := newDeadlineRecorder()
+		var target map[string]string
+		before := time.Now()
+		err := decodeWeb(writer, request, &target)
+		after := time.Now()
+		if err != nil || target["value"] != "fixture" {
+			t.Fatal("complete in-memory body rejected", err)
+		}
+		if !writer.readDeadline.After(before) || writer.readDeadline.After(after.Add(2*time.Second)) {
+			t.Fatal("body read deadline is absent or exceeds supported bound")
+		}
+		if shorter && !writer.readDeadline.Equal(earlier) {
+			t.Fatal("body read deadline extended earlier operation deadline")
+		}
+	}
+}
+
+func TestWebDecodeFailureCategories(t *testing.T) {
+	timeout := fmt.Errorf("fixture restricted details: %w", &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded})
+	if err := decodeError(timeout); !errors.Is(err, ErrUnavailable) {
+		t.Fatal("wrapped transport timeout is not unavailable", err)
+	}
+	for _, input := range []error{io.EOF, &json.SyntaxError{}, &http.MaxBytesError{Limit: 2048}, errors.New("fixture malformed body")} {
+		if err := decodeError(input); !errors.Is(err, ErrInvalid) {
+			t.Fatal("invalid body misclassified", err)
+		}
+	}
 }

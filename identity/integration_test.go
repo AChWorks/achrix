@@ -616,3 +616,196 @@ func TestPostgresSuccessfulLoginPersistsDeliberateRehash(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// waitForAccountFence observes the real blocked PostgreSQL statement, rather
+// than assuming a goroutine has reached its transaction after an arbitrary wait.
+func waitForAccountFence(t *testing.T, observer *pgx.Conn, blocker uint32) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	ticker := time.NewTicker(5 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		var waiting bool
+		err := observer.QueryRow(ctx, `SELECT EXISTS (
+   SELECT 1 FROM pg_stat_activity
+   WHERE datname=current_database()
+     AND wait_event_type='Lock'
+     AND $1::integer = ANY(pg_blocking_pids(pid))
+     AND query='SELECT revision,enabled FROM identity.accounts WHERE id=$1 FOR UPDATE'
+  )`, int64(blocker)).Scan(&waiting)
+		if err != nil {
+			t.Fatal("could not observe account fence", err)
+		}
+		if waiting {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("operation did not reach the account row fence", ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func TestPostgresSessionExpiryIsRecheckedAfterAccountFence(t *testing.T) {
+	operations := []struct {
+		name string
+		run  func(*identityFixture, Session) error
+	}{
+		{"self-password-change", func(f *identityFixture, s Session) error {
+			return f.service.ChangePassword(context.Background(), s.Token, testPassword, replacementPassword)
+		}},
+		{"rotation", func(f *identityFixture, s Session) error {
+			_, err := f.service.Rotate(context.Background(), s.Token)
+			return err
+		}},
+		{"csrf-refresh", func(f *identityFixture, s Session) error {
+			_, err := f.service.RefreshCSRF(context.Background(), s.Token)
+			return err
+		}},
+		{"session-issue", func(f *identityFixture, _ Session) error {
+			_, err := f.service.Login(context.Background(), "alice", testPassword, "")
+			return err
+		}},
+	}
+	for _, operation := range operations {
+		t.Run(operation.name, func(t *testing.T) {
+			f := newIdentityFixture(t)
+			a := f.create(t, "alice")
+			s := f.login(t, "alice", testPassword)
+			var originalHash string
+			if err := f.db.QueryRow(context.Background(), "SELECT password_hash FROM identity.credentials WHERE account_id=$1", a.ID).Scan(&originalHash); err != nil {
+				t.Fatal(err)
+			}
+			originalToken, _ := tokenHash(s.Token)
+			originalCSRF, _ := tokenHash(s.CSRF)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			holder, err := pgx.Connect(ctx, os.Getenv("ACHRIX_IDENTITY_TEST_DSN"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				cleanup, done := context.WithTimeout(context.Background(), time.Second)
+				defer done()
+				_ = holder.Close(cleanup)
+			}()
+			tx, err := holder.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				cleanup, done := context.WithTimeout(context.Background(), time.Second)
+				defer done()
+				_ = tx.Rollback(cleanup)
+			}()
+			var lockedRevision int64
+			if err = tx.QueryRow(ctx, "SELECT revision FROM identity.accounts WHERE id=$1 FOR UPDATE", a.ID).Scan(&lockedRevision); err != nil {
+				t.Fatal(err)
+			}
+			result := make(chan error, 1)
+			go func() { result <- operation.run(f, s) }()
+			waitForAccountFence(t, f.db, holder.PgConn().PID())
+			f.clock.Store(s.ExpiresAt.Add(time.Microsecond).UnixNano())
+			if err = tx.Commit(ctx); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case err = <-result:
+			case <-ctx.Done():
+				t.Fatal("blocked session operation did not finish", ctx.Err())
+			}
+			if !errors.Is(err, ErrAuthentication) {
+				t.Fatalf("expired session operation crossed the fence: %v", err)
+			}
+			if got := f.account(t, a.ID); got.Revision != lockedRevision || !got.Enabled {
+				t.Fatal("expired operation changed account", got)
+			}
+			var currentHash string
+			if err = f.db.QueryRow(ctx, "SELECT password_hash FROM identity.credentials WHERE account_id=$1", a.ID).Scan(&currentHash); err != nil {
+				t.Fatal(err)
+			}
+			if currentHash != originalHash || f.countAudit(t, a.ID) != 1 {
+				t.Fatal("expired operation changed credential or Audit")
+			}
+			var tokenStored, csrfStored []byte
+			var expiry time.Time
+			var revision int64
+			if err = f.db.QueryRow(ctx, "SELECT token_hash,csrf_hash,expires_at,account_revision FROM identity.sessions WHERE account_id=$1", a.ID).Scan(&tokenStored, &csrfStored, &expiry, &revision); err != nil {
+				t.Fatal(err)
+			}
+			var count int
+			if err = f.db.QueryRow(ctx, "SELECT count(*) FROM identity.sessions WHERE account_id=$1", a.ID).Scan(&count); err != nil {
+				t.Fatal(err)
+			}
+			if count != 1 || !bytes.Equal(tokenStored, originalToken) || !bytes.Equal(csrfStored, originalCSRF) || !expiry.Equal(s.ExpiresAt) || revision != lockedRevision {
+				t.Fatal("expired operation changed persisted sessions")
+			}
+		})
+	}
+}
+
+func TestPostgresStaleRehashCannotDowngradeCommittedPHC(t *testing.T) {
+	f := newIdentityFixture(t)
+	a := f.create(t, "alice")
+	ctx, cancel := deadline()
+	defer cancel()
+	snapshot, err := f.module.findCredential(ctx, "id", a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stronger, err := newPasswords(PasswordPolicy{19 * 1024, 4, 1}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	weaker, err := newPasswords(PasswordPolicy{19 * 1024, 3, 1}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	strongHash, err := stronger.hash(ctx, testPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	weakHash, err := weaker.hash(ctx, testPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Both completions were prepared from the same originally verified account
+	// revision and PHC. The slower weaker completion must lose the PHC fence.
+	strongSession, strongRecord := newSession(a.ID, snapshot.Revision, f.module.now().Add(time.Minute))
+	weakSession, weakRecord := newSession(a.ID, snapshot.Revision, f.module.now().Add(time.Minute))
+	if err = f.module.issue(ctx, snapshot, strongRecord, strongHash, nil, f.module.now()); err != nil {
+		t.Fatal(err)
+	}
+	if err = f.module.issue(ctx, snapshot, weakRecord, weakHash, nil, f.module.now()); err != nil {
+		t.Fatal(err)
+	}
+	var stored string
+	if err = f.db.QueryRow(ctx, "SELECT password_hash FROM identity.credentials WHERE account_id=$1", a.ID).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored != strongHash {
+		t.Fatal("a stale rehash completion overwrote the committed stronger PHC")
+	}
+	params, err := decodePassword(stored)
+	if err != nil || params.Iterations != 4 {
+		t.Fatal("committed PHC metadata lost the stronger policy", err)
+	}
+	for _, s := range []Session{strongSession, weakSession} {
+		p, e := f.service.Authenticate(context.Background(), s.Token)
+		if e != nil || p != achrix.Principal(a.ID) {
+			t.Fatal("same-password rehash session became invalid", e)
+		}
+	}
+	if f.account(t, a.ID).Revision != snapshot.Revision || f.countAudit(t, a.ID) != 1 {
+		t.Fatal("rehash changed account revision or created routine Audit")
+	}
+	var count int
+	if err = f.db.QueryRow(ctx, "SELECT count(*) FROM identity.sessions WHERE account_id=$1", a.ID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Fatal("one same-password rehash completion lost its session")
+	}
+}
