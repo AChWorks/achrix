@@ -24,6 +24,7 @@ import (
 const testID = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 type libraryStub struct {
+	formats      []media.Format
 	calls        []string
 	actor        achrix.Principal
 	target       string
@@ -36,6 +37,13 @@ type libraryStub struct {
 	err          error
 	readErr      error
 	readAfterErr error
+}
+
+func (s *libraryStub) Formats() []media.Format {
+	if s.formats != nil {
+		return s.formats
+	}
+	return []media.Format{{MIME: "image/png", Extensions: []string{"png"}}, {MIME: "image/jpeg", Extensions: []string{"jpg", "jpeg", "jpe"}}}
 }
 
 func (s *libraryStub) record(op string, p achrix.Principal, target string) {
@@ -309,6 +317,71 @@ func TestEmptyLocalizedScreenKeepsFormsModuleOwned(t *testing.T) {
 		handlerFor(s).serve(w, httptest.NewRequest("GET", "/", nil), v)
 		if len(s.calls) != 1 || s.limit != 25 || !strings.Contains(w.Body.String(), `id="media-empty"`) || strings.Contains(w.Body.String(), `id="media-file"`) {
 			t.Fatal("empty/permitted listing or denied upload presentation failed")
+		}
+	}
+}
+
+func TestScreenUsesEffectiveFormatsAndOmitsUnknownDimensions(t *testing.T) {
+	for _, language := range []string{"en", "fa"} {
+		for _, formats := range [][]media.Format{
+			(&libraryStub{}).Formats(),
+			media.SupportedFormats(),
+			{{MIME: "application/pdf", Extensions: []string{"pdf"}}},
+		} {
+			a := sample()
+			a.MIME, a.Filename, a.Width, a.Height = "application/pdf", "report.pdf", 0, 0
+			s := &libraryStub{formats: formats, page: media.Page{Assets: []media.Asset{a}}}
+			v := requestView()
+			v.Language = language
+			v.Allowed = func(cap, _ string) bool { return cap == media.List || cap == media.Create }
+			w := httptest.NewRecorder()
+			v.Render = func(p shell.Page) error {
+				return p.Template.ExecuteTemplate(w, "content", p.Data)
+			}
+			handlerFor(s).serve(w, httptest.NewRequest("GET", "/", nil), v)
+			body := w.Body.String()
+			if !strings.Contains(body, `id="media-file"`) || strings.Contains(body, "0×0") || strings.Contains(body, "Image library") || strings.Contains(body, "Ready images") {
+				t.Fatal("opaque file screen is inaccurate", body)
+			}
+			for _, format := range formats {
+				if !strings.Contains(body, format.MIME) {
+					t.Fatal("effective format absent from rendered browser hint", format.MIME)
+				}
+				for _, extension := range format.Extensions {
+					if !strings.Contains(body, "."+extension) || !strings.Contains(body, strings.ToUpper(extension)) {
+						t.Fatal("effective extension absent from accept/help", extension)
+					}
+				}
+			}
+			if len(formats) == 1 && (strings.Contains(body, "image/png") || strings.Contains(body, ".png") || strings.Contains(body, "4096")) {
+				t.Fatal("narrow upload profile acquired unrelated hints", body)
+			}
+		}
+	}
+}
+
+func TestRetainedSupportedAttachmentsIgnoreNarrowedUploadSelection(t *testing.T) {
+	for _, format := range media.SupportedFormats() {
+		t.Run(format.MIME, func(t *testing.T) {
+			a := sample()
+			a.MIME, a.Filename, a.Width, a.Height = format.MIME, "original."+format.Extensions[0], 0, 0
+			s := &libraryStub{formats: []media.Format{{MIME: "image/png", Extensions: []string{"png"}}}, asset: a, image: []byte("raw")}
+			w := &transport{ResponseRecorder: httptest.NewRecorder()}
+			handlerFor(s).serve(w, httptest.NewRequest("GET", "/read/"+testID, nil), requestView())
+			kind, params, err := mime.ParseMediaType(w.Header().Get("Content-Disposition"))
+			if w.Code != 200 || w.Body.String() != "raw" || w.Header().Get("Content-Type") != format.MIME || err != nil || kind != "attachment" || params["filename"] != a.Filename || strings.Join(s.calls, ",") != "status,read" {
+				t.Fatal("supported retained bytes were revoked or headers changed", w.Code, w.Header(), s.calls)
+			}
+		})
+	}
+	for _, unsupported := range []string{"image/svg+xml", "text/html", "application/octet-stream", "image/png; injected=true", "application/pdf\r\nX-Injected: true"} {
+		a := sample()
+		a.MIME = unsupported
+		s := &libraryStub{asset: a, image: []byte("raw")}
+		w := &transport{ResponseRecorder: httptest.NewRecorder()}
+		handlerFor(s).serve(w, httptest.NewRequest("GET", "/read/"+testID, nil), requestView())
+		if w.Code != 503 || strings.Join(s.calls, ",") != "status" || w.Header().Get("Content-Disposition") != "" || w.Header().Get("Content-Type") != "application/json; charset=utf-8" {
+			t.Fatal("unknown MIME reached read or attachment headers", unsupported, w.Code, w.Header())
 		}
 	}
 }
