@@ -18,11 +18,13 @@ This document owns the runtime/database support matrix; manifests own pins and G
 | --- | --- |
 | Go | 1.27 line; validation 1.27.1, required by both `go.mod` files |
 | PostgreSQL | ordinary 18, UTF-8, no required extensions; server/client proof 18.6 |
-| Driver | consumer-owned pgx/v5; exact direct/transitive versions in `fixtures/notes/go.mod` and `go.sum` |
+| Driver / password library | pgx/v5 for owned Identity/Audit and Notes persistence; maintained alexedwards/argon2id over x/crypto/argon2; exact direct/transitive pins in root and `fixtures/notes` manifests |
 | Platform | Linux amd64, local loopback/Unix-socket proving consumer; remote/production profiles remain unproven |
 | Validation tools | Bash, Python 3, checksum-pinned [Go quality tools](../development/go-quality.md), native PostgreSQL 18.6 tools, C compiler for Go's race detector; optional source-tool setup requires gcc/make/bison/flex/m4/curl/bzip2 |
 
 Official compatibility was checked before API coupling on 2026-10-01: [Go releases](https://go.dev/doc/devel/release), [Go downloads](https://go.dev/dl/), [pgx v5.11.0 manifest](https://github.com/jackc/pgx/blob/v5.11.0/go.mod)/[changelog](https://github.com/jackc/pgx/blob/v5.11.0/CHANGELOG.md), [PostgreSQL version policy](https://www.postgresql.org/support/versioning/), [pg_dump compatibility](https://www.postgresql.org/docs/18/app-pgdump.html). Driver support is wider than AChrix's tested matrix and does not expand it. Go toolchain/dependency checksums stay enabled; `scripts/validate.sh` rejects a disabled checksum database.
+
+The 2026-10-02 Identity dependency review checked argon2id v1.0.0 (MIT, Go 1.12), pgx v5.11.0 (MIT, Go 1.25) and x/crypto v0.57.0 (BSD-3-Clause, Go 1.26) against the supported Go pin, official source and checksum identities. Full validation analyzes both Foundation and the cold normal-module consumer. [Identity](../../identity/README.md) owns the measured hash policy and its explicit resource/web limits; [Audit](../../audit/README.md) owns retained data and query limits. The loopback/Unix test database is intentionally local; remote DSNs defensively require certificate-verified TLS on every host/fallback without establishing a remote production profile.
 
 ## Validation commands
 
