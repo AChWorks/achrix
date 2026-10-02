@@ -113,7 +113,9 @@ Performance starts with algorithm, data movement and resource ownership before c
 
 ## Bounds, scale and cost
 
-Apply relevant pagination, query/payload/upload/memory/concurrency bounds, external-call timeouts, retry budgets and queue/backlog limits. Use representative workload evidence before optimization or service/infrastructure extraction; scale the demonstrated bottleneck.
+Apply relevant pagination, query/payload/upload/memory/concurrency bounds, external-call timeouts, retry budgets and queue/backlog limits. **Per-Module bounds are not a product-level budget:** the composed product must also account for the aggregate connections/pools, goroutines/workers, memory, file descriptors/storage handles, network/provider concurrency and telemetry/resource cost of all active Modules and adapters. Measure the real composition before changing ownership or infrastructure. If aggregate pressure becomes material, compare smaller per-Module limits, an explicit shared infrastructure collaborator, external pooling or another bounded mechanism; do not introduce a process-global pool/service locator merely because several Modules use the same technology.
+
+Use representative workload evidence before optimization or service/infrastructure extraction; scale the demonstrated bottleneck.
 
 Fixture bounds: 200 Unicode characters per immutable note, 1 KiB HTTP body, 8 KiB headers, 32 active adapter requests, four runtime DB connections, one-second Application/connect deadlines, 200 ms readiness, three-second startup and two-second HTTP/Core shutdown. Startup validates configuration/schema before traffic. No query lists, automatic retries, unbounded payload logging or background job queues exist. Trusted in-process extensions must honor context cancellation; Core does not pretend to forcibly sandbox or terminate arbitrary Go code. No throughput/capacity/RPO/RTO guarantee follows from these bounds.
 
