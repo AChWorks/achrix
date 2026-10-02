@@ -37,7 +37,7 @@ func New(service *identity.Service) (shell.Surface, error) {
 	return surface(service), nil
 }
 func surface(service accounts) shell.Surface {
-	return shell.Surface{ID: "identity", Title: shell.Text{English: "Accounts", Persian: "حساب‌ها"}, Capability: identity.AccountRead, Handler: func(w http.ResponseWriter, r *http.Request, view shell.Request) { serve(service, w, r, view) }}
+	return shell.Surface{ID: "identity", Title: shell.Text{English: "Accounts", Persian: "حساب\u200cها"}, Capability: identity.AccountRead, Handler: func(w http.ResponseWriter, r *http.Request, view shell.Request) { serve(service, w, r, view) }}
 }
 
 type webAuthenticator struct{ web *identity.Web }
@@ -67,7 +67,7 @@ type accountResult struct {
 	ID       string `json:"id"`
 	Login    string `json:"login"`
 	Enabled  bool   `json:"enabled"`
-	Revision int64  `json:"revision"`
+	Revision int64  `json:"revision,string"`
 }
 type result struct {
 	Account     accountResult   `json:"account"`
@@ -84,7 +84,7 @@ func serve(service accounts, w http.ResponseWriter, r *http.Request, view shell.
 	if r.Method == http.MethodGet {
 		switch r.URL.Path {
 		case "/":
-			err := view.Render(shell.Page{Title: (shell.Text{English: "Accounts", Persian: "حساب‌ها"}).In(view.Language), Template: accountTemplate, Data: screen{view.Language, view.Allowed(identity.AccountCreate, "")}})
+			err := view.Render(shell.Page{Title: (shell.Text{English: "Accounts", Persian: "حساب\u200cها"}).In(view.Language), Template: accountTemplate, Data: screen{view.Language, view.Allowed(identity.AccountCreate, "")}})
 			if err != nil {
 				fail(w, shell.ErrConfiguration)
 			}
@@ -144,7 +144,7 @@ func serve(service accounts, w http.ResponseWriter, r *http.Request, view shell.
 	case "/enabled":
 		var body struct {
 			ID       string `json:"id"`
-			Revision int64  `json:"revision"`
+			Revision int64  `json:"revision,string"`
 			Enabled  *bool  `json:"enabled"`
 		}
 		if err = decode(w, r, &body); err == nil {
@@ -157,7 +157,7 @@ func serve(service accounts, w http.ResponseWriter, r *http.Request, view shell.
 	case "/password":
 		var body struct {
 			ID       string `json:"id"`
-			Revision int64  `json:"revision"`
+			Revision int64  `json:"revision,string"`
 			Password string `json:"password"`
 		}
 		if err = decode(w, r, &body); err == nil {
@@ -238,15 +238,15 @@ var accountTemplate = template.Must(template.New("accounts").Parse(`{{define "co
 <section aria-labelledby="create-heading"><h2 id="create-heading">{{if eq .Language "fa"}}ایجاد حساب{{else}}Create account{{end}}</h2>
 {{if .CanCreate}}<form data-admin-form data-operation="create" action="/admin/identity/create" method="post">
 <label for="new-login">{{if eq .Language "fa"}}شناسهٔ ورود{{else}}Login{{end}}</label><input id="new-login" name="login" dir="ltr" autocomplete="off" maxlength="64" pattern="[a-z0-9][a-z0-9._-]{0,63}" required aria-describedby="login-help"><p id="login-help" lang="en" dir="ltr">1–64 lowercase ASCII letters, digits, dot, underscore or hyphen; starts with a letter or digit.</p>
-<label for="new-password">{{if eq .Language "fa"}}رمز اولیه{{else}}Initial password{{end}}</label><input id="new-password" name="password" type="password" autocomplete="new-password" maxlength="512" required aria-describedby="password-help"><p id="password-help">{{if eq .Language "fa"}}۱۵ تا ۲۵۶ کاراکتر، حداکثر ۱۰۲۴ بایت. رمز نمایش یا ذخیرهٔ مرورگر نمی‌شود.{{else}}15–256 characters, at most 1024 UTF-8 bytes. Passwords are never displayed or stored by this UI.{{end}}</p>
+<label for="new-password">{{if eq .Language "fa"}}رمز اولیه{{else}}Initial password{{end}}</label><input id="new-password" name="password" type="password" autocomplete="new-password" maxlength="512" required aria-describedby="password-help"><p id="password-help">{{if eq .Language "fa"}}۱۵ تا ۲۵۶ کاراکتر، حداکثر ۱۰۲۴ بایت. رمز نمایش یا ذخیرهٔ مرورگر نمی` + "\u200c" + `شود.{{else}}15–256 characters, at most 1024 UTF-8 bytes. Passwords are never displayed or stored by this UI.{{end}}</p>
 <button type="submit" disabled>{{if eq .Language "fa"}}ایجاد{{else}}Create{{end}}</button></form>{{else}}<p>{{if eq .Language "fa"}}مجوز ایجاد حساب را ندارید.{{else}}Account creation is not permitted.{{end}}</p>{{end}}</section>
 <section aria-labelledby="lookup-heading"><h2 id="lookup-heading">{{if eq .Language "fa"}}بررسی یک حساب{{else}}Look up one account{{end}}</h2>
 <form data-admin-form data-read-only data-operation="lookup" action="/admin/identity/lookup" method="post"><label for="lookup-id">{{if eq .Language "fa"}}شناسهٔ حساب{{else}}Account ID{{end}}</label><input id="lookup-id" name="id" dir="ltr" maxlength="26" minlength="26" pattern="[A-Z2-7]{26}" required autocomplete="off"><button type="submit" disabled>{{if eq .Language "fa"}}بررسی{{else}}Look up{{end}}</button></form>
-<form data-admin-form data-read-only data-operation="lookup-login" action="/admin/identity/lookup-login" method="post"><label for="lookup-login">{{if eq .Language "fa"}}شناسهٔ ورود دقیق برای بررسی نتیجهٔ ایجاد{{else}}Exact login to reconcile creation{{end}}</label><input id="lookup-login" name="login" dir="ltr" maxlength="64" pattern="[a-z0-9][a-z0-9._-]{0,63}" required autocomplete="off" aria-describedby="lookup-login-help"><p id="lookup-login-help">{{if eq .Language "fa"}}این بررسی مجوز جداگانه می‌خواهد. اگر نتیجهٔ ایجاد نامعلوم است، شناسهٔ ورود را بررسی کنید؛ ایجاد را تکرار نکنید.{{else}}This lookup requires a separate permission. After an unknown create outcome, check the retained exact login before another creation attempt.{{end}}</p><button type="submit" disabled>{{if eq .Language "fa"}}بررسی شناسهٔ ورود{{else}}Look up login{{end}}</button></form>
+<form data-admin-form data-read-only data-operation="lookup-login" action="/admin/identity/lookup-login" method="post"><label for="lookup-login">{{if eq .Language "fa"}}شناسهٔ ورود دقیق برای بررسی نتیجهٔ ایجاد{{else}}Exact login to reconcile creation{{end}}</label><input id="lookup-login" name="login" dir="ltr" maxlength="64" pattern="[a-z0-9][a-z0-9._-]{0,63}" required autocomplete="off" aria-describedby="lookup-login-help"><p id="lookup-login-help">{{if eq .Language "fa"}}این بررسی مجوز جداگانه می` + "\u200c" + `خواهد. اگر نتیجهٔ ایجاد نامعلوم است، شناسهٔ ورود را بررسی کنید؛ ایجاد را تکرار نکنید.{{else}}This lookup requires a separate permission. After an unknown create outcome, check the retained exact login before another creation attempt.{{end}}</p><button type="submit" disabled>{{if eq .Language "fa"}}بررسی شناسهٔ ورود{{else}}Look up login{{end}}</button></form>
 <p id="account-empty">{{if eq .Language "fa"}}هنوز حسابی انتخاب نشده است.{{else}}No account selected.{{end}}</p>
-<div id="account" hidden><h3>{{if eq .Language "fa"}}حساب انتخاب‌شده{{else}}Selected account{{end}}</h3><dl><dt>ID</dt><dd><bdi id="account-id" dir="ltr"></bdi></dd><dt>{{if eq .Language "fa"}}ورود{{else}}Login{{end}}</dt><dd><bdi id="account-login" dir="auto"></bdi></dd><dt>{{if eq .Language "fa"}}وضعیت{{else}}Status{{end}}</dt><dd id="account-enabled"></dd><dt>{{if eq .Language "fa"}}بازبینی{{else}}Revision{{end}}</dt><dd><bdi id="account-revision" dir="ltr"></bdi></dd></dl>
-<form data-admin-form data-operation="enabled" action="/admin/identity/enabled" method="post" hidden><fieldset><legend>{{if eq .Language "fa"}}تغییر وضعیت و لغو نشست‌ها{{else}}Change status and revoke sessions{{end}}</legend><input name="id" type="hidden"><input name="revision" data-number type="hidden"><label><input type="checkbox" name="enabled">{{if eq .Language "fa"}}فعال{{else}}Enabled{{end}}</label><label><input type="checkbox" data-confirm required>{{if eq .Language "fa"}}تغییر وضعیت و خروج همهٔ نشست‌های این حساب را تأیید می‌کنم.{{else}}I confirm the status change and invalidation of every session for this account.{{end}}</label><button type="submit" disabled>{{if eq .Language "fa"}}اعمال وضعیت{{else}}Apply status{{end}}</button></fieldset></form>
-<form data-admin-form data-operation="password" action="/admin/identity/password" method="post" hidden><fieldset><legend>{{if eq .Language "fa"}}جایگزینی رمز و لغو نشست‌ها{{else}}Replace password and revoke sessions{{end}}</legend><input name="id" type="hidden"><input name="revision" data-number type="hidden"><label for="replacement-password">{{if eq .Language "fa"}}رمز جدید{{else}}New password{{end}}</label><input id="replacement-password" name="password" type="password" autocomplete="new-password" maxlength="512" required><label><input type="checkbox" data-confirm required>{{if eq .Language "fa"}}جایگزینی رمز و خروج همهٔ نشست‌ها را تأیید می‌کنم.{{else}}I confirm password replacement and invalidation of every session.{{end}}</label><button type="submit" disabled>{{if eq .Language "fa"}}جایگزینی رمز{{else}}Replace password{{end}}</button></fieldset></form>
-<form data-admin-form data-operation="revoke" action="/admin/identity/revoke" method="post" hidden><fieldset><legend>{{if eq .Language "fa"}}لغو همهٔ نشست‌ها{{else}}Revoke all sessions{{end}}</legend><input name="id" type="hidden"><label><input type="checkbox" data-confirm required>{{if eq .Language "fa"}}خروج همهٔ نشست‌های این حساب را تأیید می‌کنم.{{else}}I confirm invalidation of every session for this account.{{end}}</label><button type="submit" disabled>{{if eq .Language "fa"}}لغو نشست‌ها{{else}}Revoke sessions{{end}}</button></fieldset></form>
+<div id="account" hidden><h3>{{if eq .Language "fa"}}حساب انتخاب` + "\u200c" + `شده{{else}}Selected account{{end}}</h3><dl><dt>ID</dt><dd><bdi id="account-id" dir="ltr"></bdi></dd><dt>{{if eq .Language "fa"}}ورود{{else}}Login{{end}}</dt><dd><bdi id="account-login" dir="auto"></bdi></dd><dt>{{if eq .Language "fa"}}وضعیت{{else}}Status{{end}}</dt><dd id="account-enabled"></dd><dt>{{if eq .Language "fa"}}بازبینی{{else}}Revision{{end}}</dt><dd><bdi id="account-revision" dir="ltr"></bdi></dd></dl>
+<form data-admin-form data-operation="enabled" action="/admin/identity/enabled" method="post" hidden><fieldset><legend>{{if eq .Language "fa"}}تغییر وضعیت و لغو نشست` + "\u200c" + `ها{{else}}Change status and revoke sessions{{end}}</legend><input name="id" type="hidden"><input name="revision" type="hidden"><label><input type="checkbox" name="enabled">{{if eq .Language "fa"}}فعال{{else}}Enabled{{end}}</label><label><input type="checkbox" data-confirm required>{{if eq .Language "fa"}}تغییر وضعیت و خروج همهٔ نشست` + "\u200c" + `های این حساب را تأیید می` + "\u200c" + `کنم.{{else}}I confirm the status change and invalidation of every session for this account.{{end}}</label><button type="submit" disabled>{{if eq .Language "fa"}}اعمال وضعیت{{else}}Apply status{{end}}</button></fieldset></form>
+<form data-admin-form data-operation="password" action="/admin/identity/password" method="post" hidden><fieldset><legend>{{if eq .Language "fa"}}جایگزینی رمز و لغو نشست` + "\u200c" + `ها{{else}}Replace password and revoke sessions{{end}}</legend><input name="id" type="hidden"><input name="revision" type="hidden"><label for="replacement-password">{{if eq .Language "fa"}}رمز جدید{{else}}New password{{end}}</label><input id="replacement-password" name="password" type="password" autocomplete="new-password" maxlength="512" required><label><input type="checkbox" data-confirm required>{{if eq .Language "fa"}}جایگزینی رمز و خروج همهٔ نشست` + "\u200c" + `ها را تأیید می` + "\u200c" + `کنم.{{else}}I confirm password replacement and invalidation of every session.{{end}}</label><button type="submit" disabled>{{if eq .Language "fa"}}جایگزینی رمز{{else}}Replace password{{end}}</button></fieldset></form>
+<form data-admin-form data-operation="revoke" action="/admin/identity/revoke" method="post" hidden><fieldset><legend>{{if eq .Language "fa"}}لغو همهٔ نشست` + "\u200c" + `ها{{else}}Revoke all sessions{{end}}</legend><input name="id" type="hidden"><label><input type="checkbox" data-confirm required>{{if eq .Language "fa"}}خروج همهٔ نشست` + "\u200c" + `های این حساب را تأیید می` + "\u200c" + `کنم.{{else}}I confirm invalidation of every session for this account.{{end}}</label><button type="submit" disabled>{{if eq .Language "fa"}}لغو نشست` + "\u200c" + `ها{{else}}Revoke sessions{{end}}</button></fieldset></form>
 <p id="account-no-actions" hidden>{{if eq .Language "fa"}}هیچ تغییر مدیریتی برای این حساب مجاز نیست.{{else}}No management changes are permitted for this account.{{end}}</p></div></section>
 {{end}}`))

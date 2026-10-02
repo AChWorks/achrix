@@ -36,9 +36,13 @@
     if (typeof value.csrf !== "string") throw new Error("unavailable");
     return value.csrf; // Request-local only; never a URL, DOM attribute or Web Storage.
   }
-  document.querySelectorAll("form[data-admin-form],form[data-login]").forEach(form => {
-    form.querySelectorAll("input[type=password]").forEach(input => input.addEventListener("input", () => input.setCustomValidity("")));
-    form.addEventListener("submit", async event => {
+  document.addEventListener("input", event => {
+    if (event.target.matches("input[type=password]")) event.target.setCustomValidity("");
+  });
+  // Delegation also covers bounded Module-owned rows added after a list response.
+  document.addEventListener("submit", async event => {
+      const form = event.target;
+      if (!form.matches("form[data-admin-form],form[data-login]")) return;
       event.preventDefault(); if (busy) return;
       for (const input of form.querySelectorAll("input[type=password]")) {
         const minimum = form.hasAttribute("data-login") ? 1 : 15;
@@ -56,18 +60,32 @@
       let sent = false;
       try {
         const login = form.hasAttribute("data-login");
-        const headers = {"Content-Type":"application/json", "X-Identity-Request":"1"};
+        const headers = {"X-Identity-Request":"1"};
         if (!login) headers["X-CSRF-Token"] = await csrf(controller.signal);
-        const body = {};
-        for (const control of form.elements) {
-          if (!control.name || control.disabled || control.hasAttribute("data-confirm")) continue;
-          body[control.name] = control.type === "checkbox" ? control.checked : control.hasAttribute("data-number") ? Number(control.value) : control.value;
+        let body;
+        if (form.hasAttribute("data-multipart")) {
+          const file = form.querySelector("input[type=file]");
+          if (!file || file.files.length !== 1 || file.files[0].size === 0) throw {status:400};
+          if (file.files[0].size > 10 * 1024 * 1024) throw {status:413};
+          body = new FormData(form); // The browser supplies the multipart boundary.
+        } else {
+          headers["Content-Type"] = "application/json";
+          const values = {};
+          for (const control of form.elements) {
+            if (!control.name || control.disabled || control.hasAttribute("data-confirm")) continue;
+            values[control.name] = control.type === "checkbox" ? control.checked : control.value;
+          }
+          body = JSON.stringify(values); // int64 revisions remain exact decimal strings.
         }
         sent = true;
-        const response = await fetch(form.action, {method:"POST",credentials:"same-origin",headers,body:JSON.stringify(body),cache:"no-store",signal:controller.signal});
+        const response = await fetch(form.action, {method:"POST",credentials:"same-origin",headers,body,cache:"no-store",signal:controller.signal});
         // Clear credentials even when the response is lost; never render them back.
         form.querySelectorAll("input[type=password]").forEach(input => { input.value = ""; });
-        if (!response.ok) throw {status:response.status};
+        if (!response.ok) {
+          let detail;
+          try { detail = await response.json(); } catch (_) { /* Safe status remains useful. */ }
+          throw {status:response.status, detail};
+        }
         const result = response.status === 204 ? {} : await response.json();
         if (login) { location.assign("/admin/"); return; }
         announce(text("Completed. Check the displayed result before another change.", "انجام شد. پیش از تغییر بعدی نتیجهٔ نمایش‌داده‌شده را بررسی کنید."));
@@ -78,9 +96,8 @@
         const uncertain = sent && !form.hasAttribute("data-read-only") && !messages[error.status];
         const knownMessage = error.status === 404 && form.dataset.operation === "lookup-login" ? text("No account matched the exact login. Check the retained login before another creation attempt.", "حسابی با این شناسهٔ ورود دقیق پیدا نشد. پیش از ایجاد دوباره شناسهٔ نگه‌داشته‌شده را بررسی کنید.") : messages[error.status];
         announce(knownMessage || (uncertain ? unknown : text("The service is unavailable. A read can be attempted again; no change was submitted.", "سرویس در دسترس نیست. می‌توانید بررسی را دوباره انجام دهید؛ تغییری ارسال نشد.")),true);
-        form.dispatchEvent(new CustomEvent("admin:failure",{detail:{status:error.status||0,unknown:uncertain},bubbles:true}));
+        form.dispatchEvent(new CustomEvent("admin:failure",{detail:{status:error.status||0,unknown:uncertain,server:error.detail},bubbles:true}));
       } finally { clearTimeout(timer); lock(false); }
-    });
   });
   const logout = document.getElementById("logout");
   if (logout) logout.addEventListener("click", async () => {

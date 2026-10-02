@@ -131,23 +131,43 @@ func TestKnownAccountMutationPreconditionsPreserved(t *testing.T) {
 	for _, tt := range []struct {
 		path, body, operation string
 		revision              int64
-	}{{"/enabled", `{"id":"ABCDEFGHIJKLMNOPQRSTUVWXYZ","revision":3,"enabled":false}`, "enabled", 3}, {"/password", `{"id":"ABCDEFGHIJKLMNOPQRSTUVWXYZ","revision":4,"password":"new long password for test"}`, "password", 4}, {"/revoke", `{"id":"ABCDEFGHIJKLMNOPQRSTUVWXYZ"}`, "revoke", 4}} {
+	}{{"/enabled", `{"id":"ABCDEFGHIJKLMNOPQRSTUVWXYZ","revision":"3","enabled":false}`, "enabled", 3}, {"/password", `{"id":"ABCDEFGHIJKLMNOPQRSTUVWXYZ","revision":"4","password":"new long password for test"}`, "password", 4}, {"/revoke", `{"id":"ABCDEFGHIJKLMNOPQRSTUVWXYZ"}`, "revoke", 4}} {
 		w := post(t, s, tt.path, tt.body)
 		if w.Code != 204 || s.calls[len(s.calls)-1] != tt.operation || s.actor != "operator" || s.target != "ABCDEFGHIJKLMNOPQRSTUVWXYZ" || s.revision != tt.revision {
 			t.Fatal("mutation contract changed", w.Code, s.calls, s.revision)
 		}
 	}
 	before := len(s.calls)
-	w := post(t, s, "/enabled", `{"id":"ABCDEFGHIJKLMNOPQRSTUVWXYZ","revision":3}`)
+	w := post(t, s, "/enabled", `{"id":"ABCDEFGHIJKLMNOPQRSTUVWXYZ","revision":"3"}`)
 	if w.Code != 400 || len(s.calls) != before {
 		t.Fatal("absent enabled treated as false")
 	}
 	// RevokeAll has no revision precondition; a claimed revision is rejected.
-	w = post(t, s, "/revoke", `{"id":"ABCDEFGHIJKLMNOPQRSTUVWXYZ","revision":4}`)
+	w = post(t, s, "/revoke", `{"id":"ABCDEFGHIJKLMNOPQRSTUVWXYZ","revision":"4"}`)
 	if w.Code != 400 || len(s.calls) != before {
 		t.Fatal("RevokeAll silently claims CAS")
 	}
 }
+func TestRevisionAboveJavaScriptPrecisionRoundTripsExactly(t *testing.T) {
+	const revision int64 = 9007199254740993
+	s := &accountStub{account: identity.Account{ID: "ABCDEFGHIJKLMNOPQRSTUVWXYZ", Login: "known.login", Revision: revision}}
+	w := post(t, s, "/lookup", `{"id":"ABCDEFGHIJKLMNOPQRSTUVWXYZ"}`)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"revision":"9007199254740993"`) {
+		t.Fatal("revision response lost exact decimal identity", w.Body.String())
+	}
+	w = post(t, s, "/enabled", `{"id":"ABCDEFGHIJKLMNOPQRSTUVWXYZ","revision":"9007199254740993","enabled":true}`)
+	if w.Code != 204 || s.revision != revision {
+		t.Fatal("revision request lost int64 precondition", w.Code, s.revision)
+	}
+	for _, body := range []string{`{"id":"ABCDEFGHIJKLMNOPQRSTUVWXYZ","revision":9007199254740993,"enabled":true}`, `{"id":"ABCDEFGHIJKLMNOPQRSTUVWXYZ","revision":"9223372036854775808","enabled":true}`, `{"id":"ABCDEFGHIJKLMNOPQRSTUVWXYZ","revision":"9e15","enabled":true}`} {
+		before := len(s.calls)
+		w = post(t, s, "/enabled", body)
+		if w.Code != 400 || len(s.calls) != before {
+			t.Fatal("unsafe numeric/overflow revision reached domain", w.Code)
+		}
+	}
+}
+
 func TestPresentationRemainsModuleOwnedAndLocalized(t *testing.T) {
 	if _, err := New(nil); !errors.Is(err, shell.ErrConfiguration) {
 		t.Fatal("nil service accepted")
