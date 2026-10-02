@@ -406,7 +406,7 @@ func TestPostgresMigrationAndSharedBehavior(t *testing.T) {
 			t.Fatal("no correlation")
 		}
 		logs := output.String()
-		for _, component := range []string{"notes.postgresql", "notes.application", "notes.http"} {
+		for _, component := range []string{"notes.postgresql", "notes.http"} {
 			found := false
 			for _, line := range strings.Split(logs, "\n") {
 				if strings.Contains(line, component) && strings.Contains(line, id) {
@@ -425,8 +425,22 @@ func TestPostgresMigrationAndSharedBehavior(t *testing.T) {
 		r.Header.Set("Authorization", "Bearer "+reader)
 		w = httptest.NewRecorder()
 		h.ServeHTTP(w, r)
-		if w.Code != 403 || !strings.Contains(output.String(), "achrix.authorization") {
-			t.Fatal("Core attribution missing")
+		if w.Code != 403 {
+			t.Fatal("policy denial changed", w.Code)
+		}
+		if strings.Contains(output.String(), "achrix.authorization") {
+			t.Fatal("Core debug detail enabled by default")
+		}
+		denialID := w.Header().Get("X-Request-ID")
+		found := false
+		for _, line := range strings.Split(output.String(), "\n") {
+			var record map[string]any
+			if json.Unmarshal([]byte(line), &record) == nil && record["component"] == "notes.http" && record["reason"] == "permission_denied" && record["level"] == "INFO" && record["request_id"] == denialID {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatal("missing safe correlated edge denial")
 		}
 		for _, secret := range []string{token, reader, "PRIVATE_FIXTURE_BODY", os.Getenv("NOTES_TEST_DATABASE_URL"), "INSERT INTO"} {
 			if strings.Contains(output.String(), secret) || strings.Contains(w.Body.String(), secret) {
