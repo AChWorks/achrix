@@ -88,7 +88,7 @@ func (s *Store) Ready(ctx context.Context) error {
 		return domain.ErrUnavailable
 	}
 	if err := s.pool.Ping(ctx); err != nil {
-		s.logFailure(ctx, "readiness", err)
+		s.logger.WarnContext(ctx, "database readiness degraded", "component", "notes.postgresql", "operation", "readiness", "reason", FailureReason(err))
 		return domain.ErrUnavailable
 	}
 	return nil

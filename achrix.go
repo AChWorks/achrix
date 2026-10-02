@@ -248,7 +248,7 @@ func (a *Application) Start(parent context.Context) error {
 			err = ctx.Err()
 		}
 		if err != nil {
-			a.config.Logger.ErrorContext(parent, "lifecycle failure", "component", c.descriptor.ID, "phase", "start", "reason", reason(err))
+			a.config.Logger.ErrorContext(parent, "lifecycle failure", "component", c.descriptor.ID, "operation", "start", "reason", reason(err))
 			startErr = fmt.Errorf("component %s start: %w", c.descriptor.ID, err)
 			break
 		}
@@ -263,7 +263,7 @@ func (a *Application) Start(parent context.Context) error {
 	if startErr == nil {
 		a.state = "ready"
 		a.mu.Unlock()
-		a.config.Logger.InfoContext(parent, "application ready", "component", "achrix.core", "core_version", Version())
+		a.config.Logger.InfoContext(parent, "application ready", "component", "achrix.core", "operation", "start", "core_version", Version())
 		return nil
 	}
 	a.state = "stopping"
@@ -336,7 +336,7 @@ func (a *Application) stop(ctx context.Context, components []component) error {
 	for i := len(components) - 1; i >= 0; i-- {
 		c := components[i]
 		if err := c.module.Stop(ctx); err != nil {
-			a.config.Logger.ErrorContext(ctx, "lifecycle failure", "component", c.descriptor.ID, "phase", "stop", "reason", reason(err))
+			a.config.Logger.ErrorContext(ctx, "lifecycle failure", "component", c.descriptor.ID, "operation", "stop", "reason", reason(err))
 			errs = append(errs, fmt.Errorf("component %s stop: %w", c.descriptor.ID, err))
 		}
 	}
@@ -345,6 +345,7 @@ func (a *Application) stop(ctx context.Context, components []component) error {
 
 // Ready checks only composed local dependencies, under the caller's deadline.
 // It never waits behind lifecycle callbacks and is canceled/drained by Shutdown.
+// Repeated probe detail is DEBUG; the product owns bounded operational signals.
 func (a *Application) Ready(ctx context.Context) error {
 	ctx, finish, err := a.admit(ctx)
 	if err != nil {
@@ -360,7 +361,7 @@ func (a *Application) Ready(ctx context.Context) error {
 			return canceled
 		}
 		if err != nil {
-			a.config.Logger.WarnContext(ctx, "readiness failure", "component", c.descriptor.ID, "reason", reason(err))
+			a.config.Logger.DebugContext(ctx, "readiness failure", "component", c.descriptor.ID, "operation", "ready", "reason", reason(err))
 			return fmt.Errorf("component %s readiness: %w", c.descriptor.ID, err)
 		}
 	}
@@ -374,6 +375,7 @@ func (a *Application) Ready(ctx context.Context) error {
 // Callers must supply a deadline. Shutdown cancels/drains admitted policy work;
 // calls outside ready return ErrNotReady without invoking policy. Policy errors
 // never expose raw provider text: only explicit ErrDenied is a permission denial.
+// Core emits safe DEBUG detail; the product owns bounded denial/failure visibility.
 func (a *Application) Authorize(ctx context.Context, p Principal, capability, resource string) error {
 	ctx, finish, err := a.admit(ctx)
 	if err != nil {
@@ -387,7 +389,7 @@ func (a *Application) Authorize(ctx context.Context, p Principal, capability, re
 		return err
 	}
 	if _, ok := a.capabilities[capability]; !ok || p == "" {
-		a.config.Logger.WarnContext(ctx, "authorization denied", "component", "achrix.authorization", "reason", "unknown_capability_or_principal")
+		a.config.Logger.DebugContext(ctx, "authorization denied", "component", "achrix.authorization", "operation", "authorize", "reason", "unknown_capability_or_principal")
 		return ErrDenied
 	}
 	err = a.policy.Authorize(ctx, p, capability, resource)
@@ -395,11 +397,11 @@ func (a *Application) Authorize(ctx context.Context, p Principal, capability, re
 		return canceled
 	}
 	if errors.Is(err, ErrDenied) {
-		a.config.Logger.WarnContext(ctx, "authorization denied", "component", "achrix.authorization", "reason", "policy_denied")
+		a.config.Logger.DebugContext(ctx, "authorization denied", "component", "achrix.authorization", "operation", "authorize", "reason", "policy_denied")
 		return ErrDenied
 	}
 	if err != nil {
-		a.config.Logger.WarnContext(ctx, "authorization unavailable", "component", "achrix.authorization", "reason", "policy_evaluation_failed")
+		a.config.Logger.DebugContext(ctx, "authorization unavailable", "component", "achrix.authorization", "operation", "authorize", "reason", "policy_evaluation_failed")
 		return ErrAuthorizationUnavailable
 	}
 	return nil

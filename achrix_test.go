@@ -712,3 +712,52 @@ func awaitResult(t *testing.T, result <-chan error) error {
 		return nil
 	}
 }
+
+func TestRuntimeDiagnosticsOwnedByProduct(t *testing.T) {
+	for _, level := range []slog.Level{slog.LevelInfo, slog.LevelDebug} {
+		t.Run(level.String(), func(t *testing.T) {
+			var logs strings.Builder
+			cfg := config()
+			cfg.Logger = slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: level}))
+			policyErr := error(achrix.ErrDenied)
+			a, err := achrix.New(cfg, achrix.PolicyFunc(func(context.Context, achrix.Principal, string, string) error { return policyErr }), &module{d: descriptor("notes"), ready: func(context.Context) error { return errors.New("PRIVATE_DEPENDENCY") }})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := a.Start(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			defer a.Shutdown(context.Background())
+			logs.Reset()
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			for range 100 {
+				for _, input := range []struct{ principal, capability string }{{"", "notes.read"}, {"PRIVATE_PRINCIPAL", "PRIVATE_CAPABILITY"}, {"PRIVATE_PRINCIPAL", "notes.read"}} {
+					if err := a.Authorize(ctx, achrix.Principal(input.principal), input.capability, "PRIVATE_RESOURCE"); !errors.Is(err, achrix.ErrDenied) {
+						t.Fatal("denial no longer fail-closed", err)
+					}
+				}
+				if err := a.Ready(ctx); err == nil {
+					t.Fatal("failed dependency became ready")
+				}
+			}
+			policyErr = errors.New("PRIVATE_POLICY_ERROR")
+			if err := a.Authorize(ctx, "PRIVATE_PRINCIPAL", "notes.read", "PRIVATE_RESOURCE"); !errors.Is(err, achrix.ErrAuthorizationUnavailable) {
+				t.Fatal(err)
+			}
+			if level == slog.LevelInfo && logs.Len() != 0 {
+				t.Fatal("per-call diagnostic escaped production threshold", logs.String())
+			}
+			if level == slog.LevelDebug {
+				for _, field := range []string{`"level":"DEBUG"`, `"operation":"authorize"`, `"operation":"ready"`, `"component":"notes"`, `"reason":"policy_denied"`, `"reason":"unknown_capability_or_principal"`, `"reason":"policy_evaluation_failed"`} {
+					if !strings.Contains(logs.String(), field) {
+						t.Fatal("missing safe diagnostic category", field)
+					}
+				}
+			}
+			if strings.Contains(logs.String(), "PRIVATE_") {
+				t.Fatal("private runtime data logged")
+			}
+		})
+	}
+}
