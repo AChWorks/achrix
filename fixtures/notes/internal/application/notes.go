@@ -42,7 +42,7 @@ func (s *Service) Create(parent context.Context, p achrix.Principal, text string
 	}
 	n := domain.Note{ID: rand.Text(), Text: text, CreatedAt: time.Now().UTC()}
 	if err := s.repository.Save(ctx, n); err != nil {
-		s.logger.ErrorContext(ctx, "note write failed", "component", "notes.application", "operation", Create, "reason", "persistence_failure")
+		s.logger.DebugContext(ctx, "note write failed", "component", "notes.application", "operation", Create, "reason", "persistence_failure")
 		return domain.Note{}, domain.ErrUnavailable
 	}
 	return n, nil

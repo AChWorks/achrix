@@ -36,7 +36,7 @@ func New(app *achrix.Application, s *application.Service, writer, reader string,
 		ctx, cancel := context.WithTimeout(r.Context(), 200*time.Millisecond)
 		defer cancel()
 		if err := app.Ready(ctx); err != nil {
-			reply(w, 503, map[string]string{"error": "not_ready"})
+			a.failure(w, r, 503, "not_ready")
 			return
 		}
 		reply(w, 200, map[string]string{"status": "ready"})
@@ -52,7 +52,7 @@ func New(app *achrix.Application, s *application.Service, writer, reader string,
 		case a.slots <- struct{}{}:
 			defer func() { <-a.slots }()
 		default:
-			reply(w, 503, map[string]string{"error": "busy"})
+			a.failure(w, r, 503, "busy")
 			return
 		}
 		mux.ServeHTTP(w, r)
@@ -130,7 +130,11 @@ func (a *Adapter) applicationError(w http.ResponseWriter, r *http.Request, err e
 	}
 }
 func (a *Adapter) failure(w http.ResponseWriter, r *http.Request, status int, code string) {
-	a.logger.WarnContext(r.Context(), "request failed", "component", "notes.http", "status", status, "reason", code)
+	level, message := slog.LevelInfo, "request rejected"
+	if status >= 500 {
+		level, message = slog.LevelWarn, "request failed"
+	}
+	a.logger.Log(r.Context(), level, message, "component", "notes.http", "operation", "request", "status", status, "reason", code)
 	reply(w, status, map[string]string{"error": code})
 }
 func reply(w http.ResponseWriter, status int, value any) {
