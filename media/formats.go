@@ -142,8 +142,10 @@ func (m *Module) validateUpload(ctx context.Context, f *os.File, filename string
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return "", 0, 0, err
 	}
+	// The historical image path reads only eight bytes before its explicit
+	// decoder. A disabled opaque extension never reaches MIME recognition.
 	var prefix [recognitionBytes]byte
-	n, err := io.ReadFull(contextReader{ctx, f}, prefix[:])
+	n, err := io.ReadFull(contextReader{ctx, f}, prefix[:8])
 	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 		return "", 0, 0, err
 	}
@@ -166,15 +168,19 @@ func (m *Module) validateUpload(ctx context.Context, f *os.File, filename string
 		return m.validate(ctx, f)
 	}
 	extension := strings.TrimPrefix(strings.ToLower(filepath.Ext(filename)), ".")
-	detected, _, err := mime.ParseMediaType(mimetype.Detect(raw).String())
-	if err != nil {
-		return "", 0, 0, ErrInput
-	}
 	for _, spec := range supportedFormats {
-		if !m.allows(spec.format.MIME) || !slices.Contains(spec.format.Extensions, extension) {
+		if spec.format.MIME == "image/png" || spec.format.MIME == "image/jpeg" ||
+			!m.allows(spec.format.MIME) || !slices.Contains(spec.format.Extensions, extension) {
 			continue
 		}
-		if detected != spec.format.MIME && !slices.Contains(spec.detected, detected) {
+		// The dependency sees at most our fixed prefix even if another package
+		// changes its process-global limit; Media never mutates that limit.
+		more, err := io.ReadFull(contextReader{ctx, f}, prefix[n:])
+		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+			return "", 0, 0, err
+		}
+		detected, _, err := mime.ParseMediaType(mimetype.Detect(prefix[:n+more]).String())
+		if err != nil || detected != spec.format.MIME && !slices.Contains(spec.detected, detected) {
 			return "", 0, 0, ErrInput
 		}
 		if spec.format.MIME == "text/plain" || spec.format.MIME == "text/csv" {

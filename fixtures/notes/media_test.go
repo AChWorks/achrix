@@ -2,6 +2,7 @@
 package notes_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -9,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -163,7 +165,7 @@ func composeMediaConsumer(t *testing.T, restore bool) *mediaConsumer {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mediaModule, err := media.NewPostgres(dsn, media.Config{StorageRoot: root}, logger)
+	mediaModule, err := media.NewPostgres(dsn, media.Config{StorageRoot: root, AllowedMIMEs: []string{"image/png", "image/jpeg", "application/pdf", "application/zip"}}, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,6 +216,46 @@ func mediaImageBytes(t *testing.T, format string) []byte {
 		t.Fatal(err)
 	}
 	return b.Bytes()
+}
+
+// Complete synthetic files shared by the independent consumer and browser
+// fixture. No third-party document or opaque signature stub is used.
+func mediaDocumentBytes(t testing.TB) map[string][]byte {
+	t.Helper()
+	var pdf bytes.Buffer
+	pdf.WriteString("%PDF-1.4\n")
+	objects := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	}
+	content := "BT /F1 12 Tf 20 50 Td (AChrix owned media fixture) Tj ET\n"
+	objects = append(objects, fmt.Sprintf("<< /Length %d >>\nstream\n%sendstream", len(content), content))
+	offsets := []int{0}
+	for i, object := range objects {
+		offsets = append(offsets, pdf.Len())
+		fmt.Fprintf(&pdf, "%d 0 obj\n%s\nendobj\n", i+1, object)
+	}
+	xref := pdf.Len()
+	fmt.Fprintf(&pdf, "xref\n0 %d\n0000000000 65535 f \n", len(offsets))
+	for _, offset := range offsets[1:] {
+		fmt.Fprintf(&pdf, "%010d 00000 n \n", offset)
+	}
+	fmt.Fprintf(&pdf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(offsets), xref)
+	var bundle bytes.Buffer
+	archive := zip.NewWriter(&bundle)
+	file, err := archive.CreateHeader(&zip.FileHeader{Name: "fixture.txt", Method: zip.Store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Write([]byte("AChrix owned media fixture\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return map[string][]byte{"document.pdf": pdf.Bytes(), "bundle.zip": bundle.Bytes()}
 }
 
 // This test-only product ingress uses the existing Identity cookie/CSRF boundary.
@@ -403,7 +445,11 @@ func mediaDeadline() (context.Context, context.CancelFunc) {
 func mediaCheckAsset(t *testing.T, a media.Asset, name, format string, body []byte) {
 	t.Helper()
 	sum := sha256.Sum256(body)
-	if a.ID == "" || len(a.ID) != 26 || a.Filename != name || a.MIME != "image/"+format || a.Size != int64(len(body)) || a.Width != 31 || a.Height != 17 || a.SHA256 != hex.EncodeToString(sum[:]) || a.Revision < 1 || a.State != "ready" || a.CreatedAt.IsZero() || a.CreatedAt.Location() != time.UTC {
+	mimeType, width, height := format, 0, 0
+	if format == "png" || format == "jpeg" {
+		mimeType, width, height = "image/"+format, 31, 17
+	}
+	if a.ID == "" || len(a.ID) != 26 || a.Filename != name || a.MIME != mimeType || a.Size != int64(len(body)) || a.Width != width || a.Height != height || a.SHA256 != hex.EncodeToString(sum[:]) || a.Revision < 1 || a.State != "ready" || a.CreatedAt.IsZero() || a.CreatedAt.Location() != time.UTC {
 		t.Fatalf("public Media metadata differs: ID=%q MIME=%q Size=%d dimensions=%dx%d Revision=%d State=%q CreatedAt=%s location=%s", a.ID, a.MIME, a.Size, a.Width, a.Height, a.Revision, a.State, a.CreatedAt.Format(time.RFC3339Nano), a.CreatedAt.Location())
 	}
 }
@@ -513,10 +559,38 @@ func TestMediaPublicConsumer(t *testing.T) {
 	}
 	mediaCheckAsset(t, jpegAsset, retainedJPEGName, "jpeg", jpegBody)
 	f.policy.grant(jpegAsset.ID, false)
+	retained := []media.Asset{pngAsset, jpegAsset}
+	for _, name := range []string{"document.pdf", "bundle.zip"} {
+		body := mediaDocumentBytes(t)[name]
+		created := mediaHTTPSRequest(t, server, "POST", "/media/upload", origin, csrf, name, body, cookie, 0)
+		var asset media.Asset
+		if created.status != http.StatusCreated || json.Unmarshal(created.body, &asset) != nil {
+			t.Fatal("opaque HTTPS upload", name, created.status)
+		}
+		mimeType := "application/pdf"
+		if name == "bundle.zip" {
+			mimeType = "application/zip"
+		}
+		mediaCheckAsset(t, asset, name, mimeType, body)
+		if got := mediaHTTPSRequest(t, server, "GET", "/media/"+asset.ID, origin, "", "", nil, cookie, 0); got.status != http.StatusForbidden || len(got.body) != 0 {
+			t.Fatal("opaque upload widened byte permission")
+		}
+		f.policy.grant(asset.ID, false)
+		status, err := f.service.Status(ctx, actor, asset.ID)
+		if err != nil || status != asset {
+			t.Fatal("opaque public status", err)
+		}
+		read := mediaHTTPSRequest(t, server, "GET", "/media/"+asset.ID, origin, "", "", nil, cookie, 0)
+		disposition, parameters, err := mime.ParseMediaType(read.headers.Get("Content-Disposition"))
+		if read.status != http.StatusOK || !bytes.Equal(read.body, body) || read.headers.Get("Content-Type") != mimeType || read.headers.Get("X-Content-Type-Options") != "nosniff" || read.headers.Get("Cache-Control") != "private, no-store" || err != nil || disposition != "attachment" || parameters["filename"] != name {
+			t.Fatal("opaque private attachment headers/original bytes", name)
+		}
+		retained = append(retained, asset)
+	}
 	// Public immutable-ID keyset traversal is bounded, distinct and terminates.
 	seen := make(map[string]bool)
 	cursor := ""
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 5; i++ {
 		page, err := f.service.List(ctx, actor, cursor, 1)
 		if err != nil || len(page.Assets) != 1 || seen[page.Assets[0].ID] {
 			t.Fatal("bounded Media list contract failed")
@@ -530,7 +604,7 @@ func TestMediaPublicConsumer(t *testing.T) {
 		}
 		cursor = page.NextCursor
 	}
-	if len(seen) != 2 || !seen[pngAsset.ID] || !seen[jpegAsset.ID] {
+	if len(seen) != 4 || !seen[pngAsset.ID] || !seen[jpegAsset.ID] {
 		t.Fatal("retained Media listing differs")
 	}
 	for _, limit := range []int{0, 101} {
@@ -584,7 +658,7 @@ func TestMediaPublicConsumer(t *testing.T) {
 	if _, err := f.service.Read(canceled, actor, pngAsset.ID, &canceledBytes); !errors.Is(err, context.Canceled) || canceledBytes.Len() != 0 {
 		t.Fatal("canceled read produced bytes", err)
 	}
-	for _, a := range []media.Asset{pngAsset, jpegAsset} {
+	for _, a := range retained {
 		w := &mediaBoundedWriter{}
 		found, err := f.service.Read(ctx, actor, a.ID, w)
 		if err != nil || found.ID != a.ID || w.Len() != int(a.Size) || w.largest > 32<<10 {
@@ -599,7 +673,7 @@ func TestMediaPublicConsumer(t *testing.T) {
 		t.Fatal("authorized bounded explicit reconciliation failed", err)
 	}
 	page, err := f.service.List(ctx, actor, "", 100)
-	if err != nil || len(page.Assets) != 2 {
+	if err != nil || len(page.Assets) != 4 {
 		t.Fatal("failed upload/delete polluted retained ready collection")
 	}
 	// Close ingress first, then stop all participating Modules before native
@@ -627,19 +701,18 @@ func TestMediaTrustedRestore(t *testing.T) {
 	f.policy.account.Store(string(session.Principal))
 	f.policy.list.Store(true)
 	page, err := f.service.List(ctx, session.Principal, "", 100)
-	if err != nil || len(page.Assets) != 2 || page.NextCursor != "" {
+	if err != nil || len(page.Assets) != 4 || page.NextCursor != "" {
 		t.Fatal("coherently restored Media collection differs")
 	}
-	bodies := map[string][]byte{retainedPNGName: mediaImageBytes(t, "png"), retainedJPEGName: mediaImageBytes(t, "jpeg")}
+	bodies := mediaDocumentBytes(t)
+	bodies[retainedPNGName] = mediaImageBytes(t, "png")
+	bodies[retainedJPEGName] = mediaImageBytes(t, "jpeg")
 	for _, asset := range page.Assets {
 		body, ok := bodies[asset.Filename]
 		if !ok {
 			t.Fatal("unexpected retained asset")
 		}
-		format := "png"
-		if asset.Filename == retainedJPEGName {
-			format = "jpeg"
-		}
+		format := map[string]string{retainedPNGName: "png", retainedJPEGName: "jpeg", "document.pdf": "application/pdf", "bundle.zip": "application/zip"}[asset.Filename]
 		mediaCheckAsset(t, asset, asset.Filename, format, body)
 		if _, err := f.service.Status(ctx, session.Principal, asset.ID); !errors.Is(err, achrix.ErrDenied) {
 			t.Fatal("restored collection discovery widened byte rights")
