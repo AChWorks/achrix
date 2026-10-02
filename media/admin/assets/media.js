@@ -53,6 +53,8 @@
  document.addEventListener("admin:failure",event => {
   if (event.target.dataset.operation==="upload") {
    file.value="";
+   // A previous upload ID cannot identify this newly failed/unknown operation.
+   statusID.value=""; statusResult.textContent="";
    const id=event.detail.server && event.detail.server.asset_id;
    if (typeof id==="string" && idPattern.test(id)) statusID.value=id;
    if (event.detail.unknown) {
