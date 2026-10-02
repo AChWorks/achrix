@@ -54,7 +54,7 @@ func New(dsn string, logger *slog.Logger) (*Store, error) {
 }
 
 func (s *Store) Descriptor() achrix.Descriptor {
-	return achrix.Descriptor{ID: "example.notes", Version: ModuleVersion, Provides: []achrix.Capability{{ID: application.Create, Version: 1}, {ID: application.Read, Version: 1}}, Requires: []achrix.Capability{{ID: "achrix.authorization", Version: 1}}}
+	return achrix.Descriptor{ID: "example.notes", Version: ModuleVersion, Provides: []achrix.Capability{{ID: application.Create, Version: 1}, {ID: application.Read, Version: 1}}, Requires: []achrix.Capability{{ID: "achrix.authorization", Version: 2}}}
 }
 func (s *Store) Start(ctx context.Context) error {
 	s.mu.Lock()

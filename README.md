@@ -28,6 +28,8 @@ go get github.com/AChWorks/achrix@v0.1.0
 
 [GitHub Releases](https://github.com/AChWorks/achrix/releases) owns availability and exact source/artifact evidence. The [initial release line](docs/lifecycle/lifecycle-and-compatibility.md#initial-development-release-line) defines compatibility/support limits; use the [public contracts](docs/architecture/contracts-and-interfaces.md#initial-go-public-surface) to compose trusted Modules. Products own their account/profile meaning, permission policy, domain/business semantics and data; accepted reusable Modules such as Identity may supply shared authentication/session mechanics when their real implementation is delivered. [Internationalization](docs/web/seo-and-semantic-web.md#internationalization-and-directionality) covers multilingual and RTL/LTR evolution; the current v0.1.0 Foundation release includes no reusable UI/Identity/Search/Settings/Recovery implementation.
 
+Current source develops the next **v0.2** contract, including optional capability metadata and bounded authorization/shutdown with Core authorization ABI 2. It is not a v0.1-compatible patch or a published v0.2 release; read the [migration notes](docs/lifecycle/lifecycle-and-compatibility.md#next-development-minor-migration) before adopting that source.
+
 ## Licensing and participation
 
 First-party repository content defaults to [MPL-2.0](LICENSE). Compatible independent commercial/third-party Modules are possible; any Apache-2.0 SDK designation requires an explicit artifact scope. [Licensing](docs/legal/licensing.md) owns the details.

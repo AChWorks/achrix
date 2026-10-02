@@ -32,7 +32,7 @@ func ValidateText(text string) error {
 var opaqueID = regexp.MustCompile(`^[A-Z2-7]{26,64}$`)
 
 func ValidateID(id string) error {
-	if !opaqueID.MatchString(id) {
+	if len(id) < 26 || len(id) > 64 || !opaqueID.MatchString(id) {
 		return ErrInvalid
 	}
 	return nil

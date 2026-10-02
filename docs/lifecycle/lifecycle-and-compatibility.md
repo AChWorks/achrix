@@ -66,6 +66,21 @@ Keep patches within `v0.1.x` compatible with the published public surface/capabi
 
 Consumers pin a reviewed version, inspect the dependency/contract diff, validate affected behavior and deliberately rebuild/deploy. A source release does not activate an installed product. Whole-product recovery, remote deployment, administrator update UI, Multi-Site and Gateway Bridge remain unproven; Issue #19 and their owning product/module decisions retain those obligations. Unicode storage is proven by Notes, while localized UI/RTL rendering follows [Web](../web/seo-and-semantic-web.md#internationalization-and-directionality) when a real renderer exists.
 
+## Next development minor migration
+
+The Core correction in [Issue #44](https://github.com/AChWorks/achrix/issues/44) targets **v0.2**, not a compatible v0.1 patch. This section describes source migration; it does not announce publication or retire the maintained v0.1 line. GitHub Releases remains publication authority. The published v0.1 tag/source is unchanged.
+
+Consumers updating to this source must:
+
+- Replace positional `Descriptor` literals with keyed fields; its new `Optional []Capability` field changes struct shape. Nil/empty optional declarations keep required-only composition. A present optional provider participates in startup ordering and must match its exact ABI; absence is valid.
+- Update requirements for Core's `achrix.authorization` from ABI 1 to **ABI 2** after adopting the new authorization contract. Revision 2 cannot silently satisfy revision 1. Unrelated compatible Module capabilities retain their ABI revisions; implementation release numbers do not imply a capability ABI bump.
+- Return `ErrDenied` (or a wrapped form) for explicit Policy denial. A generic policy error now means safe, inspectable `ErrAuthorizationUnavailable`, not 403. Actual operation cancellation/deadline remains a context error. Map unavailable separately; do not automatically replay a domain mutation.
+- Supply a deadline for every `Authorize` and `Ready` call, including direct callers. Missing authorization deadlines fail closed as unavailable without policy evaluation. Policy implementations must be concurrent-safe and promptly honor cancellation.
+- Stop ingress and drain product-owned domain work before shutdown. Core cancels/drains its admitted readiness/policy callbacks before stopping Modules, within one shutdown waiting/drain/stop budget. A wait/drain timeout leaves admission closed; retry Shutdown only to complete cleanup after callbacks return. Startup cancellation uses fresh bounded partial-start cleanup. Completed cleanup's result is retained; repeated calls do not retry failed Module stops. Arbitrary noncompliant in-process code still requires operator/process recovery.
+- Cheaply bound/normalize untrusted resource references at the owning Application before expensive policy work without reading authorization-sensitive state. The Notes fixture now preflights its opaque ID; create's explicit global scope remains valid.
+
+The isolated Notes consumer pins the reviewed source revision through ordinary Go module resolution/checksums; its schema and immutable migration are unchanged. Validate the complete candidate with Core race tests and isolated PostgreSQL/consumer/restore proof. Future release preparation must use the exact integrated source and separately verified Lifecycle evidence; #44 itself requires integration only.
+
 ## Source release preparation and verification
 
 `.github/workflows/release.yml` is a manually dispatched preparer on canonical trusted `main`. It requires successful existing `baseline` evidence for that exact source, exports its tracked tree, and produces a source archive, SPDX source inventory, source/run identity metadata, checksums and signed build/SBOM bundles. The archive includes repository documentation, fixtures and tooling; it ships no product executable or vendored dependency implementation. The SBOM catalogs that exported source/declared manifest scope, not a deployed runtime or tested compatibility for every listed dependency.
