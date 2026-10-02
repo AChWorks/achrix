@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MPL-2.0
 """Author synthetic complete fixtures; tooling is optional and never imported by Media.
-Run with TOOL_PACKAGES (Pillow), FFMPEG, SOFFICE and SEVENZIP paths. LibreOffice
+Run with PYTHONPATH (Pillow), FFMPEG, SOFFICE and SEVENZIP paths. LibreOffice
 must be an isolated, authenticated extraction; only the XML authored here is opened.
 """
 import os, pathlib, struct, subprocess, tempfile, zipfile, zlib
