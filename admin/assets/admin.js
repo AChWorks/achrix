@@ -30,7 +30,9 @@
     const logout = document.getElementById("logout"); if (logout) logout.disabled = on;
   }
   async function csrf(signal) {
-    const response = await fetch(authPath + "/csrf", {credentials:"same-origin",headers:{"X-Identity-Request":"1"},cache:"no-store",signal});
+    // Identity requires origin evidence on this GET; the document otherwise sends
+    // no referrer. Supply only our origin root, never the current page or query.
+    const response = await fetch(authPath + "/csrf", {mode:"same-origin",redirect:"error",referrer:location.origin+"/",referrerPolicy:"same-origin",credentials:"same-origin",headers:{"X-Identity-Request":"1"},cache:"no-store",signal});
     if (!response.ok) throw {status:response.status};
     const value = await response.json();
     if (typeof value.csrf !== "string") throw new Error("unavailable");
