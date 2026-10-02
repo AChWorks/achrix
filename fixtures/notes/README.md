@@ -72,6 +72,12 @@ Before the update command, set `ACHRIX_VERSION` to the exact reviewed commit/ver
 
 Review the update/manifest diff, run `scripts/validate.sh` from the root, then rebuild your consumer. Deployment remains a separate owner action; changing Foundation source does not update an existing executable. Never edit a published migration in place or equate reverting source with reverting data. Later real-product update/recovery work remains gated by Issue #19.
 
+## Private Media proving composition
+
+The test-only `media_test.go` composes public Core, Identity, Audit and Media contracts from the normal Foundation dependency. The product fixture owns explicit create/list/exact-object-read/delete/reconcile grants, trusted same-origin HTTPS ingress and synthetic accounts. Uploading or authenticating grants no object rights; collection discovery and byte access remain distinct. PNG/JPEG originals, Persian filenames including ZWNJ, bounded keyset listing, conditional delete and safe rejected input exercise the real private image library. This fixture does not define content relationships, public serving, roles or a production storage profile.
+
+Full validation uses separate private Media test/consumer/restore databases and mode-0700 storage roots. It stops ingress and all participating Modules before native PostgreSQL capture and a manifested private asset archive, verifies paths/types/checksums before extraction, compares the whole participating metadata/ledger datasets and reads retained images through the restored public services. A missing or corrupt asset must fail before destination bytes are written. The tested coherent quiesced local capture has no live snapshot, off-host delivery or RPO/RTO guarantee. See [Media](../../media/README.md) for lifecycle, resource and recovery obligations; #19 and #49 remain separately gated.
+
 ## Licensing
 
 First-party files, including this fixture and its public Foundation contracts, are MPL-2.0. No Apache SDK exists. Preserve [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md) with distributed executables and provide matching covered source for the identified build/Foundation pin. Dependencies retain their own compatible terms. Normal dependency use neither creates an official badge nor changes product data ownership.
