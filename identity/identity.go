@@ -41,6 +41,9 @@ const (
 // authentication. A product must explicitly permit Authentication for this
 // principal; it conveys no account identity or product permission.
 const PublicPrincipal achrix.Principal = "achrix.identity.public"
+
+// ModuleVersion is the unpublished source-line label, not the packaged build version.
+// Deprecated: use Module.Descriptor().Version for component/update/recovery identity.
 const ModuleVersion = "0.2.0-development"
 
 // Config is instance-owned. No environment/global configuration is read by Identity.

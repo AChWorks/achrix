@@ -165,5 +165,22 @@ assert b['module']=='0.1.0-fixture' and len(b['migrations']['001_notes'])==64
 assert b['build']!='development'
 print('Verified composed build:',json.dumps(b,sort_keys=True))
 PY
+# Test binaries omit dependency build information on some Go toolchains. Build
+# a real consumer executable so the runtime component identity is compared with
+# the independently resolved, checksum-verified tag/pseudo-version above.
+go build -trimpath -o "$validation_root/componentidentity" ./cmd/componentidentity
+"$validation_root/componentidentity" > "$validation_root/components.json"
+python3 - "$validation_root/foundation.json" "$validation_root/components.json" <<'PYCOMPONENT'
+import json,sys
+m=json.load(open(sys.argv[1])); b=json.load(open(sys.argv[2]))
+assert b['foundation']==m['Version']
+components={d['ID']: d for d in b['components']}
+assert len(b['components'])==2 and set(components)=={'achrix.identity','achrix.audit'}
+for d in components.values():
+    assert d['Version']==m['Version'], 'packaged component version drift: '+d['ID']
+    assert all(c['Version']==1 for c in d['Provides'])
+    assert all(c['Version']==(2 if c['ID']=='achrix.authorization' else 1) for c in d['Requires'])
+print('Verified packaged component versions:',json.dumps(b,sort_keys=True))
+PYCOMPONENT
 sha256sum "$validation_root/notes"
 echo 'Foundation, isolated consumer, Identity/Audit, PostgreSQL, migrations, authorization and retained dataset restore verified'
