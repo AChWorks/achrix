@@ -2,7 +2,7 @@
 
 ## Ownership and versions
 
-Published Foundation dependencies, independently distributed Modules and product releases have immutable version/build identity tied to source and documented compatibility. Use semantic versions where accurate; a version number alone is not the contract.
+Published Foundation dependencies, independently distributed Modules and product releases have immutable version/build identity tied to source and documented compatibility. Use semantic versions where accurate; a version number alone is not the contract. Component metadata follows the [source-backed implementation-version contract](../architecture/contracts-and-interfaces.md#capability-abi-and-composition); retain the exact product/artifact/source identity alongside any development or replacement label.
 
 Products own activation/deployment. Foundation/Modules provide their compatibility information, migrations and recovery constraints. A dependency update may affect runtime, enabled Modules, configuration/defaults, schema/data and Application/API/event contracts. Do not update products by manually recopying runtime source or build a universal updater before multiple real distributions share the mechanics.
 

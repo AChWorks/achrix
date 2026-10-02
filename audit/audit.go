@@ -19,11 +19,14 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// ModuleVersion is the unpublished source-line label, not the packaged build version.
+// Deprecated: use Module.Descriptor().Version for component/update/recovery identity.
+const ModuleVersion = "0.2.0-development"
+
 const (
-	ModuleVersion = "0.2.0-development"
-	Append        = "achrix.audit.append"
-	Query         = "achrix.audit.query"
-	Export        = "achrix.audit.export"
+	Append = "achrix.audit.append"
+	Query  = "achrix.audit.query"
+	Export = "achrix.audit.export"
 )
 
 var (
