@@ -12,7 +12,9 @@ Generated bootstrap files may transfer to the product. Shared runtime is not an 
 
 Compose trusted Modules at build time through public contracts into a pinned, tested product executable/image. Core and internal Modules in one Go module share its dependency version; separately packaged Modules have their own versions.
 
-Installing/updating code selects or builds a compatible product artifact. An already packaged optional Module may be enabled/disabled through configuration under dependencies, authorization and data-lifecycle rules. Code presence, activation, permission and data removal are distinct.
+Installing/updating code selects or builds a compatible product artifact. An already packaged optional Module may be enabled/disabled through explicit product configuration under dependencies, authorization and data-lifecycle rules. **Code/artifact presence, advertised capability availability, runtime activation/resource acquisition, authorization and durable state/data removal are distinct.** Enabling a path never grants permission by itself; disabling one never implies uninstalling code, reversing migrations or deleting retained data.
+
+The same distinction applies inside a Module when a real optional subsystem is justified. Product composition may omit that subsystem, or include its code while keeping its runtime capability inactive, according to the owning Module's explicit supported contract. If omitting a subsystem from the build materially avoids dependencies or artifact/resource cost, use an explicit package/composition boundary where useful; this does not by itself create a new Module, Go module, repository or service.
 
 Standard distributions offer prepared compatible combinations; custom compositions use a trusted publisher/build pipeline. A UI may identify a Core/Module change while applying a coherent product artifact. [Lifecycle](../lifecycle/lifecycle-and-compatibility.md#product-update-experience) owns the simple user-facing update flow and activation/recovery. External integration remains available under Module model; Core needs no source/archive loader, marketplace or build service.
 

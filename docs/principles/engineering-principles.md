@@ -17,6 +17,7 @@ Compare fit, integration effort, authorization/data ownership, failure behavior,
 - Create ports/contracts only for credible variation, ownership, security, composition or testing value. Do not hide every standard library/framework facility.
 - Separate business semantics from infrastructure coupling where it materially helps testing, reuse or future change. Let infrastructure use useful vendor capabilities.
 - A Module boundary does not itself require a package, repository, process, service or database. Choose distribution separately using [Consumption](../architecture/consumption-and-packaging.md).
+- Choose granularity from coherent ownership plus meaningful dependency/resource/lifecycle/security/state boundaries. One Module may expose a bounded set of related public Capabilities; do not create a Module or Capability for every method, screen or internal package, and do not promote an optional subsystem to a separate distribution merely because it can be split.
 - Prefer reversible choices under uncertainty. A clean cheap local boundary can preserve a likely future option without implementing it now; avoid scattered hardcoded single-tenant, all-users-at-once or one-language assumptions where a small choice keeps evolution feasible. Do not build tenancy/feature-flag/translation systems without a product need.
 - Duplication can still be cheaper than a premature shared abstraction when reuse/semantics are genuinely uncertain. Do not use the reuse-first rule to force product-specific behavior into a generic Module.
 - Introduce infrastructure or service extraction for actual correctness, failure isolation, security, resource, ownership or operating needs. Benchmarks of an isolated runtime are insufficient.
@@ -27,6 +28,7 @@ Compare fit, integration effort, authorization/data ownership, failure behavior,
 Professional quality is a property of the code and behavior, not the presence of a framework, scanner or code generator.
 
 - Prefer explicit, idiomatic Go and obvious control flow over clever reflection/metaprogramming, hidden global state or framework magic. Use advanced mechanisms only when their concrete value exceeds the extra review/debugging cost.
+- Keep Module activation/composition explicit and instance-owned. Hidden registration, ambient dependency discovery and global service locators are not AChrix defaults; active capabilities should normally fail fast during bounded startup, while lazy/deferred initialization must earn its extra failure/lifecycle complexity from real measured value.
 - Keep types, functions and packages cohesive around one ownership/invariant boundary. Refactor because responsibilities or reasoning became unclear, not to satisfy arbitrary file/function-length targets or create empty layers.
 - Choose names and public contracts that communicate domain intent. Comments explain invariants, lifecycle/concurrency/security constraints and non-obvious tradeoffs; do not narrate syntax.
 - Expected, input and operational failures return stable/inspectable errors at the right boundary. Panic is reserved for genuinely impossible programmer/build-time invariants, never untrusted input, dependency failure or recoverable runtime state.
@@ -44,6 +46,7 @@ The supported way should also be the easiest way.
 - Keep focused development feedback fast; use the broader exact-candidate proof only where the changed surface needs it.
 - Configuration validates early, has safe meaningful defaults where possible and reports actionable errors without leaking secrets.
 - Public APIs/examples should let a product compose a Module without internal imports, boilerplate-heavy framework ceremony or copy/paste runtime source.
+- Learn from mature frameworks through coherent conventions, useful defaults and tooling that remove repeated consumer friction; developer experience alone does not justify re-owning commodity infrastructure or introducing hidden framework magic. Generalize only after real consumers show the repeated path.
 - Changes that make common development/debugging materially harder need an explicit offsetting correctness/security/operational reason.
 - Optimize for repository discoverability: a new contributor or capable AI should be able to locate the owner, public contract, validation path and operational evidence without relying on chat history.
 
