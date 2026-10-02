@@ -1,21 +1,23 @@
 // SPDX-License-Identifier: MPL-2.0
-package identity
+package audit
 
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"embed"
 	"encoding/hex"
 	"errors"
 	"log/slog"
 	"net"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/AChWorks/achrix"
-	"github.com/AChWorks/achrix/audit"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,15 +26,13 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
-const migrationLock int64 = 61873542136
+const migrationLock int64 = 61873542145
 
-// Module owns its pool and schema. Products explicitly compose it, install the
-// immutable migration, and wire a Service after constructing their Application.
-// Stop closes admission, cancels/drains owned DB work, then closes the pool.
+// Module owns only Audit storage, pool, admission and lifecycle. Identity's
+// declared dependency orders its shutdown drain before this Module is stopped.
 type Module struct {
 	config         Config
 	dbConfig       *pgxpool.Config
-	passwords      *passwords
 	mu             sync.Mutex
 	pool           *pgxpool.Pool
 	state          string
@@ -45,22 +45,13 @@ type Module struct {
 	lastDiagnostic atomic.Int64
 }
 
-// NewPostgres validates configuration without network/database side effects.
-// Runtime DSN sources remain product-owned. Unix/loopback is the measured dev
-// profile; a remote DSN requires certificate-verified TLS and earns no support
-// claim merely by passing this defensive preflight.
 func NewPostgres(dsn string, config Config, logger *slog.Logger) (*Module, error) {
-	c, err := config.defaults()
+	c, err := databaseConfig(dsn)
 	if err != nil {
 		return nil, err
 	}
-	db, err := databaseConfig(dsn)
-	if err != nil {
-		return nil, err
-	}
-	h, err := newPasswords(c.Password, c.HashConcurrency)
-	if err != nil {
-		return nil, err
+	if config.Now == nil {
+		config.Now = time.Now
 	}
 	if logger == nil {
 		logger = slog.Default()
@@ -68,8 +59,9 @@ func NewPostgres(dsn string, config Config, logger *slog.Logger) (*Module, error
 	work, cancel := context.WithCancel(context.Background())
 	drained := make(chan struct{})
 	close(drained)
-	return &Module{config: c, dbConfig: db, passwords: h, state: "new", work: work, cancel: cancel, drained: drained, logger: logger}, nil
+	return &Module{config: config, dbConfig: c, state: "new", work: work, cancel: cancel, drained: drained, logger: logger}, nil
 }
+
 func databaseConfig(dsn string) (*pgxpool.Config, error) {
 	if len(dsn) == 0 || len(dsn) > 4096 {
 		return nil, ErrConfiguration
@@ -78,16 +70,11 @@ func databaseConfig(dsn string) (*pgxpool.Config, error) {
 	if err != nil {
 		return nil, ErrConfiguration
 	}
-	local := func(host string) bool {
-		ip := net.ParseIP(host)
-		return strings.HasPrefix(host, "/") || host == "localhost" || (ip != nil && ip.IsLoopback())
-	}
-	if !local(c.ConnConfig.Host) && (c.ConnConfig.TLSConfig == nil || c.ConnConfig.TLSConfig.InsecureSkipVerify || c.ConnConfig.TLSConfig.ServerName == "") {
+	if !safeHostTLS(c.ConnConfig.Host, c.ConnConfig.TLSConfig) {
 		return nil, ErrConfiguration
 	}
-	// No plaintext fallback for a remote connection.
-	for _, f := range c.ConnConfig.Fallbacks {
-		if !local(f.Host) && (f.TLSConfig == nil || f.TLSConfig.InsecureSkipVerify || f.TLSConfig.ServerName == "") {
+	for _, fallback := range c.ConnConfig.Fallbacks {
+		if fallback == nil || !safeHostTLS(fallback.Host, fallback.TLSConfig) {
 			return nil, ErrConfiguration
 		}
 	}
@@ -95,20 +82,60 @@ func databaseConfig(dsn string) (*pgxpool.Config, error) {
 	c.MinConns = 0
 	c.MinIdleConns = 0
 	c.HealthCheckPeriod = time.Minute
+	c.MaxConnLifetime = time.Hour
 	c.MaxConnLifetimeJitter = 0
+	c.MaxConnIdleTime = time.Minute
 	c.PingTimeout = time.Second
 	c.ConnConfig.ConnectTimeout = time.Second
-	c.MaxConnIdleTime = time.Minute
-	c.MaxConnLifetime = time.Hour
 	return c, nil
 }
+func safeHostTLS(host string, c *tls.Config) bool {
+	ip := net.ParseIP(host)
+	local := strings.HasPrefix(host, "/") || host == "localhost" || ip != nil && ip.IsLoopback()
+	return local || c != nil && !c.InsecureSkipVerify && c.ServerName != ""
+}
+
+// Driver-generated callbacks have no public comparable semantic identity. When
+// one is configured (e.g. target_session_attrs), require the same source string
+// as well as all normalized settings; this conservatively rejects ambiguity.
+func sameDatabase(a, b *pgx.ConnConfig) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	if a.Host != b.Host || a.Port != b.Port || a.Database != b.Database || a.User != b.User || a.Password != b.Password || a.KerberosSrvName != b.KerberosSrvName || a.KerberosSpn != b.KerberosSpn || a.SSLNegotiation != b.SSLNegotiation || a.ChannelBinding != b.ChannelBinding || a.RequireAuth != b.RequireAuth || a.MinProtocolVersion != b.MinProtocolVersion || a.MaxProtocolVersion != b.MaxProtocolVersion || a.MaxProtocolMessageBodyLen != b.MaxProtocolMessageBodyLen || a.StatementCacheCapacity != b.StatementCacheCapacity || a.DescriptionCacheCapacity != b.DescriptionCacheCapacity || a.DefaultQueryExecMode != b.DefaultQueryExecMode || !reflect.DeepEqual(a.RuntimeParams, b.RuntimeParams) || !sameTLS(a.TLSConfig, b.TLSConfig) || len(a.Fallbacks) != len(b.Fallbacks) {
+		return false
+	}
+	if (a.ValidateConnect != nil || b.ValidateConnect != nil || a.OAuthTokenProvider != nil || b.OAuthTokenProvider != nil) && a.ConnString() != b.ConnString() {
+		return false
+	}
+	for i, f := range a.Fallbacks {
+		g := b.Fallbacks[i]
+		if f == nil || g == nil || f.Host != g.Host || f.Port != g.Port || !sameTLS(f.TLSConfig, g.TLSConfig) {
+			return false
+		}
+	}
+	return true
+}
+func samePool(a, b *x509.CertPool) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Equal(b)
+}
+func sameTLS(a, b *tls.Config) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.ServerName == b.ServerName && a.InsecureSkipVerify == b.InsecureSkipVerify && a.MinVersion == b.MinVersion && a.MaxVersion == b.MaxVersion && samePool(a.RootCAs, b.RootCAs) && samePool(a.ClientCAs, b.ClientCAs) && reflect.DeepEqual(a.Certificates, b.Certificates) && reflect.DeepEqual(a.NextProtos, b.NextProtos) && reflect.DeepEqual(a.CipherSuites, b.CipherSuites) && reflect.DeepEqual(a.CurvePreferences, b.CurvePreferences) && (a.VerifyPeerCertificate == nil) == (b.VerifyPeerCertificate == nil) && (a.VerifyConnection == nil) == (b.VerifyConnection == nil)
+}
+
 func (m *Module) Descriptor() achrix.Descriptor {
-	return achrix.Descriptor{ID: "achrix.identity", Version: ModuleVersion, Provides: []achrix.Capability{{ID: AccountCreate, Version: 1}, {ID: AccountRead, Version: 1}, {ID: CredentialSet, Version: 1}, {ID: PasswordChange, Version: 1}, {ID: AccountSetEnabled, Version: 1}, {ID: SessionRevokeAll, Version: 1}, {ID: Authentication, Version: 1}}, Requires: []achrix.Capability{{ID: "achrix.authorization", Version: 2}, {ID: audit.Append, Version: 1}}}
+	return achrix.Descriptor{ID: "achrix.audit", Version: ModuleVersion, Provides: []achrix.Capability{{ID: Append, Version: 1}, {ID: Query, Version: 1}, {ID: Export, Version: 1}}, Requires: []achrix.Capability{{ID: "achrix.authorization", Version: 2}}}
 }
 func (m *Module) now() time.Time { return m.config.Now().UTC().Truncate(time.Microsecond) }
 func (m *Module) Start(ctx context.Context) error {
-	if err := ctx.Err(); err != nil {
-		return err
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 	if _, ok := ctx.Deadline(); !ok {
 		return ErrConfiguration
@@ -134,12 +161,25 @@ func (m *Module) Start(ctx context.Context) error {
 		return m.failure(ctx, "start", err)
 	}
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.state != "starting" || ctx.Err() != nil {
-		m.mu.Unlock()
 		return ErrUnavailable
 	}
 	m.state = "ready"
-	m.mu.Unlock()
+	return nil
+}
+func (m *Module) admission(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if _, ok := ctx.Deadline(); !ok {
+		return ErrConfiguration
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.state != "ready" || m.pool == nil {
+		return ErrUnavailable
+	}
 	return nil
 }
 func (m *Module) acquire(parent context.Context) (context.Context, *pgxpool.Pool, func(), error) {
@@ -211,14 +251,10 @@ func (m *Module) Stop(ctx context.Context) error {
 	return nil
 }
 
-// FailureCount is fixed-cardinality operational evidence, not durable Audit.
-// Expected denial/authentication/invalid/limited traffic does not emit logs.
+// FailureCount counts bounded operational failures, not durable accountability.
 func (m *Module) FailureCount() uint64 { return m.failures.Load() }
 func (m *Module) failure(ctx context.Context, operation string, err error) error {
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return err
-	}
-	if errors.Is(err, ErrAuthentication) || errors.Is(err, ErrConflict) || errors.Is(err, ErrLimited) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrConflict) || errors.Is(err, ErrLimited) || errors.Is(err, ErrInput) || errors.Is(err, ErrUnavailable) {
 		return err
 	}
 	m.failures.Add(1)
@@ -226,19 +262,19 @@ func (m *Module) failure(ctx context.Context, operation string, err error) error
 	last := m.lastDiagnostic.Load()
 	if now-last >= int64(time.Second) && m.lastDiagnostic.CompareAndSwap(last, now) {
 		reason := "database_failure"
-		var pe *pgconn.PgError
-		if errors.As(err, &pe) && len(pe.Code) == 5 {
+		var p *pgconn.PgError
+		if errors.As(err, &p) && len(p.Code) == 5 {
 			valid := true
-			for _, r := range pe.Code {
+			for _, r := range p.Code {
 				if !(r >= '0' && r <= '9' || r >= 'A' && r <= 'Z') {
 					valid = false
 				}
 			}
 			if valid {
-				reason = "sqlstate_" + pe.Code
+				reason = "sqlstate_" + p.Code
 			}
 		}
-		m.logger.ErrorContext(ctx, "identity operation failed", "component", "achrix.identity", "operation", operation, "reason", reason)
+		m.logger.ErrorContext(ctx, "audit operation failed", "component", "achrix.audit", "operation", operation, "reason", reason)
 	}
 	return ErrUnavailable
 }
@@ -253,9 +289,9 @@ func (m *Module) transaction(parent context.Context, operation string, fn func(c
 		return m.failure(ctx, operation, err)
 	}
 	defer func() {
-		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		c, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		defer cancel()
-		_ = tx.Rollback(cleanup)
+		_ = tx.Rollback(c)
 	}()
 	if err = fn(ctx, tx); err == nil {
 		err = ctx.Err()
@@ -280,40 +316,41 @@ func checkEnvironment(ctx context.Context, p *pgxpool.Pool) error {
 	return nil
 }
 func migrationIdentity() (string, string) {
-	b, _ := migrations.ReadFile("migrations/001_identity.sql")
+	b, _ := migrations.ReadFile("migrations/001_audit.sql")
 	sum := sha256.Sum256(b)
 	return string(b), hex.EncodeToString(sum[:])
 }
 func checkSchema(ctx context.Context, p *pgxpool.Pool) error {
 	_, checksum := migrationIdentity()
 	var got string
-	var count int
-	if err := p.QueryRow(ctx, "SELECT count(*),min(checksum) FROM identity.schema_migrations").Scan(&count, &got); err != nil {
+	var count, version int
+	if err := p.QueryRow(ctx, "SELECT count(*),min(checksum),min(version) FROM audit.schema_migrations").Scan(&count, &got, &version); err != nil {
 		return err
 	}
-	if count != 1 || got != checksum {
+	if count != 1 || version != 1 || got != checksum {
 		return ErrConfiguration
 	}
-	var version int
-	if err := p.QueryRow(ctx, "SELECT version FROM identity.schema_migrations").Scan(&version); err != nil {
-		return err
-	}
-	if version != 1 {
-		return ErrConfiguration
-	}
-	// Resolve every runtime column before admitting traffic. PostgreSQL constraints
-	// own value invariants; migration identity detects unsupported schema versions.
-	rows, err := p.Query(ctx, "SELECT a.id,a.login,a.enabled,a.revision,a.created_at,c.password_hash,c.changed_at,s.token_hash,s.csrf_hash,s.expires_at,s.created_at,s.account_revision FROM identity.accounts a JOIN identity.credentials c ON c.account_id=a.id JOIN identity.sessions s ON s.account_id=a.id WHERE false")
+	rows, err := p.Query(ctx, "SELECT seq,id,actor,action,target,authority,outcome,occurred_at FROM audit.records WHERE false")
 	if err != nil {
 		return err
 	}
 	rows.Close()
-	return rows.Err()
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	var triggerCount int
+	err = p.QueryRow(ctx, "SELECT count(*) FROM pg_trigger WHERE tgrelid='audit.records'::regclass AND NOT tgisinternal AND tgenabled='O' AND tgname IN ('records_reject_mutation','records_reject_truncate')").Scan(&triggerCount)
+	if err != nil {
+		return err
+	}
+	if triggerCount != 2 {
+		return ErrConfiguration
+	}
+	return nil
 }
 
-// Migrate is an explicit product installation action, never part of Start.
-// The schema and migration identity commit together. A repeated installation
-// verifies the immutable checksum rather than reinterpreting existing data.
+// Migrate is explicit installation into the product-owned database. Runtime
+// startup checks identity and never executes migration SQL.
 func Migrate(ctx context.Context, dsn string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -338,15 +375,15 @@ func Migrate(ctx context.Context, dsn string) error {
 		return ErrUnavailable
 	}
 	defer func() {
-		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		c, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		defer cancel()
-		_ = tx.Rollback(cleanup)
+		_ = tx.Rollback(c)
 	}()
 	if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", migrationLock); err != nil {
 		return ErrUnavailable
 	}
 	var exists bool
-	if err = tx.QueryRow(ctx, "SELECT to_regnamespace('identity') IS NOT NULL").Scan(&exists); err != nil {
+	if err = tx.QueryRow(ctx, "SELECT to_regnamespace('audit') IS NOT NULL").Scan(&exists); err != nil {
 		return ErrUnavailable
 	}
 	if exists {
@@ -360,7 +397,7 @@ func Migrate(ctx context.Context, dsn string) error {
 	if _, err = tx.Exec(ctx, sql); err != nil {
 		return ErrUnavailable
 	}
-	if _, err = tx.Exec(ctx, "INSERT INTO identity.schema_migrations(version,checksum) VALUES(1,$1)", checksum); err != nil {
+	if _, err = tx.Exec(ctx, "INSERT INTO audit.schema_migrations(version,checksum) VALUES(1,$1)", checksum); err != nil {
 		return ErrUnavailable
 	}
 	if err = tx.Commit(ctx); err != nil {

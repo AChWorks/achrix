@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/AChWorks/achrix"
+	"github.com/AChWorks/achrix/audit"
 )
 
 const CookieName = "__Host-AChrix-Session"
@@ -47,7 +48,7 @@ func (w *Web) secureRequest(r *http.Request) bool {
 	if r.TLS == nil || r.Host != w.host {
 		return false
 	}
-	if r.Header.Get("Origin") != "" {
+	if _, present := r.Header["Origin"]; present {
 		return len(r.Header.Values("Origin")) == 1 && r.Header.Get("Origin") == w.origin
 	}
 	referer := r.Header.Get("Referer")
@@ -83,7 +84,7 @@ func (w *Web) clearCookie(writer http.ResponseWriter) {
 // synchronizer token and exact Origin/Referer. It returns no authority: the owning
 // product Application operation must still authorize this principal.
 func (w *Web) AuthenticateRequest(r *http.Request, mutation bool) (achrix.Principal, error) {
-	if r.TLS == nil || r.Host != w.host {
+	if r.TLS == nil || r.Host != w.host || r.URL.RawQuery != "" {
 		return "", ErrAuthentication
 	}
 	value, err := cookieToken(r)
@@ -102,6 +103,8 @@ func (w *Web) serve(writer http.ResponseWriter, r *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	writer.Header().Set("Content-Type", "application/json")
 	writer.Header().Set("X-Content-Type-Options", "nosniff")
+	writer.Header().Set("Referrer-Policy", "no-referrer")
+	writer.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
 	if !w.secureRequest(r) || r.URL.RawQuery != "" {
 		webError(writer, ErrAuthentication)
 		return
@@ -215,7 +218,7 @@ func (w *Web) serve(writer http.ResponseWriter, r *http.Request) {
 	}
 }
 func decodeWeb(writer http.ResponseWriter, r *http.Request, target any) error {
-	if r.Header.Get("Content-Type") != "application/json" {
+	if len(r.Header.Values("Content-Type")) != 1 || r.Header.Get("Content-Type") != "application/json" {
 		return ErrInvalid
 	}
 	r.Body = http.MaxBytesReader(writer, r.Body, 2048)
@@ -241,11 +244,13 @@ func webSession(writer http.ResponseWriter, s Session) {
 func webError(writer http.ResponseWriter, err error) {
 	code, status := "authentication_failed", http.StatusUnauthorized
 	switch {
+	case errors.Is(err, achrix.ErrDenied):
+		code, status = "permission_denied", http.StatusForbidden
 	case errors.Is(err, ErrLimited):
 		code, status = "authentication_limited", http.StatusTooManyRequests
 	case errors.Is(err, ErrInvalid):
 		code, status = "invalid_input", http.StatusBadRequest
-	case errors.Is(err, ErrUnavailable) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled):
+	case errors.Is(err, ErrUnavailable) || errors.Is(err, audit.ErrUnavailable) || errors.Is(err, achrix.ErrAuthorizationUnavailable) || errors.Is(err, achrix.ErrNotReady) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled):
 		code, status = "authentication_unavailable", http.StatusServiceUnavailable
 	case errors.Is(err, ErrConflict):
 		code, status = "authentication_conflict", http.StatusConflict

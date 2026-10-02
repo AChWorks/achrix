@@ -10,10 +10,12 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
+	"log/slog"
 	"regexp"
 	"time"
 
 	"github.com/AChWorks/achrix"
+	"github.com/AChWorks/achrix/audit"
 )
 
 var (
@@ -27,11 +29,18 @@ var (
 
 const (
 	AccountCreate     = "achrix.identity.account.create"
+	AccountRead       = "achrix.identity.account.read"
 	CredentialSet     = "achrix.identity.credential.set"
 	AccountSetEnabled = "achrix.identity.account.set-enabled"
 	SessionRevokeAll  = "achrix.identity.session.revoke-all"
 	Authentication    = "achrix.identity.authenticate"
+	PasswordChange    = "achrix.identity.credential.change"
 )
+
+// PublicPrincipal is only the principal for attempting credential/session
+// authentication. A product must explicitly permit Authentication for this
+// principal; it conveys no account identity or product permission.
+const PublicPrincipal achrix.Principal = "achrix.identity.public"
 const ModuleVersion = "0.2.0-development"
 
 // Config is instance-owned. No environment/global configuration is read by Identity.
@@ -78,13 +87,15 @@ type credential struct {
 // Session secrets are returned only to the trusted adapter on issue/rotation.
 // Default formatting deliberately redacts secret fields.
 type Session struct {
-	Principal   achrix.Principal
-	Token, CSRF string
-	ExpiresAt   time.Time
+	Principal achrix.Principal
+	Token     string `json:"-"`
+	CSRF      string `json:"-"`
+	ExpiresAt time.Time
 }
 
-func (s Session) String() string   { return "identity.Session[redacted]" }
-func (s Session) GoString() string { return s.String() }
+func (s Session) String() string       { return "identity.Session[redacted]" }
+func (s Session) GoString() string     { return s.String() }
+func (s Session) LogValue() slog.Value { return slog.StringValue(s.String()) }
 
 type sessionRecord struct {
 	accountID           string
@@ -96,7 +107,8 @@ type sessionRecord struct {
 var loginSyntax = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 var accountSyntax = regexp.MustCompile(`^[A-Z2-7]{26}$`)
 
-func validID(id string) bool { return accountSyntax.MatchString(id) }
+func validID(id string) bool       { return len(id) == 26 && accountSyntax.MatchString(id) }
+func validLogin(login string) bool { return len(login) <= 64 && loginSyntax.MatchString(login) }
 func token() string {
 	var b [32]byte
 	_, _ = rand.Read(b[:])
@@ -114,7 +126,7 @@ func tokenHash(value string) ([]byte, error) {
 	return sum[:], nil
 }
 func newSession(id string, revision int64, expires time.Time) (Session, sessionRecord) {
-	s := Session{Principal: achrix.Principal(id), Token: token(), CSRF: token(), ExpiresAt: expires.UTC()}
+	s := Session{Principal: achrix.Principal(id), Token: token(), CSRF: token(), ExpiresAt: expires.UTC().Truncate(time.Microsecond)}
 	th, _ := tokenHash(s.Token)
 	ch, _ := tokenHash(s.CSRF)
 	return s, sessionRecord{id, th, ch, s.ExpiresAt, revision}
@@ -130,13 +142,17 @@ func csrfMatches(expected []byte, value string) bool {
 type Service struct {
 	app    *achrix.Application
 	module *Module
+	audit  *audit.Service
 }
 
-func NewService(app *achrix.Application, module *Module) (*Service, error) {
-	if app == nil || module == nil {
+func NewService(app *achrix.Application, module *Module, accountability *audit.Service) (*Service, error) {
+	if app == nil || module == nil || accountability == nil {
 		return nil, ErrConfiguration
 	}
-	return &Service{app, module}, nil
+	if err := accountability.CheckDatabase(module.dbConfig.ConnConfig.ConnString()); err != nil {
+		return nil, ErrConfiguration
+	}
+	return &Service{app: app, module: module, audit: accountability}, nil
 }
 func (s *Service) authorize(ctx context.Context, p achrix.Principal, capability, id string) error {
 	if id != "" && !validID(id) {
@@ -144,21 +160,50 @@ func (s *Service) authorize(ctx context.Context, p achrix.Principal, capability,
 	}
 	return s.app.Authorize(ctx, p, capability, id)
 }
+func (s *Service) admission(ctx context.Context) error {
+	return s.app.Authorize(ctx, PublicPrincipal, Authentication, "")
+}
+func (s *Service) prepare(ctx context.Context, actor achrix.Principal, action, capability, id string) (audit.Prepared, error) {
+	return s.audit.Prepare(ctx, actor, audit.Event{Action: action, Target: id, Authority: capability, Outcome: "succeeded"})
+}
+
+// Account is an authorized status/revision read for subsequent conditional
+// management operations. It never returns credential or session material.
+func (s *Service) Account(parent context.Context, actor achrix.Principal, id string) (Account, error) {
+	ctx, cancel := context.WithTimeout(parent, time.Second)
+	defer cancel()
+	if !validID(id) {
+		return Account{}, ErrInvalid
+	}
+	if err := s.authorize(ctx, actor, AccountRead, id); err != nil {
+		return Account{}, err
+	}
+	return s.module.account(ctx, id)
+}
 func (s *Service) CreateAccount(parent context.Context, actor achrix.Principal, login, password string) (Account, error) {
 	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
-	if !loginSyntax.MatchString(login) {
+	if !validLogin(login) {
 		return Account{}, ErrInvalid
 	}
 	if err := s.authorize(ctx, actor, AccountCreate, ""); err != nil {
+		return Account{}, err
+	}
+	ctx, _, finish, err := s.module.acquire(ctx)
+	if err != nil {
+		return Account{}, err
+	}
+	defer finish()
+	a := Account{ID: rand.Text(), Login: login, Enabled: true, Revision: 1}
+	prepared, err := s.prepare(ctx, actor, "identity.account.create", AccountCreate, a.ID)
+	if err != nil {
 		return Account{}, err
 	}
 	hash, err := s.module.passwords.hash(ctx, password)
 	if err != nil {
 		return Account{}, err
 	}
-	a := Account{ID: rand.Text(), Login: login, Enabled: true, Revision: 1}
-	err = s.module.create(ctx, actor, a, hash, s.module.now())
+	err = s.module.create(ctx, a, hash, s.module.now(), prepared)
 	if err != nil {
 		return Account{}, err
 	}
@@ -167,36 +212,56 @@ func (s *Service) CreateAccount(parent context.Context, actor achrix.Principal, 
 func (s *Service) SetPassword(parent context.Context, actor achrix.Principal, id string, expectedRevision int64, password string) error {
 	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
-	if expectedRevision < 1 {
+	if expectedRevision < 1 || !validID(id) {
 		return ErrInvalid
 	}
 	if err := s.authorize(ctx, actor, CredentialSet, id); err != nil {
+		return err
+	}
+	ctx, _, finish, err := s.module.acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	prepared, err := s.prepare(ctx, actor, "identity.credential.set", CredentialSet, id)
+	if err != nil {
 		return err
 	}
 	hash, err := s.module.passwords.hash(ctx, password)
 	if err != nil {
 		return err
 	}
-	return s.module.setPassword(ctx, actor, id, expectedRevision, hash, s.module.now())
+	return s.module.setPassword(ctx, id, expectedRevision, hash, s.module.now(), prepared)
 }
 func (s *Service) SetEnabled(parent context.Context, actor achrix.Principal, id string, expectedRevision int64, enabled bool) error {
 	ctx, cancel := context.WithTimeout(parent, time.Second)
 	defer cancel()
-	if expectedRevision < 1 {
+	if expectedRevision < 1 || !validID(id) {
 		return ErrInvalid
 	}
 	if err := s.authorize(ctx, actor, AccountSetEnabled, id); err != nil {
 		return err
 	}
-	return s.module.setEnabled(ctx, actor, id, expectedRevision, enabled, s.module.now())
+	prepared, err := s.prepare(ctx, actor, "identity.account.set-enabled", AccountSetEnabled, id)
+	if err != nil {
+		return err
+	}
+	return s.module.setEnabled(ctx, id, expectedRevision, enabled, s.module.now(), prepared)
 }
 func (s *Service) RevokeAll(parent context.Context, actor achrix.Principal, id string) error {
 	ctx, cancel := context.WithTimeout(parent, time.Second)
 	defer cancel()
+	if !validID(id) {
+		return ErrInvalid
+	}
 	if err := s.authorize(ctx, actor, SessionRevokeAll, id); err != nil {
 		return err
 	}
-	return s.module.revokeAll(ctx, actor, id, s.module.now())
+	prepared, err := s.prepare(ctx, actor, "identity.session.revoke-all", SessionRevokeAll, id)
+	if err != nil {
+		return err
+	}
+	return s.module.revokeAll(ctx, id, s.module.now(), prepared)
 }
 
 // Login never adopts a client token. A supplied previous cookie is revoked in the
@@ -205,9 +270,17 @@ func (s *Service) RevokeAll(parent context.Context, actor achrix.Principal, id s
 func (s *Service) Login(parent context.Context, login, password, previousToken string) (Session, error) {
 	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
-	if !loginSyntax.MatchString(login) || !validPassword(password, false) {
+	if !validLogin(login) || !validPassword(password, false) {
 		return Session{}, ErrAuthentication
 	}
+	if err := s.admission(ctx); err != nil {
+		return Session{}, err
+	}
+	ctx, _, finish, err := s.module.acquire(ctx)
+	if err != nil {
+		return Session{}, err
+	}
+	defer finish()
 	c, err := s.module.findCredential(ctx, "login", login)
 	if err != nil && !errors.Is(err, ErrAuthentication) {
 		return Session{}, err
@@ -247,6 +320,9 @@ func (s *Service) Authenticate(parent context.Context, value string) (achrix.Pri
 	if err != nil {
 		return "", err
 	}
+	if err := s.admission(ctx); err != nil {
+		return "", err
+	}
 	record, err := s.module.lookup(ctx, hash, s.module.now())
 	if err != nil {
 		return "", err
@@ -258,6 +334,9 @@ func (s *Service) ValidateCSRF(parent context.Context, value, csrf string) (achr
 	defer cancel()
 	hash, err := tokenHash(value)
 	if err != nil {
+		return "", err
+	}
+	if err := s.admission(ctx); err != nil {
 		return "", err
 	}
 	record, err := s.module.lookup(ctx, hash, s.module.now())
@@ -280,6 +359,9 @@ func (s *Service) RefreshCSRF(parent context.Context, value string) (string, err
 	if err != nil {
 		return "", err
 	}
+	if err := s.admission(ctx); err != nil {
+		return "", err
+	}
 	csrf := token()
 	ch, _ := tokenHash(csrf)
 	if err = s.module.refreshCSRF(ctx, hash, ch, s.module.now()); err != nil {
@@ -292,6 +374,9 @@ func (s *Service) Rotate(parent context.Context, value string) (Session, error) 
 	defer cancel()
 	hash, err := tokenHash(value)
 	if err != nil {
+		return Session{}, err
+	}
+	if err := s.admission(ctx); err != nil {
 		return Session{}, err
 	}
 	record, err := s.module.lookup(ctx, hash, s.module.now())
@@ -312,6 +397,9 @@ func (s *Service) Logout(parent context.Context, value string) error {
 	if err != nil {
 		return err
 	}
+	if err := s.admission(ctx); err != nil {
+		return err
+	}
 	return s.module.revoke(ctx, hash)
 }
 
@@ -321,6 +409,18 @@ func (s *Service) ChangePassword(parent context.Context, value, current, next st
 	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
 	p, err := s.Authenticate(ctx, value)
+	if err != nil {
+		return err
+	}
+	if err := s.authorize(ctx, p, PasswordChange, string(p)); err != nil {
+		return err
+	}
+	ctx, _, finish, err := s.module.acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	prepared, err := s.prepare(ctx, p, "identity.credential.change", PasswordChange, string(p))
 	if err != nil {
 		return err
 	}
@@ -339,5 +439,5 @@ func (s *Service) ChangePassword(parent context.Context, value, current, next st
 	if err != nil {
 		return err
 	}
-	return s.module.changePassword(ctx, value, p, c.Revision, hash, s.module.now())
+	return s.module.changePassword(ctx, value, p, c.Revision, hash, s.module.now(), prepared)
 }

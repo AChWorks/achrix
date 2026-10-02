@@ -57,7 +57,7 @@ Prefer additive change. Breaking public semantics/IDs require explicit versionin
 
 ## Initial Go public surface
 
-The only shared import is `github.com/AChWorks/achrix`. [Package source](../../achrix.go) and Go documentation own exact signatures; unexported state/helpers are private. This pre-v1 surface is deliberately small:
+The Core import is `github.com/AChWorks/achrix`. [Package source](../../achrix.go) and Go documentation own exact signatures; unexported state/helpers are private. This pre-v1 Core surface is deliberately small:
 
 | Contract | Intended consumer use |
 | --- | --- |
@@ -84,4 +84,12 @@ In-process Module/Policy methods must honor context cancellation and return prom
 
 Shutdown atomically closes admission, cancels admitted readiness/policy contexts, waits for their callbacks to return, then stops Modules. One shutdown budget covers lifecycle serialization, drain and reverse Stop. A concurrent startup is canceled and owns its bounded partial-start cleanup. If waiting/drain expires, Shutdown returns the context result, admission stays closed and no Stop races a callback; a subsequent Shutdown may finish after it drains. Completed cleanup is not repeated and retains its result. Core cannot forcibly terminate arbitrary in-process code; no worker pool/scheduler or goroutine wrapper is used to pretend otherwise. Products stop ingress and drain their own Application/domain work before shutdown: Core tracks only its own readiness/policy callbacks, not a whole domain operation after authorization.
 
-The [Notes HTTP contract](../../fixtures/notes/README.md#http-contract) calls the same Service/authorization as direct invocation. Driver types/private SQL do not enter Foundation contracts. The fixture's `internal` packages are product-local, never Foundation internal imports. Its simple JSON error body is evidence for the original bounded proof, not the required future public API envelope. There is no generic dispatcher, dynamic loader, mandatory central service or AI-specific privilege path.
+The [Notes HTTP contract](../../fixtures/notes/README.md#http-contract) calls the same Service/authorization as direct invocation. Driver types/private SQL do not enter Core contracts. The fixture's `internal` packages are product-local, never Foundation internal imports. Its simple JSON error body is evidence for the original bounded proof, not the required future public API envelope. There is no generic dispatcher, dynamic loader, mandatory central service or AI-specific privilege path.
+
+### Development Identity and Audit imports
+
+The optional `github.com/AChWorks/achrix/identity` and `/audit` packages share the existing Foundation Go module and the next-minor release boundary. Their [Identity](../../identity/README.md) and [Audit](../../audit/README.md) contracts require Core authorization ABI 2; Identity also requires Audit append ABI 1. Explicit product composition supplies their typed collaborators and database profile. All capabilities currently use ABI 1 and Module implementation identity `0.2.0-development`; none exists in immutable v0.1.0.
+
+Identity's permission to attempt authentication uses the fixed `PublicPrincipal` and `Authentication` capability. Successful credentials return an account principal, then each product operation separately authorizes it. Management and self-password change have distinct permissions and Audit append authorization. Account reads expose a revision for subsequent conditional mutations; profiles/roles/permission grants remain product-owned.
+
+For the actual atomic Identity events, Audit exposes one deliberate PostgreSQL integration seam: `Prepare` authorizes and derives immutable metadata, then `AppendInTx` receives the owning transaction's native `pgx.Tx` and executes only Audit-owned SQL. Identity owns commit/rollback and must abort on append failure. This narrow provider-specific seam proves one commit boundary without a generic transaction facade, cross-module private SQL, distributed transaction, or portable-provider claim. A prepared operation is bounded by its original deadline/cancellation, Module and single use; it is not a durable permission grant. Source rollback cannot undo either owned migration or a committed account/Audit action.

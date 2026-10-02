@@ -40,12 +40,13 @@ quality_bin="$validation_root/quality-tools/bin"
 "$quality_bin/staticcheck" ./...
 "$quality_bin/govulncheck" -db https://vuln.go.dev -show version,verbose ./...
 go vet ./...
-go test -race -count=1 -timeout=30s ./...
 go mod verify
 if [[ $scope == core ]]; then
+  go test -race -count=1 -timeout=30s ./...
   echo 'Core validation verified; consumer/PostgreSQL proof not selected'
   exit 0
 fi
+go test -race -count=1 -timeout=30s .
 
 if [[ -n ${ACHRIX_PG_BIN:-} ]]; then export PATH="$ACHRIX_PG_BIN:$PATH"; fi
 for tool in initdb pg_ctl psql createdb pg_dump pg_restore; do
@@ -66,8 +67,19 @@ export PGHOST="$validation_root/socket" PGPORT=5432 PGUSER
 PGUSER=$(id -un)
 createdb -T template0 achrix_test_notes
 createdb -T template0 achrix_test_restore
+createdb -T template0 achrix_identity_test
+createdb -T template0 achrix_audit_test
+createdb -T template0 achrix_identity_consumer
+createdb -T template0 achrix_identity_restore
 createdb -T template0 -E LATIN1 achrix_test_latin1
 createdb -T template0 -E SQL_ASCII achrix_test_sqlascii
+
+# Module tests use distinct private databases: Go can run packages concurrently.
+# Full scope runs their unit and real persisted tests once with explicit DSNs.
+export ACHRIX_IDENTITY_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_identity_test sslmode=disable"
+export ACHRIX_AUDIT_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_audit_test sslmode=disable"
+go test -race -count=1 -timeout=90s ./identity ./audit
+unset ACHRIX_IDENTITY_TEST_DSN ACHRIX_AUDIT_TEST_DSN
 
 # Copy consumer-owned source only. Foundation source is downloaded as a pinned
 # normal Go module into a cold module cache; no replacement/workspace is used.
@@ -95,6 +107,7 @@ go vet ./...
 export NOTES_TEST_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_test_notes sslmode=disable"
 export NOTES_TEST_LATIN1_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_test_latin1 sslmode=disable"
 export NOTES_TEST_SQL_ASCII_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_test_sqlascii sslmode=disable"
+export NOTES_IDENTITY_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_identity_consumer sslmode=disable"
 go test -race -count=1 -timeout=60s ./...
 
 # Native trusted logical backup, no compression required. It covers this fixture's
@@ -107,6 +120,27 @@ PGTZ=UTC psql -XAt -d achrix_test_restore -c 'SELECT row_to_json(e) FROM notes.e
 cmp "$validation_root/source.jsonl" "$validation_root/restore.jsonl"
 export NOTES_TEST_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_test_restore sslmode=disable"
 NOTES_RESTORE_VERIFY=1 go test -race -count=1 -timeout=30s -run '^TestTrustedRestore$' .
+
+# The consumer has stopped ingress/Modules before this quiescent native capture.
+# Identity and atomic Audit are restored together; neither schema is separately
+# restorable. Bearer/CSRF plaintext is never in either dataset. These protected
+# dumps are private validation artifacts, not a production backup policy.
+pg_dump -Fc -Z0 --no-owner --no-acl -f "$validation_root/identity-audit.dump" achrix_identity_consumer
+(cd "$validation_root" && sha256sum identity-audit.dump > identity-audit.dump.sha256 && sha256sum -c identity-audit.dump.sha256)
+pg_restore --exit-on-error --no-owner --no-acl -d achrix_identity_restore "$validation_root/identity-audit.dump"
+for database in achrix_identity_consumer achrix_identity_restore; do
+  PGTZ=UTC psql -XAt -d "$database" -c 'SELECT row_to_json(r) FROM audit.records r ORDER BY seq' > "$validation_root/$database-audit.jsonl"
+  PGTZ=UTC psql -XAt -d "$database" -c 'SELECT row_to_json(a) FROM identity.accounts a ORDER BY id' > "$validation_root/$database-accounts.jsonl"
+  PGTZ=UTC psql -XAt -d "$database" -c 'SELECT row_to_json(c) FROM identity.credentials c ORDER BY account_id' > "$validation_root/$database-credentials.jsonl"
+  PGTZ=UTC psql -XAt -d "$database" -c 'SELECT row_to_json(s) FROM identity.sessions s ORDER BY token_hash' > "$validation_root/$database-sessions.jsonl"
+  PGTZ=UTC psql -XAt -d "$database" -c "SELECT 'identity',version,checksum FROM identity.schema_migrations UNION ALL SELECT 'audit',version,checksum FROM audit.schema_migrations ORDER BY 1,2" > "$validation_root/$database-ledgers.txt"
+done
+for dataset in audit accounts credentials sessions; do
+  cmp "$validation_root/achrix_identity_consumer-$dataset.jsonl" "$validation_root/achrix_identity_restore-$dataset.jsonl"
+done
+cmp "$validation_root/achrix_identity_consumer-ledgers.txt" "$validation_root/achrix_identity_restore-ledgers.txt"
+export NOTES_IDENTITY_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_identity_restore sslmode=disable"
+NOTES_IDENTITY_RESTORE_VERIFY=1 go test -race -count=1 -timeout=30s -run '^TestIdentityAuditTrustedRestore$' .
 
 build_identity=$(git -C "$repository" rev-parse HEAD)
 if [[ -n $(git -C "$repository" status --porcelain) ]]; then build_identity="$build_identity-dirty"; fi
@@ -121,4 +155,4 @@ assert b['build']!='development'
 print('Verified composed build:',json.dumps(b,sort_keys=True))
 PY
 sha256sum "$validation_root/notes"
-echo 'Foundation, isolated consumer, PostgreSQL, migrations, authorization and database restore verified'
+echo 'Foundation, isolated consumer, Identity/Audit, PostgreSQL, migrations, authorization and retained dataset restore verified'

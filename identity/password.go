@@ -3,7 +3,6 @@ package identity
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"unicode/utf8"
 
@@ -59,8 +58,11 @@ func (h *passwords) admit(ctx context.Context) (func(), error) {
 	}
 }
 func validPassword(password string, setting bool) bool {
+	if len(password) > 1024 || !utf8.ValidString(password) {
+		return false
+	}
 	n := utf8.RuneCountInString(password)
-	return utf8.ValidString(password) && len(password) <= 1024 && n <= 256 && ((!setting && n > 0) || (setting && n >= 15))
+	return n <= 256 && ((!setting && n > 0) || (setting && n >= 15))
 }
 func (h *passwords) hash(ctx context.Context, password string) (string, error) {
 	if !validPassword(password, true) {
@@ -126,10 +128,4 @@ func (h *passwords) verify(ctx context.Context, password, encoded string) (bool,
 	// Never silently weaken a stronger record when one configured dimension grows.
 	rehash := ok && p.Memory <= h.policy.Memory && p.Iterations <= h.policy.Iterations && p.Parallelism <= h.policy.Parallelism && (p.Memory < h.policy.Memory || p.Iterations < h.policy.Iterations || p.Parallelism < h.policy.Parallelism)
 	return ok, rehash, nil
-}
-func authenticationError(err error) error {
-	if errors.Is(err, ErrInvalid) {
-		return ErrAuthentication
-	}
-	return err
 }

@@ -94,15 +94,25 @@ func TestSessionTokenAndFormatting(t *testing.T) {
 	}
 }
 func BenchmarkPasswordHash(b *testing.B) {
-	h, err := newPasswords(DefaultPasswordPolicy(), 1)
-	if err != nil {
-		b.Fatal(err)
-	}
-	b.ReportAllocs()
-	b.ResetTimer()
-	for b.Loop() {
-		if _, err = h.hash(context.Background(), "a long test password"); err != nil {
-			b.Fatal(err)
-		}
+	for _, profile := range []struct {
+		name   string
+		policy PasswordPolicy
+	}{
+		{"Default", DefaultPasswordPolicy()},
+		{"Maximum", PasswordPolicy{64 * 1024, 4, 2}},
+	} {
+		b.Run(profile.name, func(b *testing.B) {
+			h, err := newPasswords(profile.policy, 1)
+			if err != nil {
+				b.Fatal(err)
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				if _, err = h.hash(context.Background(), "a long test password"); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
