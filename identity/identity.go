@@ -21,6 +21,7 @@ import (
 var (
 	ErrAuthentication = errors.New("authentication failed")
 	ErrInvalid        = errors.New("invalid identity input")
+	ErrNotFound       = errors.New("identity account not found")
 	ErrConflict       = errors.New("identity precondition conflict")
 	ErrUnavailable    = errors.New("identity unavailable")
 	ErrLimited        = errors.New("identity admission limited")
@@ -30,6 +31,7 @@ var (
 const (
 	AccountCreate     = "achrix.identity.account.create"
 	AccountRead       = "achrix.identity.account.read"
+	AccountLookup     = "achrix.identity.account.lookup"
 	CredentialSet     = "achrix.identity.credential.set"
 	AccountSetEnabled = "achrix.identity.account.set-enabled"
 	SessionRevokeAll  = "achrix.identity.session.revoke-all"
@@ -180,6 +182,23 @@ func (s *Service) Account(parent context.Context, actor achrix.Principal, id str
 	}
 	return s.module.account(ctx, id)
 }
+
+// LookupAccount reconciles one exact, validated login after an unknown create
+// outcome. Its distinct permission targets that login, never an opaque ID or
+// wildcard. Authentication and AccountRead do not implicitly grant this read.
+// The result contains no credential/session material; no listing is provided.
+func (s *Service) LookupAccount(parent context.Context, actor achrix.Principal, login string) (Account, error) {
+	ctx, cancel := context.WithTimeout(parent, time.Second)
+	defer cancel()
+	if !validLogin(login) {
+		return Account{}, ErrInvalid
+	}
+	if err := s.app.Authorize(ctx, actor, AccountLookup, login); err != nil {
+		return Account{}, err
+	}
+	return s.module.lookupAccount(ctx, login)
+}
+
 func (s *Service) CreateAccount(parent context.Context, actor achrix.Principal, login, password string) (Account, error) {
 	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
