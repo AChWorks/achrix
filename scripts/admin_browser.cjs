@@ -103,7 +103,7 @@ async function main() {
           const headers={"Content-Type":"application/json","X-Identity-Request":"1",...extra};
           if(csrf!==null) headers["X-CSRF-Token"]=csrf;
           const response=await fetch(relative,{method:"POST",credentials:"same-origin",headers,body:JSON.stringify(body),cache:"no-store"});
-          return {status:response.status(),text:await response.text()};
+          return {status:response.status,text:await response.text()};
         },{relative,body,csrf,extra});
       }
       async function csrf() {
@@ -278,7 +278,7 @@ async function main() {
       const beforeMediaDenied=await probe();
       assert.equal((await request("/admin/media/status",{id:retained.id},viewerToken)).status,403);
       assert.equal((await request("/admin/media/delete",{id:retained.id,revision:retained.revision},viewerToken)).status,403);
-      const deniedRead=await page.evaluate(async id=>{const r=await fetch("/admin/media/read/"+id,{credentials:"same-origin",cache:"no-store"});return{status:r.status(),type:r.headers.get("content-type"),text:await r.text()}},retained.id);
+      const deniedRead=await page.evaluate(async id=>{const r=await fetch("/admin/media/read/"+id,{credentials:"same-origin",cache:"no-store"});return{status:r.status,type:r.headers.get("content-type"),text:await r.text()}},retained.id);
       assert.equal(deniedRead.status,403); assert.match(deniedRead.type,/application\/json/);
       assert(!deniedRead.text.includes(retained.filename),"denial leaks no metadata/bytes");
       sameState(beforeMediaDenied,await probe(),"denied exact Media operations leave ready bytes and state unchanged");
@@ -364,7 +364,7 @@ async function mediaFlow({page,navigate,responseSubmit,request,csrf,probe,endpoi
   assert.deepEqual(await fs.readFile(await download.path()),png,"actual browser attachment retains original bytes");
   const attachment=await page.evaluate(async id=>{
     const response=await fetch("/admin/media/read/"+id,{credentials:"same-origin",cache:"no-store"});
-    return {status:response.status(),mime:response.headers.get("content-type"),
+    return {status:response.status,mime:response.headers.get("content-type"),
       disposition:response.headers.get("content-disposition"),cache:response.headers.get("cache-control"),
       nosniff:response.headers.get("x-content-type-options"),size:(await response.arrayBuffer()).byteLength};
   },first.id);
@@ -394,7 +394,7 @@ async function mediaFlow({page,navigate,responseSubmit,request,csrf,probe,endpoi
   assert.equal(status.state,"deleted","known ID reconciles its durable terminal state");
   const deletedRead=await page.evaluate(async id=>{
     const r=await fetch("/admin/media/read/"+id,{credentials:"same-origin",cache:"no-store"});
-    return{status:r.status(),type:r.headers.get("content-type"),disposition:r.headers.get("content-disposition")};
+    return{status:r.status,type:r.headers.get("content-type"),disposition:r.headers.get("content-disposition")};
   },first.id);
   assert.equal(deletedRead.status,409); assert.match(deletedRead.type,/application\/json/);
   assert.equal(deletedRead.disposition,null,"failed read is never advertised as image attachment");
@@ -406,7 +406,7 @@ async function mediaFlow({page,navigate,responseSubmit,request,csrf,probe,endpoi
     const body=new FormData(); body.append("file",new Blob([bytes],{type:"image/png"}),"extra-field.png"); body.append("extra","not permitted");
     const response=await fetch("/admin/media/upload",{method:"POST",credentials:"same-origin",
       headers:{"X-Identity-Request":"1","X-CSRF-Token":token},body,cache:"no-store"});
-    return response.status();
+    return response.status;
   },{data:images.png,token:malformedToken});
   assert.equal(malformed,400);
   sameState(beforeMalformed,await probe(),"malformed multipart framing creates no intent/file");
