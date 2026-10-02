@@ -89,14 +89,25 @@ cd "$validation_root/consumer"
 go mod download
 go mod verify
 go list -m -json github.com/AChWorks/achrix > "$validation_root/foundation.json"
-python3 - "$validation_root/foundation.json" <<'PY'
-import json,sys,os
+python3 - "$validation_root/foundation.json" "$repository" <<'PY'
+import json,sys,os,hashlib,pathlib
 m=json.load(open(sys.argv[1]))
 assert m['Path']=='github.com/AChWorks/achrix'
 assert m.get('Version','').startswith('v0.') and 'Replace' not in m
 assert m['Dir'].startswith(os.environ['GOMODCACHE']+os.sep)
 assert m.get('Sum') and m.get('GoModSum')
 print('Verified isolated pinned Foundation:',m['Version'])
+root=pathlib.Path(sys.argv[2]); dependency=pathlib.Path(m['Dir'])
+paths=[pathlib.Path('achrix.go')]
+for package in ['identity','audit']:
+    paths += sorted(p.relative_to(root) for p in (root/package).glob('*.go') if not p.name.endswith('_test.go'))
+    paths += sorted(p.relative_to(root) for p in (root/package/'migrations').glob('*.sql'))
+digest=hashlib.sha256()
+for relative in paths:
+    source=(root/relative).read_bytes(); downloaded=(dependency/relative).read_bytes()
+    assert source==downloaded, 'normal consumer source drift: '+str(relative)
+    digest.update(str(relative).encode()+b'\0'+source)
+print('Verified normal-module Core/Identity/Audit source SHA-256:',digest.hexdigest())
 PY
 if go mod edit -json | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("Replace") else 1)'; then
   echo 'Local dependency replacements are prohibited in this proof' >&2; exit 1
