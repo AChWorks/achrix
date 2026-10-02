@@ -12,7 +12,7 @@ Generated bootstrap files may transfer to the product. Shared runtime is not an 
 
 Compose trusted Modules at build time through public contracts into a pinned, tested product executable/image. Core and internal Modules in one Go module share its dependency version; separately packaged Modules have their own versions.
 
-Installing/updating code selects or builds a compatible product artifact. An already packaged optional Module may be enabled/disabled through explicit product configuration under dependencies, authorization and data-lifecycle rules. **Code/artifact presence, advertised capability availability, runtime activation/resource acquisition, authorization and durable state/data removal are distinct.** Enabling a path never grants permission by itself; disabling one never implies uninstalling code, reversing migrations or deleting retained data.
+Installing/updating code selects or builds a compatible product artifact. An already packaged optional Module may be enabled/disabled through explicit product configuration under dependencies, authorization and data-lifecycle rules. **Code/artifact presence, advertised capability availability, runtime activation/resource acquisition, authorization and durable state/data removal are distinct.** Enabling a path never grants permission by itself; disabling one never implies uninstalling code, reversing migrations or deleting retained data. A change that alters the composed Module/capability graph normally takes effect through construction, validation and activation of a new Application instance/product artifact under the product lifecycle; it does not imply mutating the running graph, hot-unloading Go code or a dynamic plugin runtime.
 
 The same distinction applies inside a Module when a real optional subsystem is justified. Product composition may omit that subsystem, or include its code while keeping its runtime capability inactive, according to the owning Module's explicit supported contract. If omitting a subsystem from the build materially avoids dependencies or artifact/resource cost, use an explicit package/composition boundary where useful; this does not by itself create a new Module, Go module, repository or service.
 
@@ -24,9 +24,11 @@ The [Module model](module-model.md) decides whether a capability belongs in Core
 
 A reusable Module normally begins in the existing AChrix repository and Foundation Go module, and may share process, deployment and relational database with Core/other Modules indefinitely. This captures reuse before the first product duplicates the behavior without prematurely creating repository/module/service overhead.
 
+Keep the distribution boundaries distinct. A **Go package** is primarily an import/code-organization boundary; an optional package that no consumer path imports need not enter that compiled package graph. Packages inside the same **Go module** still share that module's dependency requirements and version/release identity. A separate Go module creates an independent dependency/version boundary and may still live in the same repository, but it also adds its own compatibility, tagging, upgrade and CI/release burden. A **repository** and a **service/process** are separate ownership/source and runtime/deployment decisions again. Package splitting alone therefore does not prove independent versioning, while dependency weight/conflicts, materially different release cadence or independently consumed compatibility may eventually justify a separate Go module.
+
 Independent packaging/versioning needs additional value, such as:
 
-- consumers needing selective independent versions/dependencies;
+- consumers needing selective independent versions/dependencies, including material optional dependency weight/conflict that should not burden unrelated consumers;
 - materially different release/compatibility cadence;
 - independent ownership/security boundary;
 - deployment/runtime isolation that is worth the distributed-system cost;
