@@ -1,6 +1,6 @@
 # Audit source baseline
 
-This optional Module is part of the existing Foundation Go module on the unpublished v0.2 source line. `ModuleVersion` is `0.2.0-development`; `achrix.audit.append`, `achrix.audit.query` and `achrix.audit.export` use ABI 1 and require Core authorization ABI 2. The published v0.1.0 line is unchanged.
+This optional Module is part of the existing Foundation Go module on the unpublished v0.2 source line. `Descriptor.Version` reports the actual packaged Foundation dependency through `achrix.Version()`. The existing `ModuleVersion = "0.2.0-development"` constant is retained only as a deprecated unpublished source-line label, not component/update/recovery identity; `achrix.audit.append`, `achrix.audit.query` and `achrix.audit.export` use ABI 1 and require Core authorization ABI 2. The published v0.1.0 line is unchanged.
 
 Products explicitly install `audit.Migrate(ctx, dsn)` with a deadline before startup, then compose `audit.NewPostgres(dsn, audit.Config{Now: clock}, logger)` and construct `audit.NewService(app, module)`. Runtime startup verifies the exact immutable migration ledger and enabled mutation guards; it does not migrate. This baseline uses ordinary PostgreSQL 18 with UTF8, transactional DDL, native transactions and advisory locks, without extensions. Installation and runtime DSN sources, database roles and secrets remain product-owned.
 

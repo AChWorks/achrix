@@ -40,7 +40,10 @@ type Capability struct {
 // networks/databases or mutate registration. Optional providers may be absent;
 // when present they must match the exact revision and precede their consumers.
 type Descriptor struct {
-	ID       string
+	ID string
+
+	// Version identifies the Module implementation's packaged source dependency.
+	// Official packages in this Go module use Version(); capability ABI is separate.
 	Version  string
 	Provides []Capability
 	Requires []Capability
@@ -466,6 +469,10 @@ func Version() string {
 	if !ok {
 		return "development"
 	}
+	return sourceVersion(info)
+}
+
+func sourceVersion(info *debug.BuildInfo) string {
 	if info.Main.Path == "github.com/AChWorks/achrix" && info.Main.Version != "" && info.Main.Version != "(devel)" {
 		return info.Main.Version
 	}
@@ -473,6 +480,9 @@ func Version() string {
 		if d.Path == "github.com/AChWorks/achrix" {
 			if d.Replace != nil {
 				return "development-replacement"
+			}
+			if d.Version == "" || d.Version == "(devel)" {
+				return "development"
 			}
 			return d.Version
 		}
