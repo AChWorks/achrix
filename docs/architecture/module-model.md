@@ -2,7 +2,7 @@
 
 ## Ownership
 
-A Module owns one coherent capability: its business semantics, Application operations, intentionally public contracts, durable domain data/assets, mutations, provider adapters, compatibility/migrations and [recovery dependencies](../lifecycle/lifecycle-and-compatibility.md#backup-and-recovery). Other Modules do not write its tables or import its Infrastructure implementation; they use authorized Application contracts.
+A Module owns one coherent reusable behavior domain and is the ownership/lifecycle boundary for that domain: its business semantics, Application operations, intentionally public contracts, durable domain data/assets, mutations, provider adapters, compatibility/migrations and [recovery dependencies](../lifecycle/lifecycle-and-compatibility.md#backup-and-recovery). A Module may expose a bounded set of related public Capabilities inside that domain. A Capability is an intentionally public behavior/authorization/composition contract, not a synonym for the whole Module, every method, screen, package or internal component. Other Modules do not write its tables or import its Infrastructure implementation; they use authorized Application contracts.
 
 Create Domain, Application, Infrastructure and Presentation only when actual behavior belongs there. A Module boundary is not automatically a dependency package, plugin, repository, process, service or database.
 
@@ -21,6 +21,27 @@ Before serving traffic, reject missing/incompatible required capabilities, ambig
 Descriptors are deterministic, side-effect-free and cheap. Do not read environment/secrets, acquire resources, call networks/databases or mutate registration in `Descriptor()`. Actual startup/resource acquisition belongs to `Start`. Composition snapshots descriptor slices once per instance; product code explicitly wires typed collaborators.
 
 Resources and mutable registration belong to the application instance, not process-global state. Startup and bounded shutdown/cleanup handle partial failure for actual components.
+
+## Capability granularity and selective composition
+
+Keep ownership, public behavior and implementation granularity distinct:
+
+- A **Module** is the coherent ownership/lifecycle boundary. Related operations that share semantics, state and lifecycle may remain one Module even when they need separate public permissions/contracts.
+- A **Capability** exists when an independent consumer, authorization decision or composition dependency needs a stable public behavior identity. Do not create a Capability for every exported method, page, helper or internal package.
+- An **internal component/package** is an implementation boundary. Splitting code for maintainability does not create a public Capability or a new Module.
+- A **Provider/Adapter** supplies a replaceable implementation or external integration behind the owning semantics; provider variation does not transfer ownership.
+
+Treat these states as independent: **code/artifact presence**, **capability availability in the composed Application**, **runtime activation/resource acquisition**, **authorization**, and **durable state/data retention or removal**. Code presence grants no permission; an authorization denial does not mean a Capability is absent; disabling or omitting an active path does not implicitly uninstall code, reverse migrations or delete retained state.
+
+A Module instance may be constructed from explicit immutable composition/configuration so its Descriptor advertises the capability set actually supported by that instance. Once composed, that advertised set is fixed. Descriptor calculation remains deterministic, side-effect-free and cheap: no environment/database/filesystem/network discovery, package-init registration, global mutable registry or service-locator lookup. Product composition explicitly supplies typed collaborators.
+
+`Descriptor.Optional` is only an **optional dependency edge**: the consumer remains valid when that provider is absent, while a present provider must match the declared contract. It is not a generic feature flag, optional-subsystem registry or permission switch. When a real Module has a meaningful optional subsystem, first prefer explicit constructor/package composition inside the existing ownership boundary; add a new Core abstraction only if a real consumer proves that the current contracts cannot express the requirement safely.
+
+Prefer fail-fast startup for active capabilities so configuration/dependency failures are found before traffic. Lazy/deferred initialization is exceptional: use it only when measured startup/resource value justifies later failure timing and the owning Module can define bounded concurrent initialization, readiness, shutdown and recovery semantics.
+
+Do not use hidden blank-import/`init()` registration, Go runtime plugins/hot loading, or build tags as the normal AChrix product-feature mechanism. Build constraints remain appropriate for genuine platform/build variation. If excluding an optional subsystem from a product meaningfully avoids dependencies or artifact/resource cost, a separate Go package may be useful without changing Module ownership.
+
+Split a subsystem only when a meaningful dependency, resource, lifecycle, security, durable-state or ownership boundary earns the extra public/versioning/testing complexity. If a subsystem later needs independently meaningful migrations, backup/recovery, compatibility cadence, release ownership or process isolation, re-evaluate whether it should become a separate Module/package/service then; do not pre-split for hypothetical flexibility.
 
 ## Placement and extraction
 
