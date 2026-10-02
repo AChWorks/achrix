@@ -236,7 +236,7 @@ func (s *localStorage) write(ctx context.Context, m *Module, a Asset, input io.R
 	}
 	a.Size = n
 	a.SHA256 = hex.EncodeToString(h.Sum(nil))
-	a.MIME, a.Width, a.Height, err = m.validate(ctx, f)
+	a.MIME, a.Width, a.Height, err = m.validateUpload(ctx, f, a.Filename)
 	if err != nil {
 		return a, err
 	}

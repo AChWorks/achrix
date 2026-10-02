@@ -51,6 +51,10 @@ func NewPostgres(dsn string, config Config, logger *slog.Logger) (*Module, error
 	if runtime.GOOS != "linux" || config.StorageRoot == "" || len(config.StorageRoot) > 4096 || !strings.HasPrefix(config.StorageRoot, "/") {
 		return nil, ErrConfiguration
 	}
+	config.AllowedMIMEs, err = selectFormats(config.AllowedMIMEs)
+	if err != nil {
+		return nil, err
+	}
 	if config.Now == nil {
 		config.Now = time.Now
 	}

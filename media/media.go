@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-// Package media owns an authorized private PNG/JPEG library. Products own
+// Package media owns an authorized private file library. Products own
 // permissions, content associations and ingress; assets have no public URL.
 package media
 
@@ -47,7 +47,12 @@ var (
 // webroot. Now is a trusted concurrent-safe UTC time source, not an attestation.
 type Config struct {
 	StorageRoot string
-	Now         func() time.Time
+	// AllowedMIMEs selects a finite supported upload profile. Nil preserves
+	// PNG/JPEG-only behavior; CommonMIMEs opts into the common profile. An
+	// explicit empty selection, duplicates or unsupported entries are invalid.
+	// Construction copies the selection; it does not revoke retained reads.
+	AllowedMIMEs []string
+	Now          func() time.Time
 }
 type Asset struct {
 	ID            string
