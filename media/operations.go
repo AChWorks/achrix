@@ -80,6 +80,8 @@ func (m *Module) create(parent context.Context, filename string, input io.Reader
 		return a, m.failure(ctx, "create_input", err)
 	}
 	err = c.QueryRow(ctx, "UPDATE media.assets SET state='ready',revision=2,mime=$2,size=$3,width=$4,height=$5,sha256=$6 WHERE id=$1 AND state='pending' AND revision=1 RETURNING "+assetColumns, a.ID, a.MIME, a.Size, a.Width, a.Height, a.SHA256).Scan(&a.ID, &a.State, &a.Revision, &a.Filename, &a.MIME, &a.Size, &a.Width, &a.Height, &a.SHA256, &a.CreatedAt)
+	// Driver timestamps may use the process local zone. Public metadata is UTC.
+	a.CreatedAt = a.CreatedAt.UTC()
 	if err != nil {
 		return a, m.failure(ctx, "create_publish", mutationError(err))
 	}

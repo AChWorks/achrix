@@ -32,6 +32,8 @@ Current source develops the next **v0.2** contract, including optional capabilit
 
 That development source includes product-local [Identity](identity/README.md) accounts, maintained Argon2id passwords and revocable server-side sessions with a same-origin HTTPS cookie/CSRF adapter. [Audit](audit/README.md) records the five accountable account/credential/status/revocation operations in the same PostgreSQL transaction, with authorized bounded query/export. The independent Notes test composition proves authentication followed by separate product authorization and retained-dataset restore; it establishes no production deployment, CMS, central identity service or permission roles.
 
+The development source also includes a private [Media](media/README.md) PNG/JPEG library with separately authorized create/list/read/conditional-delete operations and bounded explicit reconciliation. It uses real PostgreSQL metadata and private Linux filesystem storage; products own permissions, content relationships, ingress and their production recovery profile. The independent consumer proves trusted HTTPS and coherent quiesced metadata plus asset restore.
+
 ## Licensing and participation
 
 First-party repository content defaults to [MPL-2.0](LICENSE). Compatible independent commercial/third-party Modules are possible; any Apache-2.0 SDK designation requires an explicit artifact scope. [Licensing](docs/legal/licensing.md) owns the details.
