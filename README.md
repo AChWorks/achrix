@@ -34,6 +34,8 @@ That development source includes product-local [Identity](identity/README.md) ac
 
 The development source also includes a private [Media](media/README.md) PNG/JPEG library with separately authorized create/list/read/conditional-delete operations and bounded explicit reconciliation. It uses real PostgreSQL metadata and private Linux filesystem storage; products own permissions, content relationships, ingress and their production recovery profile. The independent consumer proves trusted HTTPS and coherent quiesced metadata plus asset restore.
 
+The development [Admin shell](admin/README.md) composes real [Identity-owned](identity/admin/) and [Media-owned](media/admin/README.md) screens through their public services. Products own explicit grants and HTTPS ingress; the shell supplies bounded presentation, navigation, English/Persian direction and safe form feedback. Its independent trusted-TLS browser proof covers both real surfaces without copying Foundation source or adding a frontend framework.
+
 ## Licensing and participation
 
 First-party repository content defaults to [MPL-2.0](LICENSE). Compatible independent commercial/third-party Modules are possible; any Apache-2.0 SDK designation requires an explicit artifact scope. [Licensing](docs/legal/licensing.md) owns the details.
