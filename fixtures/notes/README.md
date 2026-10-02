@@ -68,7 +68,7 @@ go get "github.com/AChWorks/achrix@$ACHRIX_VERSION"
 go mod tidy
 ```
 
-Before the update command, set `ACHRIX_VERSION` to the exact reviewed commit/version you intend to consume. The identity command reports the actual Foundation dependency, fixture Module version, consumer build revision and migration checksum. Isolated validation injects the exact consumer Git revision when building outside its Git worktree and checks that the Foundation runtime identity matches its manifest pin. Unversioned local builds identify themselves as development. Full validation also builds `cmd/componentidentity` and compares the composed Identity/Audit `Descriptor.Version` values with the normally resolved Foundation pin. This uses a real executable because Go test binaries may omit dependency build metadata; the deprecated source-line constants are not build identity. No v1 stability, automatic updater or binary release is claimed.
+Before the update command, set `ACHRIX_VERSION` to the exact reviewed commit/version you intend to consume. The identity command reports the actual Foundation dependency, fixture Module version, consumer build revision and migration checksum. Isolated validation injects the exact consumer Git revision when building outside its Git worktree and checks that the Foundation runtime identity matches its manifest pin. Unversioned local builds identify themselves as development. Full validation also builds `cmd/componentidentity` and compares the composed Identity/Audit/Media `Descriptor.Version` values with the normally resolved Foundation pin. This uses a real executable because Go test binaries may omit dependency build metadata; the deprecated source-line constants are not build identity. No v1 stability, automatic updater or binary release is claimed.
 
 Review the update/manifest diff, run `scripts/validate.sh` from the root, then rebuild your consumer. Deployment remains a separate owner action; changing Foundation source does not update an existing executable. Never edit a published migration in place or equate reverting source with reverting data. Later real-product update/recovery work remains gated by Issue #19.
 
@@ -77,6 +77,22 @@ Review the update/manifest diff, run `scripts/validate.sh` from the root, then r
 The test-only `media_test.go` composes public Core, Identity, Audit and Media contracts from the normal Foundation dependency. The product fixture owns explicit create/list/exact-object-read/delete/reconcile grants, trusted same-origin HTTPS ingress and synthetic accounts. Uploading or authenticating grants no object rights; collection discovery and byte access remain distinct. PNG/JPEG originals, Persian filenames including ZWNJ, bounded keyset listing, conditional delete and safe rejected input exercise the real private image library. This fixture does not define content relationships, public serving, roles or a production storage profile.
 
 Full validation uses separate private Media test/consumer/restore databases and mode-0700 storage roots. It stops ingress and all participating Modules before native PostgreSQL capture and a manifested private asset archive, verifies paths/types/checksums before extraction, compares the whole participating metadata/ledger datasets and reads retained images through the restored public services. A missing or corrupt asset must fail before destination bytes are written. The tested coherent quiesced local capture has no live snapshot, off-host delivery or RPO/RTO guarantee. See [Media](../../media/README.md) for lifecycle, resource and recovery obligations; #19 and #49 remain separately gated.
+
+## Admin browser proving composition
+
+The opt-in `admin_test.go` composes the real Admin shell with Identity-owned account forms and Media-owned library forms using only the normally downloaded Foundation dependency. It owns synthetic administrator/viewer/denied accounts, explicit product policy, two trusted local HTTPS origins and a private database/assets/control directory. The viewer's collection metadata grant does not permit file bytes/deletion or exact-login discovery. Durable state snapshots compare real denied/stale/malformed calls independently of displayed buttons.
+
+Run from the repository root after installing the test-only Node 24.21.0, Playwright 1.63.0 and that Playwright release's Chromium into an explicitly owned directory:
+
+```bash
+ACHRIX_BROWSER_NODE=/absolute/owned/browser-tools/node/bin/node \
+ACHRIX_PLAYWRIGHT_MODULE=/absolute/owned/browser-tools/node_modules/playwright \
+PLAYWRIGHT_BROWSERS_PATH=/absolute/owned/browser-tools/browsers \
+ACHRIX_PG_BIN=/absolute/owned/pg-validation/install/bin \
+scripts/validate-admin-browser.sh
+```
+
+The runner requires supported Go/PostgreSQL tools, normal checksums and cold SDK download with recursive runtime/embedded-asset source equality. It verifies certificates using only the fixture's public certificate/SPKI pins, constrains browser requests to its two local HTTPS origins and removes its owned temporary cluster/cache afterward. Product runtime has no Node/Playwright dependency. The browser suite exercises actual login/cookie/CSRF, create and exact-login recovery after a committed response is lost, finite waits without replay, conditional account management, PNG/JPEG upload/library/private download/confirmed deletion, permissions, keyboard focus, responsive English/Persian RTL and preserved mixed text. It reports actual UI payload and request counts; these local observations establish no production network latency or capacity. `scripts/validate.sh full` separately runs the complete package trees and real exact-login PostgreSQL proof; the browser command is explicit and must pass for the Admin candidate's acceptance.
 
 ## Licensing
 

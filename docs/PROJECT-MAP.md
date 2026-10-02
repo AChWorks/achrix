@@ -19,6 +19,7 @@ The document index, not a status report. Start from README/AGENTS and the releva
 | Semantic web, SEO, localization and machine content representations | [Web](web/seo-and-semantic-web.md) |
 | Go analysis tools, vulnerability triage and Foundation benchmarks | [Go quality](development/go-quality.md) |
 | Development Identity/Audit/Media contracts, web security, atomic events and retained-state/asset limits | [Identity](../identity/README.md), [Audit](../audit/README.md), [Media](../media/README.md) |
+| Development administration shell, Module-owned forms and browser proof | [Admin](../admin/README.md), [Identity Admin](../identity/admin/), [Media Admin](../media/admin/README.md), [consumer proof](../fixtures/notes/README.md#admin-browser-proving-composition) |
 | Outcome sequence | [Roadmap](development/roadmap.md) |
 | Artifact licenses | [LICENSE](../LICENSE), [Licensing policy](legal/licensing.md) |
 | Incoming rights and private consent procedure | [CLA](legal/cla.md) |

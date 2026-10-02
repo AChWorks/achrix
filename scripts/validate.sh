@@ -72,6 +72,7 @@ createdb -T template0 achrix_audit_test
 createdb -T template0 achrix_identity_consumer
 createdb -T template0 achrix_identity_restore
 createdb -T template0 achrix_media_test
+createdb -T template0 achrix_admin_test
 createdb -T template0 achrix_media_consumer
 createdb -T template0 achrix_media_restore
 mkdir -m 0700 "$validation_root/media-module" "$validation_root/media-source" "$validation_root/media-restored"
@@ -83,9 +84,10 @@ createdb -T template0 -E SQL_ASCII achrix_test_sqlascii
 export ACHRIX_IDENTITY_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_identity_test sslmode=disable"
 export ACHRIX_AUDIT_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_audit_test sslmode=disable"
 export ACHRIX_MEDIA_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_media_test sslmode=disable"
+export ACHRIX_ADMIN_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_admin_test sslmode=disable"
 export ACHRIX_MEDIA_TEST_ROOT="$validation_root/media-module"
-go test -race -count=1 -timeout=90s ./identity ./audit ./media
-unset ACHRIX_IDENTITY_TEST_DSN ACHRIX_AUDIT_TEST_DSN ACHRIX_MEDIA_TEST_DSN ACHRIX_MEDIA_TEST_ROOT
+go test -race -count=1 -timeout=90s ./identity/... ./audit/... ./media/... ./admin/...
+unset ACHRIX_IDENTITY_TEST_DSN ACHRIX_AUDIT_TEST_DSN ACHRIX_MEDIA_TEST_DSN ACHRIX_MEDIA_TEST_ROOT ACHRIX_ADMIN_TEST_DSN
 
 # Copy consumer-owned source only. Foundation source is downloaded as a pinned
 # normal Go module into a cold module cache; no replacement/workspace is used.
@@ -105,15 +107,17 @@ assert m.get('Sum') and m.get('GoModSum')
 print('Verified isolated pinned Foundation:',m['Version'])
 root=pathlib.Path(sys.argv[2]); dependency=pathlib.Path(m['Dir'])
 paths=[pathlib.Path('achrix.go')]
-for package in ['identity','audit','media']:
-    paths += sorted(p.relative_to(root) for p in (root/package).glob('*.go') if not p.name.endswith('_test.go'))
-    paths += sorted(p.relative_to(root) for p in (root/package/'migrations').glob('*.sql'))
+for package in ['identity','audit','media','admin']:
+    assert (root/package).is_dir() and (dependency/package).is_dir()
+    paths += sorted(p.relative_to(root) for p in (root/package).rglob('*')
+                    if p.is_file() and p.suffix in ['.go','.sql','.js','.css','.html']
+                    and not p.name.endswith('_test.go'))
 digest=hashlib.sha256()
 for relative in paths:
     source=(root/relative).read_bytes(); downloaded=(dependency/relative).read_bytes()
     assert source==downloaded, 'normal consumer source drift: '+str(relative)
     digest.update(str(relative).encode()+b'\0'+source)
-print('Verified normal-module Core/Identity/Audit/Media source SHA-256:',digest.hexdigest())
+print('Verified normal-module Core/Identity/Audit/Media/Admin source SHA-256:',digest.hexdigest())
 PY
 if go mod edit -json | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("Replace") else 1)'; then
   echo 'Local dependency replacements are prohibited in this proof' >&2; exit 1
@@ -254,4 +258,4 @@ for d in components.values():
 print('Verified packaged component versions:',json.dumps(b,sort_keys=True))
 PYCOMPONENT
 sha256sum "$validation_root/notes"
-echo 'Foundation, isolated consumer, Identity/Audit/Media, PostgreSQL, migrations, authorization and coherent retained database/assets restore verified'
+echo 'Foundation, isolated consumer, Identity/Audit/Media/Admin, PostgreSQL, migrations, authorization and coherent retained database/assets restore verified'

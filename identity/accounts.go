@@ -30,6 +30,25 @@ func (m *Module) account(parent context.Context, id string) (Account, error) {
 	return a, nil
 }
 
+func (m *Module) lookupAccount(parent context.Context, login string) (Account, error) {
+	ctx, p, finish, err := m.acquire(parent)
+	if err != nil {
+		return Account{}, err
+	}
+	defer finish()
+	var a Account
+	// Existing UNIQUE(login) owns the bounded exact predicate. Do not join
+	// credentials or sessions into this metadata-only reconciliation path.
+	err = p.QueryRow(ctx, "SELECT id,login,enabled,revision FROM identity.accounts WHERE login=$1", login).Scan(&a.ID, &a.Login, &a.Enabled, &a.Revision)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Account{}, ErrNotFound
+	}
+	if err != nil {
+		return Account{}, m.failure(ctx, "account_lookup", err)
+	}
+	return a, nil
+}
+
 func (m *Module) create(parent context.Context, a Account, hash string, now time.Time, prepared audit.Prepared) error {
 	return m.transaction(parent, "account_create", func(ctx context.Context, tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, "INSERT INTO identity.accounts(id,login,enabled,revision,created_at) VALUES($1,$2,$3,$4,$5)", a.ID, a.Login, a.Enabled, a.Revision, now)

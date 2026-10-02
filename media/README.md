@@ -2,6 +2,8 @@
 
 Media supplies an authorized private PNG/JPEG asset library inside the Foundation Go dependency. It owns generic asset identity, metadata and storage lifecycle. Products own permission grants, upload ingress, content relationships, retention policy and deployment/recovery profiles. Media has no Identity, Audit, Admin, public URL or static-file dependency. This is next-minor development source; the published v0.1.0 dependency has no Media implementation.
 
+This is the first implemented Media slice, not a restriction of Media ownership to images. Current supported uploads are **PNG and JPEG only**; WebP, SVG, GIF, ZIP, PDF, Word, Excel, PowerPoint and video are not accepted. Add formats from an actual consumer need with an explicit byte-validation, size/resource, authorization, serving and recovery profile before enabling them. Private attachment storage/download, inline preview, archive extraction and document/video conversion are distinct support decisions; accepting a file does not imply support for processing or displaying it. Products choose the formats they need within a supported profile rather than enabling every extension by default.
+
 The Module descriptor uses `achrix.Version()` for the containing Foundation dependency's source identity; capability ABI revisions are separate. Public Go declarations own the exact API.
 
 ## Compose and authorize
