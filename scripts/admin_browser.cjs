@@ -284,7 +284,7 @@ async function main() {
       }
 
       // Both actual owning surfaces use the normally resolved SDK and real data.
-      const retained=await mediaFlow({page,navigate,responseSubmit,request,csrf,probe,endpoint,fa,context,images:metadata.images});
+      const retained=await mediaFlow({page,navigate,responseSubmit,request,csrf,probe,endpoint,fa,context,images:metadata.images,files:metadata.files});
 
       // Missing CSRF and crafted privileged calls are checked against the real
       // cookie-bound handler, then independent persisted state is compared.
@@ -305,7 +305,7 @@ async function main() {
       sameState(beforeDenied,await probe(),"domain permission denial has no durable effects");
       await navigate("/admin/media");
       const viewerRow=page.locator('#assets tr[data-asset-id="'+retained.id+'"]');
-      assert.equal(await viewerRow.count(),1,"metadata viewer sees ready image");
+      assert.equal(await viewerRow.count(),1,"metadata viewer sees ready file");
       assert.equal(await viewerRow.locator("a[data-download],form[data-operation=delete]").count(),0,"metadata never grants Read or Delete");
       assert.equal(await page.locator("form[data-operation=upload]").count(),0);
       const beforeMediaDenied=await probe();
@@ -327,7 +327,7 @@ async function main() {
       await deleteRetained.locator("[data-confirm]").check();
       await responseSubmit(deleteRetained,"/admin/media/delete",204);
       assert.equal(await page.locator("#media-empty").isVisible(),true);
-      assert.equal((await probe()).readyAssets,0,"each language leaves no ready image behind");
+      assert.equal((await probe()).readyAssets,0,"each language leaves no ready file behind");
 
       assert.deepEqual(consoleErrors,[],"no uncaught browser exceptions");
       // Cold UI documents/assets are the payload that drives rendering. No
@@ -340,13 +340,13 @@ async function main() {
       assert(total<128*1024,"bounded unique UI payload");
       reports.push({language:endpoint.language,browser:browser.version(),uniqueUIPayloadBytes:total,
         requests:calls.length,createRoundTrips:2,actualTLS:true,keyboard:true,unknownCreateRecovered:true,
-        deniedDurableStateUnchanged:true});
+        deniedDurableStateUnchanged:true,commonAttachmentFormats:["PDF","ZIP","WebP","WebM"]});
       await context.close();
     }
     console.log(JSON.stringify({proof:"actual HTTPS normal-SDK Identity Media Admin browser",reports},null,2));
   } finally { await browser.close(); }
 }
-async function mediaFlow({page,navigate,responseSubmit,request,csrf,probe,endpoint,fa,context,images}) {
+async function mediaFlow({page,navigate,responseSubmit,request,csrf,probe,endpoint,fa,context,images,files}) {
   await navigate("/admin/media");
   assert.equal(await page.locator("#media-empty").isVisible(),true,"real empty library");
   const png=Buffer.from(images.png,"base64"),jpeg=Buffer.from(images.jpeg,"base64");
@@ -383,8 +383,72 @@ async function mediaFlow({page,navigate,responseSubmit,request,csrf,probe,endpoi
   const jpegRow=page.locator('#assets tr[data-asset-id="'+second.id+'"]');
   assert.equal(await jpegRow.locator("bdi").first().innerText(),jpegName,"stored markup-like filename rendered as text");
   assert.equal(await jpegRow.locator("img,svg,[onerror]").count(),0,"module-owned refreshed DOM uses contextual escaping");
+  // These are original owned files, not preview/conversion outputs of Media.
+  // Chromium itself produces complete WebP/WebM fixtures for this pinned test.
+  const nativeFiles=await page.evaluate(async ()=>{
+    const canvas=document.createElement("canvas");canvas.width=16;canvas.height=16;
+    const drawing=canvas.getContext("2d");drawing.fillStyle="#1775c2";drawing.fillRect(0,0,16,16);
+    const image=await new Promise(resolve=>canvas.toBlob(resolve,"image/webp",0.9));
+    if (!image || image.type!=="image/webp") throw new Error("pinned Chromium WebP encoder unavailable");
+    const stream=canvas.captureStream(10);
+    const chunks=[];
+    const recorder=new MediaRecorder(stream,{mimeType:"video/webm;codecs=vp8"});
+    const complete=new Promise((resolve,reject)=>{
+      recorder.ondataavailable=event=>{if(event.data.size)chunks.push(event.data)};
+      recorder.onerror=event=>reject(event.error||new Error("owned WebM recording failed"));
+      recorder.onstop=resolve;
+    });
+    try {
+      recorder.start();
+      await new Promise(resolve=>setTimeout(resolve,250));
+      drawing.fillStyle="#c27517";drawing.fillRect(0,0,16,16);
+      await new Promise(resolve=>setTimeout(resolve,150));
+      recorder.stop();await complete;
+    } finally { for(const track of stream.getTracks())track.stop(); }
+    const video=new Blob(chunks,{type:"video/webm"});
+    if(!video.size)throw new Error("owned WebM recording is empty");
+    return{webp:Array.from(new Uint8Array(await image.arrayBuffer())),webm:Array.from(new Uint8Array(await video.arrayBuffer()))};
+  });
+  const examples=[
+    {name:"گزارش نمونه-"+endpoint.language+".pdf",mime:"application/pdf",body:Buffer.from(files["document.pdf"],"base64")},
+    {name:"bundle-"+endpoint.language+".zip",mime:"application/zip",body:Buffer.from(files["bundle.zip"],"base64")},
+    {name:"picture-"+endpoint.language+".webp",mime:"image/webp",body:Buffer.from(nativeFiles.webp)},
+    {name:"clip-"+endpoint.language+".webm",mime:"video/webm",body:Buffer.from(nativeFiles.webm)}
+  ];
+  const accept=await page.locator("#media-file").getAttribute("accept");
+  for(const example of examples) {
+    assert(example.body.length>0,"complete owned common-format fixture");
+    assert(accept.includes(example.mime),"effective common format appears in browser hint");
+    // A caller MIME claim is not authoritative; the PDF is deliberately claimed binary.
+    await page.locator("#media-file").setInputFiles({name:example.name,mimeType:"application/octet-stream",buffer:example.body});
+    const created=(await(await responseSubmit(upload,"/admin/media/upload")).json()).asset;
+    assert.equal(created.mime,example.mime);assert.equal(created.filename,example.name);
+    assert.equal(created.width,0);assert.equal(created.height,0,"opaque recognition supplies no decoded dimensions");
+    assert.equal(created.size,example.body.length);
+    await responseSubmit(page.locator("#media-refresh"),"/admin/media/list");
+    const exampleRow=page.locator('#assets tr[data-asset-id="'+created.id+'"]');
+    assert.equal(await exampleRow.locator("bdi").first().innerText(),example.name);
+    assert(!(await exampleRow.innerText()).includes("0×0"),"unknown dimensions are omitted from dynamic rows");
+    const originalDownload=page.waitForEvent("download");
+    await exampleRow.locator("a[data-download]").press("Enter");
+    const saved=await originalDownload;assert.equal(await saved.failure(),null);
+    assert.equal(saved.suggestedFilename(),example.name);
+    assert.deepEqual(await fs.readFile(await saved.path()),example.body,"common format retains exact original bytes");
+    const headers=await page.evaluate(async id=>{
+      const response=await fetch("/admin/media/read/"+id,{credentials:"same-origin",cache:"no-store"});
+      return{status:response.status,mime:response.headers.get("content-type"),disposition:response.headers.get("content-disposition"),cache:response.headers.get("cache-control"),nosniff:response.headers.get("x-content-type-options"),length:response.headers.get("content-length")};
+    },created.id);
+    assert.equal(headers.status,200);assert.equal(headers.mime,example.mime);
+    assert.equal(headers.cache,"private, no-store");assert.equal(headers.nosniff,"nosniff");
+    assert.equal(headers.length,String(example.body.length));
+    assert(headers.disposition.startsWith("attachment; "),"opaque files remain authenticated attachments");
+    const remove=exampleRow.locator('form[data-operation="delete"]');
+    await remove.locator("[data-confirm]").check();await responseSubmit(remove,"/admin/media/delete",204);
+    assert.equal(await exampleRow.count(),0,"ordinary confirmed deletion handles common files");
+  }
+  assert.equal(await page.locator("#assets tr").count(),2,"common-format proof cleans up only its own additions");
   await page.setViewportSize({width:375,height:812});
-  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),"responsive image library does not overflow viewport");
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),"responsive file library does not overflow viewport");
   await page.setViewportSize({width:1280,height:900});
 
   // Exercise the real private attachment link using the authenticated browser.
