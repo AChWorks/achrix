@@ -246,7 +246,7 @@ import json,sys
 m=json.load(open(sys.argv[1])); b=json.load(open(sys.argv[2]))
 assert b['foundation']==m['Version']
 components={d['ID']: d for d in b['components']}
-assert len(b['components'])==2 and set(components)=={'achrix.identity','achrix.audit'}
+assert len(b['components'])==3 and set(components)=={'achrix.identity','achrix.audit','achrix.media'}
 for d in components.values():
     assert d['Version']==m['Version'], 'packaged component version drift: '+d['ID']
     assert all(c['Version']==1 for c in d['Provides'])

@@ -13,6 +13,7 @@ import (
 	"github.com/AChWorks/achrix"
 	"github.com/AChWorks/achrix/audit"
 	"github.com/AChWorks/achrix/identity"
+	"github.com/AChWorks/achrix/media"
 )
 
 func main() {
@@ -33,9 +34,13 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	mediaModule, err := media.NewPostgres(dsn, media.Config{StorageRoot: "/tmp/achrix-component-storage"}, nil)
+	if err != nil {
+		return err
+	}
 	app, err := achrix.New(achrix.Config{StartupTimeout: time.Second, ShutdownTimeout: time.Second}, achrix.PolicyFunc(func(context.Context, achrix.Principal, string, string) error {
 		return achrix.ErrDenied
-	}), identityModule, auditModule)
+	}), identityModule, auditModule, mediaModule)
 	if err != nil {
 		return err
 	}
