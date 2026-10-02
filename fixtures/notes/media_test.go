@@ -404,7 +404,7 @@ func mediaCheckAsset(t *testing.T, a media.Asset, name, format string, body []by
 	t.Helper()
 	sum := sha256.Sum256(body)
 	if a.ID == "" || len(a.ID) != 26 || a.Filename != name || a.MIME != "image/"+format || a.Size != int64(len(body)) || a.Width != 31 || a.Height != 17 || a.SHA256 != hex.EncodeToString(sum[:]) || a.Revision < 1 || a.State != "ready" || a.CreatedAt.IsZero() || a.CreatedAt.Location() != time.UTC {
-		t.Fatal("public Media identity/metadata differs")
+		t.Fatalf("public Media metadata differs: ID=%q MIME=%q Size=%d dimensions=%dx%d Revision=%d State=%q CreatedAt=%s location=%s", a.ID, a.MIME, a.Size, a.Width, a.Height, a.Revision, a.State, a.CreatedAt.Format(time.RFC3339Nano), a.CreatedAt.Location())
 	}
 }
 

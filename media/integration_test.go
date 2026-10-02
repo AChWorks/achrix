@@ -124,7 +124,7 @@ func TestPostgresLifecycleAuthorizationAndPagination(t *testing.T) {
 	assets := make([]Asset, 3)
 	for i := range assets {
 		assets[i], err = f.service.Create(ctx, testActor, "تصویر‌نمونه.png", bytes.NewReader(data))
-		if err != nil || assets[i].State != "ready" || assets[i].Revision != 2 || assets[i].Filename != "تصویر‌نمونه.png" {
+		if err != nil || assets[i].State != "ready" || assets[i].Revision != 2 || assets[i].Filename != "تصویر‌نمونه.png" || assets[i].CreatedAt.Location() != time.UTC {
 			t.Fatalf("create %+v %v", assets[i], err)
 		}
 	}
