@@ -58,8 +58,16 @@ async function main() {
       const page=await context.newPage();
       const consoleErrors=[];
       page.on("pageerror",error=>consoleErrors.push(error.message));
-      const calls=[];
-      page.on("request",request=>calls.push({method:request.method(),path:new URL(request.url()).pathname}));
+      const calls=[],csrfAdmissions=[];
+      page.on("request",request=>{
+        const pathname=new URL(request.url()).pathname;
+        calls.push({method:request.method(),path:pathname});
+        if(pathname==="/auth/csrf"&&request.method()==="GET") {
+          // Observe actual browser-generated source headers without overriding
+          // routing or logging cookie/CSRF/credential-bearing headers.
+          csrfAdmissions.push(request.allHeaders().then(headers=>({referer:headers.referer,origin:headers.origin})));
+        }
+      });
       const cost=[];
       page.on("response",response=>{
         const type=response.request().resourceType();
@@ -81,9 +89,16 @@ async function main() {
         return response;
       }
       async function responseSubmit(form,route,status=200) {
+        const validation=await form.evaluate(f=>({valid:f.checkValidity(),invalid:[...f.elements].filter(e=>e.validity&&!e.validity.valid).map(e=>e.name)}));
+        assert.equal(validation.valid,true,route+": native form validation: "+validation.invalid.join(","));
+        const admissionBefore=csrfAdmissions.length;
         const pending=page.waitForResponse(r=>new URL(r.url()).pathname===route&&r.request().method()==="POST");
         await form.locator('button[type="submit"]').press("Enter");
         const response=await pending; assert.equal(response.status(),status,route);
+        assert.equal(csrfAdmissions.length,admissionBefore+1,"one actual UI CSRF admission: "+route);
+        const source=await csrfAdmissions[admissionBefore];
+        assert.equal(source.referer,endpoint.origin+"/","UI CSRF sends only the same-origin root as Referer");
+        if(source.origin!==undefined) assert.equal(source.origin,endpoint.origin,"UI CSRF Origin remains exact");
         await page.waitForFunction(()=>document.querySelector('form[aria-busy="true"]')===null);
         if(status===200||status===204) {
           assert((await page.locator("#status").innerText()).includes(completed));
@@ -108,7 +123,8 @@ async function main() {
       }
       async function csrf() {
         return page.evaluate(async ()=>{
-          const response=await fetch("/auth/csrf",{credentials:"same-origin",headers:{"X-Identity-Request":"1"},cache:"no-store"});
+          const response=await fetch("/auth/csrf",{credentials:"same-origin",headers:{"X-Identity-Request":"1"},cache:"no-store",
+            mode:"same-origin",redirect:"error",referrer:location.origin+"/",referrerPolicy:"same-origin"});
           if(!response.ok) throw new Error("fixture csrf unavailable");
           return (await response.json()).csrf;
         });
@@ -147,8 +163,20 @@ async function main() {
       assert.equal(await page.locator("input:not([type=hidden]):not([type=checkbox])").evaluateAll(inputs=>inputs.every(input=>input.labels.length>0)),true,"visible inputs have labels");
       const create=page.locator('form[data-operation="create"]');
       const login="browser-created-"+endpoint.language;
-      await page.locator("#new-login").fill(login);
+      await page.locator("[pattern]").evaluateAll(inputs=>inputs.forEach(input=>new RegExp(input.pattern,"v")));
       await page.locator("#new-password").fill("🔐".repeat(15));
+      const beforeInvalidLogin=calls.length;
+      for(const selector of ["#new-login","#lookup-login"]) {
+        const input=page.locator(selector);
+        await input.fill("invalid login");
+        assert.equal(await input.evaluate(e=>e.validity.patternMismatch),true,"native login syntax rejects spaces: "+selector);
+        await input.locator("xpath=..").locator('button[type="submit"]').press("Enter");
+        assert.equal(await input.evaluate(e=>e===document.activeElement),true,"native validation focuses the invalid login");
+      }
+      await delay(100);
+      assert.equal(calls.length,beforeInvalidLogin,"invalid login submits no request");
+      await page.locator("#lookup-login").fill(login);
+      await page.locator("#new-login").fill(login);
       const startCalls=calls.length;
       const created=await responseSubmit(create,"/admin/identity/create");
       const createdBody=await created.json();
