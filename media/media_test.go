@@ -58,7 +58,7 @@ func TestInputAndConfigurationBounds(t *testing.T) {
 			t.Fatalf("accepted unsafe filename %q", name)
 		}
 	}
-	if !validFilename("تصویر نمونه.png") || !validFilename("تصویر‌نمونه.png") || !validFilename("تصویر‍نمونه.png") {
+	if !validFilename("تصویر نمونه.png") || !validFilename("تصویر\u200cنمونه.png") || !validFilename("تصویر\u200dنمونه.png") {
 		t.Fatal("ordinary RTL filename rejected")
 	}
 	for _, id := range []string{"", "../x", strings.Repeat("A", 25), strings.Repeat("A", 27), strings.Repeat("a", 26)} {
