@@ -103,7 +103,7 @@ func databaseConfig(dsn string) (*pgxpool.Config, error) {
 	return c, nil
 }
 func (m *Module) Descriptor() achrix.Descriptor {
-	return achrix.Descriptor{ID: "achrix.identity", Version: ModuleVersion, Provides: []achrix.Capability{{ID: AccountCreate, Version: 1}, {ID: AccountRead, Version: 1}, {ID: CredentialSet, Version: 1}, {ID: PasswordChange, Version: 1}, {ID: AccountSetEnabled, Version: 1}, {ID: SessionRevokeAll, Version: 1}, {ID: Authentication, Version: 1}}, Requires: []achrix.Capability{{ID: "achrix.authorization", Version: 2}, {ID: audit.Append, Version: 1}}}
+	return achrix.Descriptor{ID: "achrix.identity", Version: achrix.Version(), Provides: []achrix.Capability{{ID: AccountCreate, Version: 1}, {ID: AccountRead, Version: 1}, {ID: CredentialSet, Version: 1}, {ID: PasswordChange, Version: 1}, {ID: AccountSetEnabled, Version: 1}, {ID: SessionRevokeAll, Version: 1}, {ID: Authentication, Version: 1}}, Requires: []achrix.Capability{{ID: "achrix.authorization", Version: 2}, {ID: audit.Append, Version: 1}}}
 }
 func (m *Module) now() time.Time { return m.config.Now().UTC().Truncate(time.Microsecond) }
 func (m *Module) Start(ctx context.Context) error {

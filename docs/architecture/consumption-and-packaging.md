@@ -10,7 +10,7 @@ Generated bootstrap files may transfer to the product. Shared runtime is not an 
 
 ## Module installation
 
-Compose trusted Modules at build time through public contracts into a pinned, tested product executable/image. Core and internal Modules in one Go module share its dependency version; separately packaged Modules have their own versions.
+Compose trusted Modules at build time through public contracts into a pinned, tested product executable/image. Core and internal Modules in one Go module share its dependency version; separately packaged Modules have their own versions. Their `Descriptor.Version` reports that actual source-backed dependency identity under the [public version contract](contracts-and-interfaces.md#capability-abi-and-composition); development/replacement labels are explicit and never an invented release.
 
 Installing/updating code selects or builds a compatible product artifact. An already packaged optional Module may be enabled/disabled through explicit product configuration under dependencies, authorization and data-lifecycle rules. **Code/artifact presence, advertised capability availability, runtime activation/resource acquisition, authorization and durable state/data removal are distinct.** Enabling a path never grants permission by itself; disabling one never implies uninstalling code, reversing migrations or deleting retained data. A change that alters the composed Module/capability graph normally takes effect through construction, validation and activation of a new Application instance/product artifact under the product lifecycle; it does not imply mutating the running graph, hot-unloading Go code or a dynamic plugin runtime.
 

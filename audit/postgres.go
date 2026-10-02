@@ -130,7 +130,7 @@ func sameTLS(a, b *tls.Config) bool {
 }
 
 func (m *Module) Descriptor() achrix.Descriptor {
-	return achrix.Descriptor{ID: "achrix.audit", Version: ModuleVersion, Provides: []achrix.Capability{{ID: Append, Version: 1}, {ID: Query, Version: 1}, {ID: Export, Version: 1}}, Requires: []achrix.Capability{{ID: "achrix.authorization", Version: 2}}}
+	return achrix.Descriptor{ID: "achrix.audit", Version: achrix.Version(), Provides: []achrix.Capability{{ID: Append, Version: 1}, {ID: Query, Version: 1}, {ID: Export, Version: 1}}, Requires: []achrix.Capability{{ID: "achrix.authorization", Version: 2}}}
 }
 func (m *Module) now() time.Time { return m.config.Now().UTC().Truncate(time.Microsecond) }
 func (m *Module) Start(ctx context.Context) error {
