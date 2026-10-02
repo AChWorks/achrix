@@ -12,11 +12,12 @@ DOCUMENTS = {
 ROUTING = {
     ".github/workflows/baseline.yml", "scripts/validation_scope.py",
     "scripts/test_validation_scope.py", "scripts/validate.sh",
-    "scripts/setup-validation-postgres.sh",
+    "scripts/setup-validation-postgres.sh", "scripts/setup-quality-tools.sh",
+    "scripts/check-gofmt.sh", "scripts/test_go_quality.py",
 }
 
 
-def classify(changes):
+def classify(changes, benchmark_is_regular=False):
     if not changes:
         return "full", True
     docs = lambda path: path in DOCUMENTS or (
@@ -26,6 +27,8 @@ def classify(changes):
     if all(docs(path) for _, path in changes):
         return "docs", routing
     if all(docs(path) or (status == "M" and path == "achrix_test.go")
+           or (benchmark_is_regular and status in {"A", "M"}
+               and path == "achrix_bench_test.go")
            for status, path in changes):
         return "core", routing
     return "full", routing
@@ -52,7 +55,21 @@ def select(base, directory=None):
         git + ["diff", "--no-ext-diff", "--no-textconv", "--check", base, "HEAD"],
         check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
-    return classify(changes)
+    benchmark_is_regular = False
+    if any(path == "achrix_bench_test.go" for _, path in changes):
+        try:
+            tree = subprocess.check_output(
+                git + ["ls-tree", "-z", "HEAD", "--", "achrix_bench_test.go"],
+                stderr=subprocess.PIPE,
+            )
+        except subprocess.CalledProcessError:
+            return "full", True
+        benchmark_is_regular = (
+            tree.startswith((b"100644 blob ", b"100755 blob "))
+            and tree.endswith(b"\tachrix_bench_test.go\0")
+            and tree.count(b"\0") == 1
+        )
+    return classify(changes, benchmark_is_regular)
 
 
 if __name__ == "__main__":

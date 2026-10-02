@@ -51,6 +51,37 @@ class ValidationScopeTests(unittest.TestCase):
         self.commit()
         self.assertEqual(self.scope(), ("core", False))
 
+    def test_benchmark_addition_and_modification_need_only_core(self):
+        self.write("achrix_bench_test.go")
+        self.commit()
+        self.assertEqual(self.scope(), ("core", False))
+        base = self.git("rev-parse", "HEAD").strip()
+        self.write("achrix_bench_test.go", "updated benchmark\n")
+        self.commit()
+        self.assertEqual(select(base, self.root), ("core", False))
+
+    def test_added_benchmark_symlink_is_not_a_narrow_exception(self):
+        (self.root / "achrix_bench_test.go").symlink_to("README.md")
+        self.commit()
+        self.assertEqual(self.scope(), ("full", False))
+
+    def test_benchmark_deletion_type_change_and_unknown_tests_stay_full(self):
+        self.write("achrix_bench_test.go")
+        self.commit()
+        base = self.git("rev-parse", "HEAD").strip()
+        (self.root / "achrix_bench_test.go").unlink()
+        (self.root / "achrix_bench_test.go").symlink_to("README.md")
+        self.commit()
+        self.assertEqual(select(base, self.root), ("full", False))
+        base = self.git("rev-parse", "HEAD").strip()
+        (self.root / "achrix_bench_test.go").unlink()
+        self.commit()
+        self.assertEqual(select(base, self.root), ("full", False))
+        base = self.git("rev-parse", "HEAD").strip()
+        self.write("other_bench_test.go")
+        self.commit()
+        self.assertEqual(select(base, self.root), ("full", False))
+
     def test_runtime_mixed_dependencies_and_unknown_paths_stay_full(self):
         for index, path in enumerate((
             "achrix.go", "go.mod", "fixtures/notes/go.sum",
@@ -65,9 +96,13 @@ class ValidationScopeTests(unittest.TestCase):
                 self.assertEqual(select(base, self.root), ("full", False))
 
     def test_routing_changes_validate_the_router(self):
-        self.write(".github/workflows/baseline.yml")
-        self.commit()
-        self.assertEqual(self.scope(), ("full", True))
+        for path in (".github/workflows/baseline.yml", "scripts/setup-quality-tools.sh",
+                     "scripts/check-gofmt.sh", "scripts/test_go_quality.py"):
+            with self.subTest(path=path):
+                base = self.git("rev-parse", "HEAD").strip()
+                self.write(path)
+                self.commit()
+                self.assertEqual(select(base, self.root), ("full", True))
 
     def test_deleted_or_renamed_runtime_and_core_tests_cannot_hide(self):
         (self.root / "achrix_test.go").unlink()

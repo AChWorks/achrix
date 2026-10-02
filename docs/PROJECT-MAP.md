@@ -17,6 +17,7 @@ The document index, not a status report. Start from README/AGENTS and the releva
 | Install/upgrade, backup/restore/recovery profile, compatibility and official artifact evidence | [Lifecycle](lifecycle/lifecycle-and-compatibility.md) |
 | Deployment/runtime configuration versus durable Settings, diagnosis, bounded resources and cost | [Operations](operations/operability-performance.md) |
 | Semantic web, SEO, localization and machine content representations | [Web](web/seo-and-semantic-web.md) |
+| Go analysis tools, vulnerability triage and Foundation benchmarks | [Go quality](development/go-quality.md) |
 | Outcome sequence | [Roadmap](development/roadmap.md) |
 | Artifact licenses | [LICENSE](../LICENSE), [Licensing policy](legal/licensing.md) |
 | Incoming rights and private consent procedure | [CLA](legal/cla.md) |
