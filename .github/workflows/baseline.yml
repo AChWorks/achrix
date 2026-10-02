@@ -34,12 +34,15 @@ jobs:
         if: steps.scope.outputs.routing_tests == 'true'
         run: |
           python3 -m unittest discover -s scripts -p 'test_validation_scope.py'
-          bash -n scripts/validate.sh scripts/setup-validation-postgres.sh
+          bash -n scripts/validate.sh scripts/setup-validation-postgres.sh scripts/setup-quality-tools.sh scripts/check-gofmt.sh
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         if: steps.scope.outputs.scope != 'docs'
         with:
           go-version: '1.27.1'
           cache: false
+      - name: Check quality-tool guards and formatter failures
+        if: steps.scope.outputs.routing_tests == 'true'
+        run: python3 -m unittest discover -s scripts -p 'test_go_quality.py'
       # Cache only native tools. The setup digest includes the official source
       # checksum, exact version and build options; never restore a prefix match.
       - name: Restore exact PostgreSQL validation tools

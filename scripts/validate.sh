@@ -20,6 +20,25 @@ fi
 # Retain the already verified toolchain when the dependency module cache becomes
 # cold; an older bootstrap Go need not download that identical SDK a second time.
 export PATH="$(go env GOROOT)/bin:$PATH"
+validation_root=$(mktemp -d /tmp/achrix-validation.XXXXXXXX)
+started=0
+cleanup() {
+  result=$?
+  if [[ $started == 1 ]]; then pg_ctl -D "$validation_root/database" -m fast -w stop >/dev/null || result=1; fi
+  # Go's module cache is intentionally read-only. Use Go's supported cleanup on
+  # this exact task-owned cache rather than trying to remove protected files.
+  if [[ -d $validation_root/module-cache ]]; then
+    GOMODCACHE="$validation_root/module-cache" go clean -modcache || result=1
+  fi
+  rm -rf -- "$validation_root" || result=1
+  exit "$result"
+}
+trap cleanup EXIT
+scripts/check-gofmt.sh
+scripts/setup-quality-tools.sh "$validation_root/quality-tools"
+quality_bin="$validation_root/quality-tools/bin"
+"$quality_bin/staticcheck" ./...
+"$quality_bin/govulncheck" -db https://vuln.go.dev -show version,verbose ./...
 go vet ./...
 go test -race -count=1 -timeout=30s ./...
 go mod verify
@@ -37,20 +56,6 @@ for tool in initdb pg_ctl psql createdb pg_dump pg_restore; do
 done
 if [[ $(id -u) == 0 ]]; then echo 'Run validation as a non-root user' >&2; exit 1; fi
 
-validation_root=$(mktemp -d /tmp/achrix-validation.XXXXXXXX)
-started=0
-cleanup() {
-  result=$?
-  if [[ $started == 1 ]]; then pg_ctl -D "$validation_root/database" -m fast -w stop >/dev/null || result=1; fi
-  # Go's module cache is intentionally read-only. Use Go's supported cleanup on
-  # this exact task-owned cache rather than trying to remove protected files.
-  if [[ -d $validation_root/module-cache ]]; then
-    GOMODCACHE="$validation_root/module-cache" go clean -modcache || result=1
-  fi
-  rm -rf -- "$validation_root" || result=1
-  exit "$result"
-}
-trap cleanup EXIT
 mkdir "$validation_root/socket"
 initdb -D "$validation_root/database" -A trust --no-locale -E UTF8 >/dev/null
 # A mode-0700 task-owned directory and Unix socket only; no host DB/service/port is used.
@@ -84,6 +89,8 @@ PY
 if go mod edit -json | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("Replace") else 1)'; then
   echo 'Local dependency replacements are prohibited in this proof' >&2; exit 1
 fi
+"$quality_bin/staticcheck" ./...
+"$quality_bin/govulncheck" -db https://vuln.go.dev -show version,verbose ./...
 go vet ./...
 export NOTES_TEST_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_test_notes sslmode=disable"
 export NOTES_TEST_LATIN1_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_test_latin1 sslmode=disable"

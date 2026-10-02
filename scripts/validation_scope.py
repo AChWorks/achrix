@@ -12,7 +12,8 @@ DOCUMENTS = {
 ROUTING = {
     ".github/workflows/baseline.yml", "scripts/validation_scope.py",
     "scripts/test_validation_scope.py", "scripts/validate.sh",
-    "scripts/setup-validation-postgres.sh",
+    "scripts/setup-validation-postgres.sh", "scripts/setup-quality-tools.sh",
+    "scripts/check-gofmt.sh", "scripts/test_go_quality.py",
 }
 
 
@@ -26,6 +27,7 @@ def classify(changes):
     if all(docs(path) for _, path in changes):
         return "docs", routing
     if all(docs(path) or (status == "M" and path == "achrix_test.go")
+           or (status in {"A", "M"} and path == "achrix_bench_test.go")
            for status, path in changes):
         return "core", routing
     return "full", routing
