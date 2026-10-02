@@ -18,23 +18,33 @@ import (
 )
 
 var (
-	ErrDenied      = errors.New("permission denied")
-	ErrNotReady    = errors.New("application not ready")
-	ErrComposition = errors.New("invalid composition")
+	ErrDenied                   = errors.New("permission denied")
+	ErrAuthorizationUnavailable = errors.New("authorization unavailable")
+	ErrNotReady                 = errors.New("application not ready")
+	ErrComposition              = errors.New("invalid composition")
 )
 
+var errDeadlineRequired = errors.New("operation deadline required")
+
 // Capability identifies an owned public contract. Version is its positive ABI
-// revision, not the implementation's release version.
+// revision, not the implementation's release version. Compatible additive changes
+// retain the revision; incompatible contracts increment it. Composition matches
+// exact revisions and admits only one provider/revision for each capability ID.
 type Capability struct {
 	ID      string
 	Version uint32
 }
 
+// Descriptor is deterministic, side-effect-free, cheap composition metadata.
+// Describing a Module must not read environment/secrets, acquire resources, call
+// networks/databases or mutate registration. Optional providers may be absent;
+// when present they must match the exact revision and precede their consumers.
 type Descriptor struct {
 	ID       string
 	Version  string
 	Provides []Capability
 	Requires []Capability
+	Optional []Capability
 }
 
 // Module owns its resources. Start, Ready and Stop must honor context cancellation.
@@ -50,8 +60,10 @@ type Module interface {
 // Principal is a product-authenticated opaque identity, never a bearer token.
 type Principal string
 
-// Policy is the consumer-owned authorization decision. Any non-nil result denies.
-// It must honor context cancellation and must not mutate domain state.
+// Policy is the consumer-owned authorization decision: nil allows, ErrDenied
+// (possibly wrapped) explicitly denies, and other errors fail closed as evaluation
+// unavailable. It must honor cancellation and must not mutate domain state.
+// Implementations must be safe for concurrent calls.
 type Policy interface {
 	Authorize(context.Context, Principal, string, string) error
 }
@@ -73,20 +85,26 @@ type component struct {
 	descriptor Descriptor
 }
 
-// Application is immutable after composition except for its serialized lifecycle.
+// Application is immutable after composition except for lifecycle/admission state.
 // Domain methods remain typed consumer-owned methods, not an untyped dispatcher.
 type Application struct {
-	mu           sync.RWMutex
+	mu           sync.Mutex // Short state/admission sections only; never callbacks.
 	config       Config
 	policy       Policy
 	components   []component
 	capabilities map[string]Capability
 	state        string
+	lifecycle    chan struct{} // Serializes Start/Stop without unbounded lock waits.
+	workContext  context.Context
+	cancelWork   context.CancelFunc
+	active       int
+	drained      chan struct{}
+	stopErr      error
 }
 
 var identity = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$`)
 
-// New rejects duplicate, missing, incompatible or cyclic required contracts before
+// New rejects duplicate, missing, incompatible or cyclic composed contracts before
 // any module starts. Module descriptors are snapshotted to prevent mutable registry
 // state leaking between instances. No process-global registration exists.
 func New(config Config, policy Policy, modules ...Module) (*Application, error) {
@@ -96,7 +114,7 @@ func New(config Config, policy Policy, modules ...Module) (*Application, error) 
 	if config.Logger == nil {
 		config.Logger = slog.Default()
 	}
-	a := &Application{config: config, policy: policy, state: "new", capabilities: map[string]Capability{"achrix.authorization": {ID: "achrix.authorization", Version: 1}}}
+	a := &Application{config: config, policy: policy, state: "new", capabilities: map[string]Capability{"achrix.authorization": {ID: "achrix.authorization", Version: 2}}}
 	owners := map[string]int{"achrix.authorization": -1}
 	ids := map[string]bool{}
 	all := make([]component, len(modules))
@@ -127,14 +145,25 @@ func New(config Config, policy Policy, modules ...Module) (*Application, error) 
 	for i, c := range all {
 		deps[i] = map[int]bool{}
 		seen := map[string]bool{}
-		for _, r := range c.descriptor.Requires {
-			got, ok := a.capabilities[r.ID]
-			if !valid(r) || !ok || got.Version != r.Version || seen[r.ID] {
-				return nil, fmt.Errorf("%w: required capability %s", ErrComposition, r.ID)
-			}
-			seen[r.ID] = true
-			if owner := owners[r.ID]; owner >= 0 {
-				deps[i][owner] = true
+		for _, group := range []struct {
+			capabilities []Capability
+			optional     bool
+		}{{c.descriptor.Requires, false}, {c.descriptor.Optional, true}} {
+			for _, r := range group.capabilities {
+				if !valid(r) || seen[r.ID] {
+					return nil, fmt.Errorf("%w: dependency declaration %s", ErrComposition, r.ID)
+				}
+				seen[r.ID] = true
+				got, present := a.capabilities[r.ID]
+				if !present && group.optional {
+					continue
+				}
+				if !present || got.Version != r.Version {
+					return nil, fmt.Errorf("%w: dependency capability %s", ErrComposition, r.ID)
+				}
+				if owner := owners[r.ID]; owner >= 0 {
+					deps[i][owner] = true
+				}
 			}
 		}
 	}
@@ -162,6 +191,10 @@ func New(config Config, policy Policy, modules ...Module) (*Application, error) 
 			return nil, fmt.Errorf("%w: startup dependency cycle", ErrComposition)
 		}
 	}
+	a.lifecycle = make(chan struct{}, 1)
+	a.drained = make(chan struct{})
+	close(a.drained)
+	a.workContext, a.cancelWork = context.WithCancel(context.Background())
 	return a, nil
 }
 
@@ -180,6 +213,7 @@ func nilValue(v any) bool {
 func clone(d Descriptor) Descriptor {
 	d.Provides = slices.Clone(d.Provides)
 	d.Requires = slices.Clone(d.Requires)
+	d.Optional = slices.Clone(d.Optional)
 	return d
 }
 
@@ -188,14 +222,24 @@ func clone(d Descriptor) Descriptor {
 // failures are diagnosed by component and phase without logging extension errors.
 func (a *Application) Start(parent context.Context) error {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	if a.state != "new" {
+		a.mu.Unlock()
 		return ErrNotReady
 	}
+	// A new instance has no lifecycle owner. Reserve ownership before publishing
+	// starting so concurrent Shutdown cannot stop a partially starting Module.
+	a.lifecycle <- struct{}{}
 	a.state = "starting"
+	a.mu.Unlock()
+	defer func() { <-a.lifecycle }()
 	ctx, cancel := context.WithTimeout(parent, a.config.StartupTimeout)
 	defer cancel()
+	stopCancel := context.AfterFunc(a.workContext, cancel)
+	defer stopCancel()
+	var startErr error
+	started := 0
 	for i, c := range a.components {
+		started = i + 1
 		err := ctx.Err()
 		if err == nil {
 			err = c.module.Start(ctx)
@@ -205,33 +249,86 @@ func (a *Application) Start(parent context.Context) error {
 		}
 		if err != nil {
 			a.config.Logger.ErrorContext(parent, "lifecycle failure", "component", c.descriptor.ID, "phase", "start", "reason", reason(err))
-			a.state = "stopped"
-			cleanup, cancel := context.WithTimeout(context.WithoutCancel(parent), a.config.ShutdownTimeout)
-			defer cancel()
-			return errors.Join(fmt.Errorf("component %s start: %w", c.descriptor.ID, err), a.stop(cleanup, a.components[:i+1]))
+			startErr = fmt.Errorf("component %s start: %w", c.descriptor.ID, err)
+			break
 		}
 	}
-	a.state = "ready"
-	a.config.Logger.InfoContext(parent, "application ready", "component", "achrix.core", "core_version", Version())
-	return nil
+	a.mu.Lock()
+	if startErr == nil {
+		startErr = ctx.Err()
+		if startErr == nil && a.state != "starting" {
+			startErr = context.Canceled
+		}
+	}
+	if startErr == nil {
+		a.state = "ready"
+		a.mu.Unlock()
+		a.config.Logger.InfoContext(parent, "application ready", "component", "achrix.core", "core_version", Version())
+		return nil
+	}
+	a.state = "stopping"
+	a.mu.Unlock()
+	cleanup, cleanupCancel := context.WithTimeout(context.WithoutCancel(parent), a.config.ShutdownTimeout)
+	defer cleanupCancel()
+	cleanupErr := a.stop(cleanup, a.components[:started])
+	a.mu.Lock()
+	a.state, a.stopErr = "stopped", cleanupErr
+	a.cancelWork()
+	a.mu.Unlock()
+	return errors.Join(startErr, cleanupErr)
 }
 
-// Shutdown prevents new authorization and stops started modules in reverse order.
-// Repeated shutdown is safe. Modules must wait for/terminate their owned work in Stop.
+// Shutdown closes admission immediately, cancels admitted Ready/Authorize work,
+// drains it, then stops Modules in reverse order. Its deadline covers lifecycle
+// waiting, drain and Stop together. If waiting/drain expires, the instance remains
+// stopping and a later Shutdown may finish cleanup; Stop never races callbacks.
+// Completed cleanup is not repeated and its result is retained. Modules must
+// terminate their owned domain work in Stop; Core tracks only its own callbacks.
 func (a *Application) Shutdown(parent context.Context) error {
+	ctx, cancel := context.WithTimeout(parent, a.config.ShutdownTimeout)
+	defer cancel()
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	if a.state == "stopped" {
-		return nil
+		err := a.stopErr
+		a.mu.Unlock()
+		return err
 	}
 	if a.state == "new" {
 		a.state = "stopped"
+		a.cancelWork()
+		a.mu.Unlock()
 		return nil
 	}
-	a.state = "stopped"
-	ctx, cancel := context.WithTimeout(parent, a.config.ShutdownTimeout)
-	defer cancel()
-	return a.stop(ctx, a.components)
+	a.state = "stopping"
+	a.cancelWork()
+	a.mu.Unlock()
+	select {
+	case a.lifecycle <- struct{}{}:
+		defer func() { <-a.lifecycle }()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	a.mu.Lock()
+	if a.state == "stopped" {
+		err := a.stopErr
+		a.mu.Unlock()
+		return err
+	}
+	drained := a.drained
+	a.mu.Unlock()
+	select {
+	case <-drained:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	err := a.stop(ctx, a.components)
+	a.mu.Lock()
+	a.state, a.stopErr = "stopped", err
+	a.mu.Unlock()
+	return err
 }
 
 func (a *Application) stop(ctx context.Context, components []component) error {
@@ -243,64 +340,112 @@ func (a *Application) stop(ctx context.Context, components []component) error {
 			errs = append(errs, fmt.Errorf("component %s stop: %w", c.descriptor.ID, err))
 		}
 	}
-	return errors.Join(errs...)
+	return errors.Join(append(errs, ctx.Err())...)
 }
 
 // Ready checks only composed local dependencies, under the caller's deadline.
-// During lifecycle exclusion it returns ErrNotReady without waiting or invoking modules.
+// It never waits behind lifecycle callbacks and is canceled/drained by Shutdown.
 func (a *Application) Ready(ctx context.Context) error {
-	if err := ctx.Err(); err != nil {
+	ctx, finish, err := a.admit(ctx)
+	if err != nil {
 		return err
 	}
-	if !a.mu.TryRLock() {
-		return ErrNotReady
-	}
-	defer a.mu.RUnlock()
-	if a.state != "ready" {
-		return ErrNotReady
-	}
-	if _, ok := ctx.Deadline(); !ok {
-		return fmt.Errorf("readiness deadline required")
-	}
+	defer finish()
 	for _, c := range a.components {
-		if err := ctx.Err(); err != nil {
+		if err := a.operationErr(ctx); err != nil {
 			return err
 		}
-		if err := c.module.Ready(ctx); err != nil {
+		err := c.module.Ready(ctx)
+		if canceled := a.operationErr(ctx); canceled != nil {
+			return canceled
+		}
+		if err != nil {
 			a.config.Logger.WarnContext(ctx, "readiness failure", "component", c.descriptor.ID, "reason", reason(err))
 			return fmt.Errorf("component %s readiness: %w", c.descriptor.ID, err)
 		}
 	}
-	return ctx.Err()
+	return a.operationErr(ctx)
 }
 
 // Authorize fails closed for empty principals, unknown capabilities, stopped
 // applications or policy errors. Call it inside the owning Application operation
-// before validation-dependent reads/writes; transport discovery grants no rights.
-// During lifecycle exclusion it returns ErrNotReady without waiting or invoking policy.
+// before authorization-sensitive reads/writes; transport discovery grants no rights.
+// resource is a product-owned opaque scope/reference, not trusted client claims.
+// Callers must supply a deadline. Shutdown cancels/drains admitted policy work;
+// calls outside ready return ErrNotReady without invoking policy. Policy errors
+// never expose raw provider text: only explicit ErrDenied is a permission denial.
 func (a *Application) Authorize(ctx context.Context, p Principal, capability, resource string) error {
-	if err := ctx.Err(); err != nil {
+	ctx, finish, err := a.admit(ctx)
+	if err != nil {
+		if errors.Is(err, errDeadlineRequired) {
+			return fmt.Errorf("%w: deadline required", ErrAuthorizationUnavailable)
+		}
 		return err
 	}
-	if !a.mu.TryRLock() {
-		return ErrNotReady
-	}
-	defer a.mu.RUnlock()
-	if a.state != "ready" {
-		return ErrNotReady
-	}
-	if err := ctx.Err(); err != nil {
+	defer finish()
+	if err := a.operationErr(ctx); err != nil {
 		return err
 	}
 	if _, ok := a.capabilities[capability]; !ok || p == "" {
 		a.config.Logger.WarnContext(ctx, "authorization denied", "component", "achrix.authorization", "reason", "unknown_capability_or_principal")
 		return ErrDenied
 	}
-	if err := a.policy.Authorize(ctx, p, capability, resource); err != nil {
+	err = a.policy.Authorize(ctx, p, capability, resource)
+	if canceled := a.operationErr(ctx); canceled != nil {
+		return canceled
+	}
+	if errors.Is(err, ErrDenied) {
 		a.config.Logger.WarnContext(ctx, "authorization denied", "component", "achrix.authorization", "reason", "policy_denied")
 		return ErrDenied
 	}
-	return ctx.Err()
+	if err != nil {
+		a.config.Logger.WarnContext(ctx, "authorization unavailable", "component", "achrix.authorization", "reason", "policy_evaluation_failed")
+		return ErrAuthorizationUnavailable
+	}
+	return nil
+}
+
+// admit/finish protect Module resources until every Core callback returns. No
+// extension callback or diagnostic handler executes while the state lock is held.
+func (a *Application) admit(parent context.Context) (context.Context, func(), error) {
+	if err := parent.Err(); err != nil {
+		return nil, nil, err
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.state != "ready" {
+		return nil, nil, ErrNotReady
+	}
+	if _, ok := parent.Deadline(); !ok {
+		return nil, nil, errDeadlineRequired
+	}
+	if err := parent.Err(); err != nil {
+		return nil, nil, err
+	}
+	ctx, cancel := context.WithCancel(parent)
+	stopCancel := context.AfterFunc(a.workContext, cancel)
+	if a.active == 0 {
+		a.drained = make(chan struct{})
+	}
+	a.active++
+	return ctx, func() {
+		stopCancel()
+		cancel()
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		a.active--
+		if a.active == 0 {
+			close(a.drained)
+		}
+	}, nil
+}
+
+func (a *Application) operationErr(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	// AfterFunc cancellation may still be scheduled: never allow during that gap.
+	return a.workContext.Err()
 }
 
 // Components returns a defensive snapshot for compatible build/recovery identity.

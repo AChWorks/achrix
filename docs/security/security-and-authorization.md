@@ -20,6 +20,8 @@ Do not encode business authorization only as UI visibility or role-name conditio
 
 Roles may be convenient permission bundles; policies/capabilities own enforcement semantics.
 
+Core preserves fail-closed semantics while separating explicit `ErrDenied`, actual operation cancellation/deadline and safe `ErrAuthorizationUnavailable` for evaluation/dependency failure. Raw policy errors are never returned or logged by Core. [Contracts](../architecture/contracts-and-interfaces.md#authorization-and-shutdown) owns exact result/admission semantics; product adapters map denial and unavailable separately. A 503 does not establish that replaying a domain mutation is safe. [Authorization scope](../architecture/contracts-and-interfaces.md#authorization-scope) owns cheap reference preflight before policy; syntax validation never grants access or reveals resource existence.
+
 ## Secure implementation discipline
 
 Security is enforced by implementation and review; scanners/WAFs/headers are supporting controls, not substitutes for correct code.

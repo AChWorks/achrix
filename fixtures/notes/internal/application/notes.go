@@ -51,10 +51,12 @@ func (s *Service) Create(parent context.Context, p achrix.Principal, text string
 func (s *Service) Read(parent context.Context, p achrix.Principal, id string) (domain.Note, error) {
 	ctx, cancel := context.WithTimeout(parent, time.Second)
 	defer cancel()
-	if err := s.app.Authorize(ctx, p, Read, id); err != nil {
+	// Bound the opaque reference before policy work; syntax reveals no existence
+	// and performs no authorization-sensitive read.
+	if err := domain.ValidateID(id); err != nil {
 		return domain.Note{}, err
 	}
-	if err := domain.ValidateID(id); err != nil {
+	if err := s.app.Authorize(ctx, p, Read, id); err != nil {
 		return domain.Note{}, err
 	}
 	n, err := s.repository.Find(ctx, id)

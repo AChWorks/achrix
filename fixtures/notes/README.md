@@ -48,6 +48,8 @@ The fixture maps the two runtime tokens to `writer`/`reader`; direct callers pas
 
 Bodies are capped at 1 KiB; text is valid nonblank Unicode with at most 200 characters and no NUL. Unknown fields/trailing JSON are rejected. Public codes are `unauthenticated` (401), `permission_denied` (403), `invalid_input` (400), `not_found` (404), `unavailable`/`busy` (503). `X-Request-ID` correlates safe structured stderr records across the actual boundaries. There is no payload/DSN/token/SQL capture, debug endpoint or central telemetry requirement. Notes have no update/delete/list endpoint or external effect. Create has no automatic retry/replay guarantee; a network timeout alone does not prove that a write was absent.
 
+Read cheaply preflights the opaque reference's 26–64 byte ASCII/base32 syntax before policy or storage; malformed references reveal no existence. The fixture's create capability deliberately permits the empty global scope. Service operations supply deadlines, explicitly denied policies map to 403 and safe Core evaluation-unavailable maps to 503. Its descriptor requires Core authorization ABI 2 under the [next-minor migration](../../docs/lifecycle/lifecycle-and-compatibility.md#next-development-minor-migration); the schema/migration and Notes capability ABI remain unchanged.
+
 For a local request, with the writer token already supplied as a runtime variable:
 
 ```bash
