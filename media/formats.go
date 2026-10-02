@@ -144,15 +144,15 @@ func (m *Module) validateUpload(ctx context.Context, f *os.File, filename string
 	}
 	// The historical image path reads only eight bytes before its explicit
 	// decoder. A disabled opaque extension never reaches MIME recognition.
-	var prefix [recognitionBytes]byte
-	n, err := io.ReadFull(contextReader{ctx, f}, prefix[:8])
+	var header [8]byte
+	n, err := io.ReadFull(contextReader{ctx, f}, header[:])
 	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 		return "", 0, 0, err
 	}
 	if n == 0 {
 		return "", 0, 0, ErrInput
 	}
-	raw := prefix[:n]
+	raw := header[:n]
 	// Preserve existing explicit decoders, including APNG and filename-agnostic
 	// PNG/JPEG admission. No dependency registry can change these decoders.
 	imageType := ""
@@ -175,6 +175,8 @@ func (m *Module) validateUpload(ctx context.Context, f *os.File, filename string
 		}
 		// The dependency sees at most our fixed prefix even if another package
 		// changes its process-global limit; Media never mutates that limit.
+		var prefix [recognitionBytes]byte
+		copy(prefix[:], raw)
 		more, err := io.ReadFull(contextReader{ctx, f}, prefix[n:])
 		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 			return "", 0, 0, err
