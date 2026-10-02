@@ -123,10 +123,13 @@ async function main() {
       }
       async function csrf() {
         return page.evaluate(async ()=>{
-          const response=await fetch("/auth/csrf",{credentials:"same-origin",headers:{"X-Identity-Request":"1"},cache:"no-store",
-            mode:"same-origin",redirect:"error",referrer:location.origin+"/",referrerPolicy:"same-origin"});
-          if(!response.ok) throw new Error("fixture csrf unavailable");
-          return (await response.json()).csrf;
+          const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
+          try {
+            const response=await fetch("/auth/csrf",{credentials:"same-origin",headers:{"X-Identity-Request":"1"},cache:"no-store",
+              mode:"same-origin",redirect:"error",referrer:location.origin+"/",referrerPolicy:"same-origin",signal:controller.signal});
+            if(!response.ok) throw new Error("fixture csrf unavailable");
+            return (await response.json()).csrf;
+          } finally { clearTimeout(timer); }
         });
       }
 
