@@ -1,10 +1,12 @@
-github.com/AChWorks/achrix v0.1.1-0.20261002173516-b0637b24a621 h1:c9i3n7sRbOSOpxEGHWjqqGn8CBFYuZ12myUAsLGJTxs=
-github.com/AChWorks/achrix v0.1.1-0.20261002173516-b0637b24a621/go.mod h1:GIfS1cQLxa4WFnC9sMmkCX0La7OrrGfc79VKUhoUN9o=
+github.com/AChWorks/achrix v0.1.1-0.20261002224223-e07a7d6429dd h1:/haTQoPyUOMmqqAgAlHgIJS8eruvbVIrxwbOf474CmM=
+github.com/AChWorks/achrix v0.1.1-0.20261002224223-e07a7d6429dd/go.mod h1:ZrFzzqT2IfjT8U5EElBlHnS2yAWdjkFRYwAMNccTePE=
 github.com/alexedwards/argon2id v1.0.0 h1:wJzDx66hqWX7siL/SRUmgz3F8YMrd/nfX/xHHcQQP0w=
 github.com/alexedwards/argon2id v1.0.0/go.mod h1:tYKkqIjzXvZdzPvADMWOEZ+l6+BD6CtBXMj5fnJppiw=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/gabriel-vasile/mimetype v1.4.15 h1:05iP/CYtZ/w455R/KZM6rZ5ieAdh99UPtd+d3YzLmaI=
+github.com/gabriel-vasile/mimetype v1.4.15/go.mod h1:azpTcoLcDZRNgFou5j+APrqQx9HqVPWa6ijYQIIVswQ=
 github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=
