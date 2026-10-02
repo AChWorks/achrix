@@ -37,7 +37,7 @@ import (
 const mediaFixtureLogin = "media-consumer"
 const mediaFixturePassword = "Synthetic Media consumer password 123!"
 const mediaFixtureBootstrap achrix.Principal = "media-consumer-bootstrap"
-const retainedPNGName = "تصویر نمونه.png"
+const retainedPNGName = "تصویر‌نمونه.png"
 const retainedJPEGName = "نمونه.jpg"
 
 // This product policy owns grants, never Media. Collection discovery does not
