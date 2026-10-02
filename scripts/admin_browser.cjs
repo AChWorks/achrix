@@ -45,6 +45,8 @@ async function main() {
   ]});
   const reports=[];
   try {
+    // The filename expectation below is tied to the pinned Chromium profile.
+    assert.equal(browser.version(),"153.0.8010.12","pinned Chromium browser profile");
     for (const endpoint of metadata.endpoints) {
       const fa=endpoint.language==="fa";
       const completed=fa?"انجام شد":"Completed";
@@ -391,7 +393,11 @@ async function mediaFlow({page,navigate,responseSubmit,request,csrf,probe,endpoi
   await row.locator("a[data-download]").press("Enter");
   const download=await downloadEvent;
   assert.equal(await download.failure(),null);
-  assert.equal(download.suggestedFilename(),pngName);
+  // Chromium 153 replaces Unicode Cf characters (including Persian ZWNJ)
+  // with '_': base/i18n/file_util_icu.cc and net/base/filename_util_internal.cc
+  // at tag 153.0.8010.12. The exact stored/DOM/header filename is still original;
+  // only the browser's proposed local destination follows this pinned profile.
+  assert.equal(download.suggestedFilename(),"تصویر_نمونه-RTL-v1-"+endpoint.language+".png","pinned Chromium destination filename");
   assert.deepEqual(await fs.readFile(await download.path()),png,"actual browser attachment retains original bytes");
   const attachment=await page.evaluate(async id=>{
     const response=await fetch("/admin/media/read/"+id,{credentials:"same-origin",cache:"no-store"});
@@ -400,7 +406,7 @@ async function mediaFlow({page,navigate,responseSubmit,request,csrf,probe,endpoi
       nosniff:response.headers.get("x-content-type-options"),size:(await response.arrayBuffer()).byteLength};
   },first.id);
   assert.equal(attachment.status,200); assert.equal(attachment.mime,"image/png");
-  assert.match(attachment.disposition,/^attachment;/);
+  assert.equal(attachment.disposition,"attachment; filename*=utf-8''"+encodeURIComponent(pngName),"raw attachment header retains exact original UTF-8 filename");
   assert.equal(attachment.cache,"private, no-store"); assert.equal(attachment.nosniff,"nosniff");
   assert.equal(attachment.size,png.length);
 
@@ -441,6 +447,59 @@ async function mediaFlow({page,navigate,responseSubmit,request,csrf,probe,endpoi
   },{data:images.png,token:malformedToken});
   assert.equal(malformed,400);
   sameState(beforeMalformed,await probe(),"malformed multipart framing creates no intent/file");
+
+  // A real committed upload loses its entire acknowledgement. The test observer
+  // knows the committed asset; the UI received no ID and must not reuse a prior
+  // result as this operation's identity or automatically replay the upload.
+  await page.locator("#media-status-id").fill(second.id);
+  await responseSubmit(page.locator('form[data-operation="status"]'),"/admin/media/status");
+  assert.equal(await page.locator("#media-status-id").inputValue(),second.id);
+  assert((await page.locator("#asset-status").innerText()).includes(second.id));
+  await page.locator("#media-file").setInputFiles({name:pngName,mimeType:"image/png",buffer:png});
+  const beforeLostUpload=await probe();
+  let uploadMutations=0,lostAsset,releaseUpload,committedUpload;
+  const uploadCommitted=new Promise(resolve=>{committedUpload=resolve});
+  const uploadGate=new Promise(resolve=>{releaseUpload=resolve});
+  await page.route("**/admin/media/upload",async route=>{
+    assert.equal(new URL(route.request().url()).origin,endpoint.origin);
+    uploadMutations++;
+    const response=await route.fetch({timeout:10000,maxRedirects:0,maxRetries:0});
+    assert.equal(response.status(),200,"lost upload acknowledgement server commit");
+    lostAsset=(await response.json()).asset;
+    assert.match(lostAsset.id,/^[A-Z2-7]{26}$/);
+    committedUpload();
+    await uploadGate;
+    await route.abort("failed");
+  });
+  const uploadCSRF=page.waitForResponse(r=>new URL(r.url()).pathname==="/auth/csrf"&&r.request().method()==="GET");
+  await upload.locator('button[type="submit"]').click();
+  await uploadCSRF;
+  await page.waitForFunction(()=>document.querySelector('form[data-operation="upload"]').getAttribute("aria-busy")==="true");
+  assert.equal(await upload.locator("button").isDisabled(),true,"pending upload admits no duplicate action");
+  await withDeadline(uploadCommitted,12000,"lost-upload server commit deadline");
+  assert.equal((await probe()).readyAssets,beforeLostUpload.readyAssets+1,"one upload committed before delivery abort");
+  releaseUpload();
+  const unknownUpload=fa?"نتیجه قابل تأیید نیست":"outcome could not be confirmed";
+  await page.waitForFunction(text=>document.querySelector("#status").textContent.includes(text),unknownUpload);
+  await page.waitForFunction(()=>document.querySelector('form[aria-busy="true"]')===null);
+  await page.unroute("**/admin/media/upload");
+  assert.equal(uploadMutations,1,"unknown upload is never replayed");
+  assert.equal(await page.locator("#media-file").inputValue(),"","unknown upload clears file selection");
+  assert.equal(await page.locator("#media-status-id").inputValue(),"","no acknowledged new ID means no fabricated operation identity");
+  assert.equal(await page.locator("#asset-status").innerText(),"","prior status is cleared after a wholly lost upload response");
+  assert((await page.locator("#upload-result").innerText()).includes(fa?"نتیجه نامعلوم":"Outcome unknown"));
+  assert.equal((await probe()).readyAssets,beforeLostUpload.readyAssets+1,"no hidden upload replay");
+  const evidence=(await (await responseSubmit(page.locator("#media-refresh"),"/admin/media/list")).json()).assets;
+  assert.equal(evidence.length,2);
+  assert(evidence.some(value=>value.asset.id===lostAsset.id&&value.asset.state==="ready"),"permitted library provides ready-asset evidence");
+  assert.equal(await page.locator("#media-status-id").inputValue(),"","library evidence does not claim this unknown operation's ID");
+  const observedRow=page.locator('#assets tr[data-asset-id="'+lostAsset.id+'"]');
+  const explicitDelete=observedRow.locator('form[data-operation="delete"]');
+  await explicitDelete.locator("[data-confirm]").check();
+  await responseSubmit(explicitDelete,"/admin/media/delete",204);
+  assert.equal(await observedRow.count(),0,"explicit known-ID deletion cleans up the observed ready asset");
+  assert.equal((await probe()).readyAssets,beforeLostUpload.readyAssets);
+  assert.equal(await page.locator("#assets tr").count(),1);
   return second; // Retained ready bytes are used for the viewer denial proof.
 }
 main().catch(error=>{ console.error(error.stack||error.message); process.exitCode=1; });
