@@ -46,7 +46,7 @@ func tlsRequest(method, path string) *http.Request {
 	return r
 }
 func testSurface(handler func(http.ResponseWriter, *http.Request, Request)) Surface {
-	return Surface{ID: "accounts", Title: Text{English: "Accounts", Persian: "حساب‌ها"}, Capability: "test.read", Handler: handler}
+	return Surface{ID: "accounts", Title: Text{English: "Accounts", Persian: "حساب\u200cها"}, Capability: "test.read", Handler: handler}
 }
 func fixture(t *testing.T, auth *authentication, policy *authorization, surface Surface) *Shell {
 	t.Helper()
