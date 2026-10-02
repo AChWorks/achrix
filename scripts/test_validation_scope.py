@@ -60,6 +60,11 @@ class ValidationScopeTests(unittest.TestCase):
         self.commit()
         self.assertEqual(select(base, self.root), ("core", False))
 
+    def test_added_benchmark_symlink_is_not_a_narrow_exception(self):
+        (self.root / "achrix_bench_test.go").symlink_to("README.md")
+        self.commit()
+        self.assertEqual(self.scope(), ("full", False))
+
     def test_benchmark_deletion_type_change_and_unknown_tests_stay_full(self):
         self.write("achrix_bench_test.go")
         self.commit()
