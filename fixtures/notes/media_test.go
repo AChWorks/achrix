@@ -258,6 +258,24 @@ func mediaDocumentBytes(t testing.TB) map[string][]byte {
 	return map[string][]byte{"document.pdf": pdf.Bytes(), "bundle.zip": bundle.Bytes()}
 }
 
+// Delay attachment metadata until the public service has verified stored
+// integrity and writes its first byte. Failure before bytes keeps error headers.
+type mediaConsumerDownloadWriter struct {
+	response http.ResponseWriter
+	asset    media.Asset
+	started  bool
+}
+
+func (w *mediaConsumerDownloadWriter) Write(body []byte) (int, error) {
+	if !w.started {
+		w.response.Header().Set("Content-Type", w.asset.MIME)
+		w.response.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": w.asset.Filename}))
+		w.response.Header().Set("Content-Length", strconv.FormatInt(w.asset.Size, 10))
+		w.started = true
+	}
+	return w.response.Write(body)
+}
+
 // This test-only product ingress uses the existing Identity cookie/CSRF boundary.
 // TLS and actual read deadlines bound untrusted network readers; Media's trusted
 // synchronous io.Reader/io.Writer contracts do not interrupt arbitrary callbacks.
@@ -316,9 +334,8 @@ func mediaConsumerHandler(web *identity.Web, service *media.Service) http.Handle
 				mediaHTTPError(w, err)
 				return
 			}
-			w.Header().Set("Content-Type", asset.MIME)
-			w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": asset.Filename}))
-			if _, err := service.Read(ctx, actor, id, w); err != nil {
+			destination := &mediaConsumerDownloadWriter{response: w, asset: asset}
+			if _, err := service.Read(ctx, actor, id, destination); err != nil && !destination.started {
 				mediaHTTPError(w, err)
 			}
 			return
@@ -630,6 +647,17 @@ func TestMediaPublicConsumer(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.policy.grant(temporary.ID, true)
+	// Stored integrity failure sends no attachment metadata or original bytes.
+	if err := os.WriteFile(filepath.Join(f.root, temporary.ID), []byte("tampered"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	failedRead := mediaHTTPSRequest(t, server, "GET", "/media/"+temporary.ID, origin, "", "", nil, cookie, 0)
+	if failedRead.status != http.StatusServiceUnavailable || len(failedRead.body) != 0 || failedRead.headers.Get("Content-Disposition") != "" || failedRead.headers.Get("Content-Type") == "image/png" {
+		t.Fatal("integrity failure exposed attachment headers/bytes")
+	}
+	if err := os.WriteFile(filepath.Join(f.root, temporary.ID), pngBody, 0600); err != nil {
+		t.Fatal(err)
+	}
 	if err := f.service.Delete(ctx, actor, temporary.ID, temporary.Revision+1); !errors.Is(err, media.ErrConflict) {
 		t.Fatal("stale delete precondition accepted", err)
 	}

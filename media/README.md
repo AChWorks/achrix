@@ -1,8 +1,53 @@
 # Development Media Module
 
-Media supplies an authorized private PNG/JPEG asset library inside the Foundation Go dependency. It owns generic asset identity, metadata and storage lifecycle. Products own permission grants, upload ingress, content relationships, retention policy and deployment/recovery profiles. Media has no Identity, Audit, Admin, public URL or static-file dependency. This is next-minor development source; the published v0.1.0 dependency has no Media implementation.
+Media supplies an authorized private attachment library inside the Foundation Go dependency. It owns generic asset identity, metadata and storage lifecycle. Products own permission grants, upload ingress, content relationships, retention policy and deployment/recovery profiles. Media has no Identity, Audit, Admin, public URL or static-file dependency. This is next-minor development source; the published v0.1.0 dependency has no Media implementation.
 
-This is the first implemented Media slice, not a restriction of Media ownership to images. Current supported uploads are **PNG and JPEG only**; WebP, SVG, GIF, ZIP, PDF, Word, Excel, PowerPoint and video are not accepted. Add formats from an actual consumer need with an explicit byte-validation, size/resource, authorization, serving and recovery profile before enabling them. Private attachment storage/download, inline preview, archive extraction and document/video conversion are distinct support decisions; accepting a file does not imply support for processing or displaying it. Products choose the formats they need within a supported profile rather than enabling every extension by default.
+The default upload profile remains PNG/JPEG. Products explicitly opt into the finite common profile with `Config{StorageRoot: path, AllowedMIMEs: CommonMIMEs()}`, or supply a nonempty subset of the owning canonical MIME values. An empty non-nil selection, duplicates and unknown MIME values fail configuration. Configuration slices are copied; `Service.Formats()`, `SupportedFormats()` and `CommonMIMEs()` return independent copies. The effective service inventory supplies upload controls. The supported inventory remains available for reading retained files after a product narrows new-upload admission.
+
+Private attachment admission/download, preview, extraction and document/video conversion are distinct capabilities. This slice retains original bytes and starts no processor or background worker. A disabled opaque extension fails after the eight-byte historical image sniff, before allocating the recognition prefix or calling its detector. Opaque recognition acquires no image decoder slot. Dependency presence does not promise per-format code unloading or independent dependency versions.
+
+## Finite common profile
+
+`SupportedFormats()` owns these canonical MIME values and lowercase extension aliases. Only PNG/JPEG are fully decoded; every other listed format is an opaque attachment with width and height zero. SVG/SVGZ, HTML/JavaScript/executables and explicit macro-enabled Office extensions are outside this profile.
+
+| MIME | Extensions |
+| --- | --- |
+| `image/png` | `png` |
+| `image/jpeg` | `jpg`, `jpeg`, `jpe` |
+| `image/gif` | `gif` |
+| `image/webp` | `webp` |
+| `image/avif` | `avif` |
+| `image/bmp` | `bmp` |
+| `image/tiff` | `tif`, `tiff` |
+| `image/x-icon` | `ico` |
+| `application/pdf` | `pdf` |
+| `application/msword` | `doc` |
+| `application/vnd.openxmlformats-officedocument.wordprocessingml.document` | `docx` |
+| `application/vnd.ms-excel` | `xls` |
+| `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` | `xlsx` |
+| `application/vnd.ms-powerpoint` | `ppt` |
+| `application/vnd.openxmlformats-officedocument.presentationml.presentation` | `pptx` |
+| `application/vnd.oasis.opendocument.text` | `odt` |
+| `application/vnd.oasis.opendocument.spreadsheet` | `ods` |
+| `application/vnd.oasis.opendocument.presentation` | `odp` |
+| `text/plain` | `txt` |
+| `text/csv` | `csv` |
+| `application/zip` | `zip` |
+| `application/vnd.rar` | `rar` |
+| `application/x-7z-compressed` | `7z` |
+| `video/mp4` | `mp4`, `m4v` |
+| `video/quicktime` | `mov` |
+| `video/webm` | `webm` |
+| `video/matroska` | `mkv` |
+| `video/x-msvideo` | `avi` |
+| `video/mpeg` | `mpeg`, `mpg` |
+| `video/ogg` | `ogv` |
+| `audio/mpeg` | `mp3` |
+| `audio/mp4` | `m4a` |
+| `audio/ogg` | `ogg`, `oga` |
+| `audio/wav` | `wav` |
+| `audio/flac` | `flac` |
+| `audio/aac` | `aac` |
 
 The Module descriptor uses `achrix.Version()` for the containing Foundation dependency's source identity; capability ABI revisions are separate. Public Go declarations own the exact API.
 
@@ -14,9 +59,9 @@ Create an existing absolute-path directory with mode `0700`, outside every webro
 
 | Capability | Target | Meaning |
 | --- | --- | --- |
-| `Create` | `LibraryTarget` (`library`) | Create a private image asset. |
+| `Create` | `LibraryTarget` (`library`) | Create a private supported attachment. |
 | `List` | `LibraryTarget` | Discover bounded collection metadata, including filenames. |
-| `Read` | Exact generated asset ID | Read durable status or original image bytes. |
+| `Read` | Exact generated asset ID | Read durable status or original attachment bytes. |
 | `Delete` | Exact generated asset ID | Conditionally delete that asset at a supplied revision. |
 | `Reconcile` | `LibraryTarget` | Abort interrupted pending uploads and finish deletion, in bounded batches. |
 
@@ -26,7 +71,11 @@ The product Policy decides grants. Uploader identity is not ownership, collectio
 
 ## Input, transport and resource limits
 
-Uploads accept PNG or JPEG based on their bytes, with a maximum of 10 MiB, maximum dimension 4096 and maximum 8,388,608 pixels. Extension and caller MIME claims do not select the decoder. Header checks precede full decoding with the maintained Go standard [PNG](https://pkg.go.dev/image/png) and [JPEG](https://pkg.go.dev/image/jpeg) decoders. The process-global image registry cannot expand the accepted formats. Full decoding rejects malformed/truncated image streams. SVG, GIF, PDF, video, transformation and derivatives are excluded. Original accepted bytes are retained; metadata stripping or malware scanning is not claimed.
+Every file retains the 10 MiB cap. PNG/JPEG are selected from bytes independently of filename/extension, with maximum dimension 4096 and maximum 8,388,608 pixels. Header checks precede full decoding with the maintained Go standard [PNG](https://pkg.go.dev/image/png) and [JPEG](https://pkg.go.dev/image/jpeg) decoders. The process-global image registry cannot expand these explicit decoders. Full decoding rejects malformed/truncated image streams.
+
+Opaque formats require both an enabled supported extension and compatible byte recognition by pinned [mimetype v1.4.15](https://github.com/gabriel-vasile/mimetype/tree/v1.4.15). Media passes at most the first 4096 bytes and never calls `SetLimit`/`Extend` or promotes a generic ZIP/OLE container to an Office subtype based on its claimed extension. UTF-8 TXT/CSV additionally scan the whole already size-bounded file with a fixed buffer, rejecting malformed UTF-8 and controls other than tab/CR/LF. Caller Content-Type has no admission authority.
+
+Recognition is a bounded file/container classification, not complete validity, malware scanning or safe-to-open attestation. Legitimate encodings/layouts whose identifying metadata falls beyond the prefix may fail closed: this includes ordinary LibreOffice-generated DOC/XLS/PPT with late CFB directories and Office ZIP packages whose subtype cannot be seen within the prefix. Encrypted Office containers whose exact subtype is not recognized fail closed. Opaque archive encryption/contents are not inspected, and recognized encrypted archives are not promised to be rejected. Newly admitted GIF/WebP/AVIF/BMP/TIFF/ICO also remain opaque: their dimensions/pixels are not decoded or bounded. No opening, extraction, conversion, transcoding, preview, metadata stripping or sanitization is supplied.
 
 Filenames are bounded UTF-8 metadata, not storage paths: at most 256 bytes/120 code points, no separators, leading/trailing whitespace, control characters or Unicode bidi controls. Ordinary Persian text, ZWNJ and ZWJ are preserved. Generated 128-bit opaque IDs exclusively name stored files. The local adapter checks that both generated names are unused before creating durable intent, uses descriptor-contained `os.Root` operations, rejects symlink/nonregular/wrong-mode/hard-linked read targets, and publishes with an exclusive hard link rather than replacing an existing destination.
 
@@ -38,7 +87,9 @@ Module shutdown closes its admission, cancels owned work and waits for it before
 
 ## Durable lifecycle and unknown outcomes
 
-The immutable PostgreSQL migration owns `media.assets` and its migration ledger. Installation serializes through a transaction advisory lock. Repeated identical installation is harmless; unknown/changed ledger identities fail. Startup checks the existing environment, ledger and required columns; it does not migrate or continuously detect privileged database/storage tampering. Reverting source does not reverse this state.
+The immutable `001_media.sql` and its original checksum are retained. `002_common_formats.sql` adds the finite MIME/opaque-dimension constraints without rewriting retained metadata or touching asset bytes. Explicit `Migrate` installs both on a fresh database or advances an exact retained v1 ledger under one transaction and transaction advisory lock. The ordered ledger must be a nonempty exact prefix for an existing schema; missing, unknown, reordered or changed entries fail before migration effects. DDL and ledger insertion roll back together on failure. Concurrent fresh installation/upgrade and repeated exact installation are serialized and idempotent.
+
+Startup checks the existing environment, complete current ledger and required columns; a v1-only database is unavailable until explicitly upgraded. Startup never migrates and does not continuously detect privileged database/storage tampering. Old source expecting only v1 rejects the two-entry ledger. Reverting source is not data rollback: retain coherent metadata plus asset recovery coverage and use an explicit reviewed restore/forward path.
 
 1. Create generates its ID, acquires a per-asset PostgreSQL session lock and acknowledges a durable `pending` intent at revision 1 before touching storage. No database transaction spans streaming/decoding.
 2. Storage exclusively creates `ID.upload` with mode `0600`, streams/hashes/validates it, synchronizes the file, exclusively links `ID`, removes the temporary name and synchronizes the directory.
@@ -70,3 +121,8 @@ On 2026-10-02, Go 1.27.1/Linux amd64 on AMD EPYC 7763 development hardware with 
 - A warm local 10 MiB file hash pass followed by a second discard-copy pass: 10.31–10.40 ms (approximately 1.01 GB/s of logical delivered bytes), 66,112 allocated bytes, 13 allocations. Cache, host/storage, TLS/network and concurrent product load affect deployment performance.
 
 Reproduce with `GOMAXPROCS=2 go test -run '^$' -bench 'Benchmark(ValidatePNG16|Copy10MiB|StorageHashCopy10MiB)$' -benchmem -benchtime=3x -count=3 ./media`. Real PostgreSQL `EXPLAIN (ANALYZE, BUFFERS)` with 6,000 synthetic metadata rows verifies the ready keyset partial index, exact-ID primary key and unfinished-state partial index without planner overrides. These are representative bounded access-path observations, not a production scale/SLO claim.
+
+
+The opt-in common-profile admission benchmark on the same Go/Linux/EPYC development profile uses complete owned PDF/ZIP/DOCX/WebM/MP3 files and a warm local file. Disabled types read only eight bytes: about 2.1–2.2 µs, 40 B and two allocations per admission, with no MIME detection or 4096-byte prefix allocation. Enabled recognition reads up to 4096 bytes: about 5.1–7.7 µs, 4,216 B and five allocations. These observations include file seeks/reads and exact MIME parsing; they are not pure detector or network throughput.
+
+TXT/CSV require an additional whole-file UTF-8 scan. Maximum 10 MiB synthetic ASCII files measured about 87–94 ms and 37 KiB allocated per admission (seven to eleven allocations), using a fixed reader buffer. This distinct cost is not represented by the prefix-only opaque-format measurements. Reproduce with `GOMAXPROCS=2 go test ./media -run '^$' -bench 'Benchmark(CommonRecognition|WholeUTF8Admission)$' -benchmem -benchtime=300ms -count=1`. The full real-PostgreSQL Media race suite completed in 6.9 seconds within the 90-second package timeout; one warm Go/test invocation observed approximately 207 MiB maximum child RSS, including test/toolchain allocations rather than a production resource limit.
