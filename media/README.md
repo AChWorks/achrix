@@ -1,6 +1,6 @@
-# Development Media Module
+# Media Module
 
-Media supplies an authorized private attachment library inside the Foundation Go dependency. It owns generic asset identity, metadata and storage lifecycle. Products own permission grants, upload ingress, content relationships, retention policy and deployment/recovery profiles. Media has no Identity, Audit, Admin, public URL or static-file dependency. This is next-minor development source; the published v0.1.0 dependency has no Media implementation.
+Media supplies an authorized private attachment library inside the Foundation Go dependency. It owns generic asset identity, metadata and storage lifecycle. Products own permission grants, upload ingress, content relationships, retention policy and deployment/recovery profiles. Media has no Identity, Audit, Admin, public URL or static-file dependency. This belongs to the v0.2 source line; the published v0.1.0 dependency has no Media implementation.
 
 The default upload profile remains PNG/JPEG. Products explicitly opt into the finite common profile with `Config{StorageRoot: path, AllowedMIMEs: CommonMIMEs()}`, or supply a nonempty subset of the owning canonical MIME values. An empty non-nil selection, duplicates and unknown MIME values fail configuration. Configuration slices are copied; `Service.Formats()`, `SupportedFormats()` and `CommonMIMEs()` return independent copies. The effective service inventory supplies upload controls. The supported inventory remains available for reading retained files after a product narrows new-upload admission.
 

@@ -8,6 +8,118 @@ The consumer must identify/pin its Foundation version, deliberately review updat
 
 Generated bootstrap files may transfer to the product. Shared runtime is not an unmanaged permanent source copy. A justified fork has explicit independent ownership/maintenance and follows [Trademark Policy](../../TRADEMARKS.md); ordinary dependency consumption remains the default shared path.
 
+## Start a v0.2 product
+
+Use the reviewed `v0.2.0` source dependency; [GitHub Releases](https://github.com/AChWorks/achrix/releases) owns actual availability and artifact evidence. This is a pre-v1 developer release. Read the [v0.1 to v0.2 migration](../lifecycle/lifecycle-and-compatibility.md#next-development-minor-migration) before updating an existing consumer. Use Go 1.27.1; the implemented database/storage Modules have the narrower [supported environment](../operations/operability-performance.md#supported-environment) and owning profiles linked below.
+
+Create your own Go module and pin the exact version:
+
+```bash
+mkdir my-product
+cd my-product
+go mod init example.com/my-product
+go get github.com/AChWorks/achrix@v0.2.0
+```
+
+Save this complete minimal composition as `main.go`:
+
+```go
+package main
+
+import (
+    "context"
+    "errors"
+    "fmt"
+    "log"
+    "time"
+
+    "github.com/AChWorks/achrix"
+)
+
+func run() error {
+    // The product owns policy. This example denies every domain operation.
+    policy := achrix.PolicyFunc(func(context.Context, achrix.Principal, string, string) error {
+        return achrix.ErrDenied
+    })
+    app, err := achrix.New(achrix.Config{
+        StartupTimeout:  5 * time.Second,
+        ShutdownTimeout: 5 * time.Second,
+    }, policy)
+    if err != nil {
+        return err
+    }
+    if err := app.Start(context.Background()); err != nil {
+        return err
+    }
+
+    readyCtx, cancelReady := context.WithTimeout(context.Background(), time.Second)
+    readyErr := app.Ready(readyCtx)
+    cancelReady()
+
+    // A server product closes ingress and drains its domain work before this.
+    stopCtx, cancelStop := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancelStop()
+    return errors.Join(readyErr, app.Shutdown(stopCtx))
+}
+
+func main() {
+    if err := run(); err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(achrix.Version())
+}
+```
+
+Then run:
+
+```bash
+go mod tidy
+go mod verify
+go run .
+```
+
+Expected output is `v0.2.0`. This Core-only program opens no database, file store or HTTP listener. It proves the dependency and bounded composition entry point; it supplies no authentication or product domain operation. Commit the product's `go.mod`/`go.sum`. Use ordinary module resolution, without `replace`, `go.work` overrides or copied Foundation runtime source.
+
+### Add only the Modules the product needs
+
+All official packages below share the same Foundation version; do not select unrelated per-package “latest” versions. Import, construct and pass only needed runtime Modules to `achrix.New`. An unconstructed Module opens no pool or worker. Packages outside the imported package graph need not be compiled into that executable; shared Go module requirements/versioning are still shared.
+
+| Need | Public entry and owning guide | Required composition / product obligation |
+| --- | --- | --- |
+| Accounts, passwords and sessions | [Identity](../../identity/README.md): `identity.NewPostgres`, `identity.NewService`, `identity.NewWeb` | Identity requires Audit and Core authorization ABI 2. Product owns profiles, explicit grants and trusted HTTPS ingress. |
+| Accountable events and bounded query/export | [Audit](../../audit/README.md): `audit.NewPostgres`, `audit.NewService` | Identity/Audit use the same supported PostgreSQL consistency boundary. Atomic append uses the caller's native transaction; it is not distributed atomicity. |
+| Private original attachments | [Media](../../media/README.md): `media.NewPostgres`, `media.NewService` | Core authorization ABI 2; private Linux storage and explicit product permissions. Default PNG/JPEG; `AllowedMIMEs: media.CommonMIMEs()` opts into the finite common profile. No public inline image serving or conversion is supplied. |
+| Account/Media administration | [Admin](../../admin/README.md): `admin.New`, `Handler()`, `ConfigureServer`; [Media surface](../../media/admin/README.md) | Compose Identity/Web authentication plus explicit owning surfaces and product policy. The presentation shell is mounted separately, not an `achrix.Module`; owning database Modules still participate in Core lifecycle. |
+
+For a stateful product, follow the owning public signatures/examples:
+
+1. Supply product-owned configuration/secrets, supported PostgreSQL credentials and, if needed, an exclusive mode-`0700` private Media directory outside webroots.
+2. Run only participating Modules' public `Migrate(ctx, dsn)` operations explicitly with deadlines, serialized by the product's install/deploy path. Preserve published SQL and ledgers; requests/startup do not install schema.
+3. Construct typed Modules, compose the Application with a fail-closed product Policy, then construct the owning Services. Construct Audit Service before Identity Service; Identity and Audit must use the same supported database profile.
+4. Start and check readiness before opening ingress. Authentication supplies a principal; each domain operation separately authorizes its capability/target. Public authentication admission, navigation, collection metadata, object bytes and mutation grants are distinct.
+5. On shutdown, stop ingress and drain product-owned requests/transactions before shutting down the Application. Deadlines bound cooperative work; in-process Modules are trusted code.
+
+[Notes](../../fixtures/notes/README.md) and its [Media](../../fixtures/notes/README.md#private-media-proving-composition)/[Admin browser](../../fixtures/notes/README.md#admin-browser-proving-composition) compositions demonstrate public API wiring, product-owned policy and normal pinned consumption. They are fixtures, not a production starter distribution; copy only product-owned example/bootstrap material you deliberately maintain, never shared runtime or private implementations.
+
+### Extend and upgrade without losing product code
+
+Keep product/domain packages, schemas, roles, content/media relationships, configuration and deployment code in the product. Implement supported public interfaces or use typed public collaborators; request a Foundation contract extension when no public seam fits rather than patching dependency-cache files or importing private implementation. A deliberate fork has its own maintenance/merge obligations.
+
+For an upgrade, choose an exact reviewed version, inspect its release/migration notes and public/dependency/schema diff, then:
+
+```bash
+# Set this to the exact reviewed target version before running.
+go get "github.com/AChWorks/achrix@$ACHRIX_VERSION"
+go mod tidy
+go mod verify
+go test ./...
+go build ./...
+```
+
+Validate affected product behavior, stage explicit migrations and a coherent rebuilt product artifact, then activate through its supported deployment/recovery profile. Retain `achrix.Version()`, participating `Descriptor.Version` values, product build and migration identities. Updating a dependency preserves separately owned product source; a breaking API or schema change can still require deliberate adaptation. Code rollback does not reverse data or external effects.
+
+The first real product must identify its minimum real workflow and enabled Modules, policy, data/storage and deployment profile. CMS/content is one candidate; AChrix owns no CMS content model. Aggregate capacity, a product update UI and production backup/recovery remain product evidence; [#19](https://github.com/AChWorks/achrix/issues/19) retains its separate execution gate.
+
 ## Module installation
 
 Compose trusted Modules at build time through public contracts into a pinned, tested product executable/image. Core and internal Modules in one Go module share its dependency version; separately packaged Modules have their own versions. Their `Descriptor.Version` reports that actual source-backed dependency identity under the [public version contract](contracts-and-interfaces.md#capability-abi-and-composition); development/replacement labels are explicit and never an invented release.
