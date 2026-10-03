@@ -16,7 +16,9 @@ class ValidationScopeTests(unittest.TestCase):
         self.git("init", "-q")
         self.git("config", "user.name", "Validation fixture")
         self.git("config", "user.email", "validation@example.invalid")
-        for name in ("README.md", "achrix.go", "achrix_test.go"):
+        for name in ("README.md", "achrix.go", "achrix_test.go",
+                     "identity/README.md", "audit/README.md", "media/README.md",
+                     "admin/README.md", "media/admin/README.md"):
             self.write(name, "baseline\n")
         self.commit()
         self.base = self.git("rev-parse", "HEAD").strip()
@@ -44,6 +46,50 @@ class ValidationScopeTests(unittest.TestCase):
         self.write("docs/architecture/new.md")
         self.commit()
         self.assertEqual(self.scope(), ("docs", False))
+
+    def test_known_module_readme_edits_need_no_runtime_setup(self):
+        for path in ("identity/README.md", "audit/README.md", "media/README.md",
+                     "admin/README.md", "media/admin/README.md"):
+            with self.subTest(path=path):
+                base = self.git("rev-parse", "HEAD").strip()
+                self.write(path)
+                self.commit()
+                self.assertEqual(select(base, self.root), ("docs", False))
+
+    def test_module_readme_and_core_test_need_only_core(self):
+        self.write("media/README.md")
+        self.write("achrix_test.go")
+        self.commit()
+        self.assertEqual(self.scope(), ("core", False))
+
+    def test_module_docs_cannot_hide_runtime_or_unknown_markdown(self):
+        for index, path in enumerate((
+            "media/media.go", "identity/migrations/new.sql",
+            "media/admin/assets/app.js", "go.mod", "new-module/README.md",
+        )):
+            with self.subTest(path=path):
+                base = self.git("rev-parse", "HEAD").strip()
+                self.write("media/README.md", f"docs {index}\n")
+                self.write(path, f"input {index}\n")
+                self.commit()
+                self.assertEqual(select(base, self.root), ("full", False))
+
+    def test_module_readme_type_change_and_rename_stay_full(self):
+        path = self.root / "media/README.md"
+        path.unlink()
+        path.symlink_to("../README.md")
+        self.commit()
+        self.assertEqual(self.scope(), ("full", False))
+        base = self.git("rev-parse", "HEAD").strip()
+        path.rename(self.root / "media/unknown.md")
+        self.commit()
+        self.assertEqual(select(base, self.root), ("full", False))
+
+    def test_runtime_renamed_to_known_module_readme_stays_full(self):
+        (self.root / "identity/README.md").unlink()
+        (self.root / "achrix.go").rename(self.root / "identity/README.md")
+        self.commit()
+        self.assertEqual(self.scope(), ("full", False))
 
     def test_existing_core_test_and_docs_need_only_core(self):
         self.write("achrix_test.go")
@@ -96,7 +142,8 @@ class ValidationScopeTests(unittest.TestCase):
                 self.assertEqual(select(base, self.root), ("full", False))
 
     def test_routing_changes_validate_the_router(self):
-        for path in (".github/workflows/baseline.yml", "scripts/setup-quality-tools.sh",
+        for path in (".github/workflows/baseline.yml", "scripts/validation_scope.py",
+                     "scripts/test_validation_scope.py", "scripts/setup-quality-tools.sh",
                      "scripts/check-gofmt.sh", "scripts/test_go_quality.py"):
             with self.subTest(path=path):
                 base = self.git("rev-parse", "HEAD").strip()

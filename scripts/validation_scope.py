@@ -8,6 +8,8 @@ DOCUMENTS = {
     "README.md", "AGENTS.md", "CONTRIBUTING.md", "GOVERNANCE.md",
     "SECURITY.md", "TRADEMARKS.md", "fixtures/notes/README.md",
     "fixtures/notes/THIRD_PARTY_NOTICES.md",
+    "identity/README.md", "audit/README.md", "media/README.md",
+    "admin/README.md", "media/admin/README.md",
 }
 ROUTING = {
     ".github/workflows/baseline.yml", "scripts/validation_scope.py",
@@ -24,6 +26,9 @@ def classify(changes, benchmark_is_regular=False):
         path.startswith("docs/") and path.endswith(".md")
     )
     routing = any(path in ROUTING for _, path in changes)
+    # A known path changing file type is no longer proven documentation/test input.
+    if any(status == "T" for status, _ in changes):
+        return "full", routing
     if all(docs(path) for _, path in changes):
         return "docs", routing
     if all(docs(path) or (status == "M" and path == "achrix_test.go")
