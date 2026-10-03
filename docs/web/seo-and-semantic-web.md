@@ -35,6 +35,20 @@ Use meaningful elements and hierarchy:
 
 This helps users, assistive technology, search engines, crawlers, and AI extraction.
 
+## Public content and AI retrieval
+
+Public product output should be understandable to people, search engines and AI retrieval systems, in addition to the development and Application contracts being recoverable by AI. Products and rendering Modules own this output; Core does not become a content model, SEO engine or crawler service.
+
+- Keep primary public information in readable semantic HTML. Identify the page's subject, relevant author/publisher, real publication/modification dates, language and stable canonical URL when those facts apply. Preserve useful source references, units and context instead of relying on images or decorative layout to convey meaning.
+- Derive supported structured data, such as Article/BlogPosting or BreadcrumbList, from the same authoritative content as the visible page. A future commerce owner supplies Product/Offer facts only when that real workflow exists. Never invent prices, availability, reviews, ratings or authors to fill a schema. Use maintained vocabulary appropriate to the actual page and normal safe output serialization.
+- Publishing, corrections, withdrawal and route changes keep rendered content, metadata, structured data, sitemap and served artifacts consistent under the product's declared freshness/publication contract. A theme redesign must not lose the authoritative page meaning.
+- Product operators own crawling, indexing and snippet policy. Search discovery and model-training controls can differ by provider; do not collapse them into a universal AI switch. A crawler user-agent is not an authenticated principal. Authentication and resource authorization protect private content; robots/noindex directives do not replace access control or make published data private.
+- Prefer existing web standards and supported provider guidance. Do not promise that compliant output will be indexed, cited, ranked, recommended or interpreted correctly by any search/AI service. Google's AI Search guidance requires no separate AI-specific schema or file, but that statement is not a guarantee or a universal contract for other providers.
+
+Validate the actual rendered product path when implemented: primary content without client JavaScript, correct canonical/language/author/date facts, structured data matching visible content, and no private/draft/cross-site leakage through HTML, metadata, sitemaps or public assets. Add only page-type/provider checks relevant to real supported flows; this policy does not require a new broad CI suite or absent-product tests.
+
+References: [Google AI features](https://developers.google.com/search/docs/appearance/ai-features), [structured-data policies](https://developers.google.com/search/docs/appearance/structured-data/sd-policies), [OpenAI crawler controls](https://developers.openai.com/api/docs/bots).
+
 ## Internationalization and directionality
 
 Preserve Unicode/UTF-8 through accepted text, storage, APIs and export. Do not restrict human text to ASCII or rewrite it merely for display direction. Stable protocol/capability IDs remain separate from translated display text under [Contracts](../architecture/contracts-and-interfaces.md).
