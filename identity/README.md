@@ -1,6 +1,6 @@
-# Development Identity Module
+# Identity Module
 
-This optional package is next-minor `0.2.0-development` source in the existing Foundation Go module; immutable v0.1.0 has no Identity/Audit implementation. `Descriptor.Version` reports the actual packaged Foundation dependency through `achrix.Version()`. The existing `ModuleVersion` constant is retained only as a deprecated unpublished source-line label, not component/update/recovery identity. Public Go declarations own exact signatures. Identity owns product-local accounts, password credentials and opaque server-side sessions; products own profiles, roles, permissions and configuration. No central service, self-registration, recovery/email, MFA, OIDC or tenant model is supplied.
+This optional package belongs to the v0.2 line in the existing Foundation Go module; immutable v0.1.0 has no Identity/Audit implementation. `Descriptor.Version` reports the actual packaged Foundation dependency through `achrix.Version()`. The existing `ModuleVersion` constant is retained only as a deprecated unpublished source-line label, not component/update/recovery identity. Public Go declarations own exact signatures. Identity owns product-local accounts, password credentials and opaque server-side sessions; products own profiles, roles, permissions and configuration. No central service, self-registration, recovery/email, MFA, OIDC or tenant model is supplied.
 
 ## Composition and authorized operations
 

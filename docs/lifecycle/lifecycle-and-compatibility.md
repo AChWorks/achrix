@@ -42,7 +42,7 @@ Backup existence is not restore evidence. Prove the needed profile on real persi
 
 ## Initial fixture lifecycle and database scope
 
-The next-minor [Identity](../../identity/README.md) and [Audit](../../audit/README.md) Modules add separate owned immutable migration ledgers. Product installation migrates them explicitly before Core startup; startup verifies compatible existing state. Atomic Identity/Audit history belongs to one database consistency boundary and must be captured/restored together. Full validation proves a quiescent native PostgreSQL capture, exact retained rows/ledger identity and public contracts after restore. It does not activate #19 or establish a production recovery profile. Retain the source/configuration/migration identities and protect credential/session hashes; after real recovery, reconcile credentials and revoke restored sessions before ingress. No destructive retention API or independent partial-schema restore is supported by this first slice.
+The v0.2 [Identity](../../identity/README.md) and [Audit](../../audit/README.md) Modules add separate owned immutable migration ledgers. Product installation migrates them explicitly before Core startup; startup verifies compatible existing state. Atomic Identity/Audit history belongs to one database consistency boundary and must be captured/restored together. Full validation proves a quiescent native PostgreSQL capture, exact retained rows/ledger identity and public contracts after restore. It does not activate #19 or establish a production recovery profile. Retain the source/configuration/migration identities and protect credential/session hashes; after real recovery, reconcile credentials and revoke restored sessions before ingress. No destructive retention API or independent partial-schema restore is supported by this first slice.
 
 The proving consumer installs its one immutable SQL migration through an explicit `notes -mode migrate` operation before serving traffic. Its private installer uses native PostgreSQL transactional DDL, a transaction advisory lock and an ID/SHA-256 ledger. Schema and ledger commit together; failure/interruption rolls back both, concurrent installers serialize, changed/unknown published identities fail, and repeat execution is harmless. Runtime startup checks the exact ledger; it does not execute migrations from requests or replicas. No down migration, universal migration engine or Backup & Recovery implementation is published by this fixture. The reusable recovery ownership boundary exists only as architecture until #19/#49 produce real product evidence. The native one-file mechanism is a bounded baseline use of maintained database functionality; reconsider a broader migration tool when real schema evolution needs it.
 
@@ -72,7 +72,7 @@ Consumers pin a reviewed version, inspect the dependency/contract diff, validate
 
 ## Next development minor migration
 
-The Core correction in [Issue #44](https://github.com/AChWorks/achrix/issues/44) targets **v0.2**, not a compatible v0.1 patch. This section describes source migration; it does not announce publication or retire the maintained v0.1 line. GitHub Releases remains publication authority. The published v0.1 tag/source is unchanged.
+The Core correction in [Issue #44](https://github.com/AChWorks/achrix/issues/44) belongs to **v0.2**, not a compatible v0.1 patch. These migration steps apply when an existing v0.1 consumer adopts v0.2. [GitHub Releases](https://github.com/AChWorks/achrix/releases) owns actual publication and exact evidence. v0.2 is the developer line for new consumers; this successor does not retire v0.1 or alter its patch compatibility commitment. The published v0.1 tag/source is unchanged; no permanent LTS/backport promise is introduced.
 
 Consumers updating to this source must:
 
@@ -83,7 +83,7 @@ Consumers updating to this source must:
 - Stop ingress and drain product-owned domain work before shutdown. Core cancels/drains its admitted readiness/policy callbacks before stopping Modules, within one shutdown waiting/drain/stop budget. A wait/drain timeout leaves admission closed; retry Shutdown only to complete cleanup after callbacks return. Startup cancellation uses fresh bounded partial-start cleanup. Completed cleanup's result is retained; repeated calls do not retry failed Module stops. Arbitrary noncompliant in-process code still requires operator/process recovery.
 - Cheaply bound/normalize untrusted resource references at the owning Application before expensive policy work without reading authorization-sensitive state. The Notes fixture now preflights its opaque ID; create's explicit global scope remains valid.
 
-The isolated Notes consumer pins the reviewed source revision through ordinary Go module resolution/checksums; its schema and immutable migration are unchanged. Validate the complete candidate with Core race tests and isolated PostgreSQL/consumer/restore proof. Future release preparation must use the exact integrated source and separately verified Lifecycle evidence; #44 itself requires integration only.
+The isolated Notes consumer pins the reviewed source revision through ordinary Go module resolution/checksums; its schema and immutable migration are unchanged. Validate the complete candidate with Core race tests and isolated PostgreSQL/consumer/restore proof. Release preparation uses the exact integrated source and separately verified Lifecycle evidence; #44 itself required integration only. The [product quick start](../architecture/consumption-and-packaging.md#start-a-v02-product) owns ordinary versioned installation and deliberate consumer updates.
 
 ## Source release preparation and verification
 
@@ -94,7 +94,7 @@ Preparation has no tag/release publication permission, runs no PostgreSQL or rep
 From a maintainer environment with a GitHub CLI supporting artifact-attestation verification:
 
 ```bash
-ACHRIX_RELEASE_VERSION=v0.1.0
+ACHRIX_RELEASE_VERSION=v0.2.0
 gh workflow run release.yml --repo AChWorks/achrix --ref main -f version="$ACHRIX_RELEASE_VERSION"
 gh run list --repo AChWorks/achrix --workflow release.yml --branch main --limit 5 --json databaseId,headSha,status,conclusion
 ```
