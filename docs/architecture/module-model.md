@@ -139,7 +139,9 @@ It may own reusable backup/restore operation identity/progress, manifests bindin
 
 Use maintained native/provider mechanisms rather than inventing a backup format. Restore/preflight/reconciliation evidence is part of support; backup existence alone is not. The first real-product proof in #19 shapes the minimum reusable mechanics before [Issue #49](https://github.com/AChWorks/achrix/issues/49) implements a general boundary. Core gains no shell/root/filesystem/database-proxy authority from this placement.
 
-Identity, Admin, Media, Audit, Notifications, Search, Settings and Backup & Recovery are the current accepted reusable placements. Content/taxonomy, commerce, payments, AI/provider behavior, Multi-Site and Gateway Bridge remain case-by-case until their own evidence/decision establishes placement; a familiar feature name alone is not reuse evidence.
+Identity, Admin, Media, Audit, Notifications, Search, Settings, Backup & Recovery and optional Multi-Site are accepted reusable placements. [Issue #4](https://github.com/AChWorks/achrix/issues/4) records the owner-selected Multi-Site boundary: existing AChrix repository/Go module and shared release, with its bounded contract and real consumer proof still required. Products retain content, theme, routing/publication and deployment semantics; single-site consumers and Core composition remain valid without tenancy. Acceptance is not an implemented package or an instruction to create an empty Module.
+
+Content/taxonomy, commerce, payments, AI/provider behavior and Gateway Bridge remain case-by-case until their own evidence/decision establishes placement; a familiar feature name alone is not reuse evidence.
 
 ## Shared infrastructure candidates
 
