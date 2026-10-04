@@ -29,6 +29,27 @@ Budget each independently owned pool/Module, then sum the actual composition and
 
 Identity hash concurrency/security/session/HTTP bounds and Media upload/image/SVG/parser/private-storage/durable-outcome invariants remain independent. Media expensive validation stays two even when general admission is raised. Products choose and measure their aggregate workload/deployment budget; no adaptive controller, shared fairness scheduler, security knob or Core tenancy is introduced.
 
+## Public-image resource profile
+
+[Media](../../media/README.md#clean-public-image-preparation) owns the finite interpretation/API profile. Source remains 10MiB, each dimension 4096 and total pixels 8388608. Clean output is capped 40MiB and streamed without a 40MiB buffer. Metadata is capped 256KiB: PNG counts encoded ancillary chunk bytes plus 12-byte framing; JPEG counts complete APP/COM segments. PNG has at most 4096 total chunks; JPEG at most 4096 SOI/EOI plus length-bearing segments and 64 SOS. Restarts/stuffing/fill are bounded by source bytes/geometry. Exif adds its directory/entry/depth bounds. These fixed bounds are independent of operator pool/general-lease maxima; two nonqueued shared expensive slots remain held from before snapshot allocation through private output.
+
+Memory follows admitted shapes, not a 128MiB promise. Native progressive JPEG coefficient arrays require `256*ceil(W/(8Hmax))*ceil(H/(8Vmax))*sum(HiVi)` bytes: 4096x2048/444 alone requires 96MiB. Add source snapshot, decoded YCbCr/gray/RGB planes, any oriented pixel buffer and encoder/runtime/database overhead. RGB decoding also converts its temporary YCbCr representation; Adam7 decoding allocates individual pass images in addition to the combined image. Typed row/pixel access avoids per-pixel interface allocations; rotated opaque JPEG uses the native encoder's RGBA fast path. Aggregate active Modules/replicas and product-held outputs add separately. No hard heap/RSS, fleet, throughput, fairness or perceptual guarantee follows.
+
+Cold observations are opt-in and not repeated by ordinary baseline CI. Set `ACHRIX_MEDIA_TEST_DSN` to a disposable supported PostgreSQL 18.6 database named `achrix_media_*` and run one fresh process per scenario: `ACHRIX77_RESOURCE_SCENARIO=adam7 go test -count=1 -v -run '^TestPublicImageResourceObservation$' -timeout=40s ./media`; other scenarios are `progressive444`, `progressive-rgb`, `progressive-gray` and `two-concurrent`. The repository-owned fixtures generate complete synthetic codestreams at the maximum admitted pixel count and seed exact ready source metadata/private bytes without a preceding image decode. Every actual Service operation retains its 15-second cooperative deadline; observing two simultaneous private writers also verifies immediate third-operation rejection. Sampling reports actual Go allocation/heap and Linux process RSS, including runtime/setup overhead, and is observational rather than a peak guarantee. Ordinary tests verify smaller framing/color/alpha/lifecycle cases and full CI verifies normal dependency consumption and retained restore.
+
+
+On 2026-10-04, Go 1.27.1/Linux amd64 on the dedicated development host observed the following fresh-process Service calls against real PostgreSQL 18.6. Each synthetic source is 4096x2048 with Orientation6. JPEGs have constant zero coefficients; source payloads are 33–247KB. These shapes exercise large native allocation planes, not arbitrary entropy, 10MiB snapshots, every dimension rounding or the complete product workload. Five-millisecond samples may miss shorter peaks; allocation totals include sampling/runtime activity.
+
+| Shape | Concurrent calls | Elapsed ms | Sampled peak Go heap MiB | Allocated MiB | Sampled peak process RSS MiB |
+| --- | --- | --- | --- | --- | --- |
+| adam7 | 1 | 375 | 82.0 | 97.7 | 110.7 |
+| progressive444 | 1 | 457 | 152.7 | 152.3 | 168.9 |
+| progressive-rgb | 1 | 487 | 184.8 | 184.3 | 200.7 |
+| progressive-gray | 1 | 173 | 48.6 | 48.1 | 64.3 |
+| two-concurrent | 2 | 716 | 368.8 | 368.4 | 384.9 |
+
+After explicit GC, observed live Go heap returned to approximately 0.46–0.53MiB; RSS reclamation was not asserted. The ordinary focused race proof also exercises upload/preparation shared saturation and cooperative stop, independently of these opt-in observations. Source-derived rounding remains authoritative for budgeting other shapes; the table is not a worst-case ceiling.
+
 ## Supported environment
 
 This document owns the runtime/database support matrix; manifests own pins and Git/CI own proof. The first executable baseline supports one Go line and PostgreSQL major; expand only for real consumers and tested compatibility.

@@ -75,6 +75,9 @@ func newFixtureConfig(t *testing.T, config Config) *fixture {
 		t.Fatal(err)
 	}
 	policy := achrix.PolicyFunc(func(_ context.Context, p achrix.Principal, c, r string) error {
+		if p == publicImageActor && c == PreparePublicImage && validID(r) {
+			return nil
+		}
 		if p != testActor {
 			return achrix.ErrDenied
 		}
