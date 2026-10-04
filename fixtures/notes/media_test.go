@@ -165,7 +165,7 @@ func composeMediaConsumer(t *testing.T, restore bool) *mediaConsumer {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mediaModule, err := media.NewPostgres(dsn, media.Config{StorageRoot: root, AllowedMIMEs: []string{"image/png", "image/jpeg", "application/pdf", "application/zip"}}, logger)
+	mediaModule, err := media.NewPostgres(dsn, media.Config{StorageRoot: root, AllowedMIMEs: []string{"image/png", "image/jpeg", "application/pdf", "application/zip", "image/svg+xml"}}, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +255,9 @@ func mediaDocumentBytes(t testing.TB) map[string][]byte {
 	if err := archive.Close(); err != nil {
 		t.Fatal(err)
 	}
-	return map[string][]byte{"document.pdf": pdf.Bytes(), "bundle.zip": bundle.Bytes()}
+	return map[string][]byte{"document.pdf": pdf.Bytes(), "bundle.zip": bundle.Bytes(), "drawing.svg": []byte(`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="untrusted"><title>نمونه &amp; original</title><g/></svg>
+`)}
 }
 
 // Delay attachment metadata until the public service has verified stored
@@ -577,7 +579,7 @@ func TestMediaPublicConsumer(t *testing.T) {
 	mediaCheckAsset(t, jpegAsset, retainedJPEGName, "jpeg", jpegBody)
 	f.policy.grant(jpegAsset.ID, false)
 	retained := []media.Asset{pngAsset, jpegAsset}
-	for _, name := range []string{"document.pdf", "bundle.zip"} {
+	for _, name := range []string{"document.pdf", "bundle.zip", "drawing.svg"} {
 		body := mediaDocumentBytes(t)[name]
 		created := mediaHTTPSRequest(t, server, "POST", "/media/upload", origin, csrf, name, body, cookie, 0)
 		var asset media.Asset
@@ -587,6 +589,8 @@ func TestMediaPublicConsumer(t *testing.T) {
 		mimeType := "application/pdf"
 		if name == "bundle.zip" {
 			mimeType = "application/zip"
+		} else if name == "drawing.svg" {
+			mimeType = "image/svg+xml"
 		}
 		mediaCheckAsset(t, asset, name, mimeType, body)
 		if got := mediaHTTPSRequest(t, server, "GET", "/media/"+asset.ID, origin, "", "", nil, cookie, 0); got.status != http.StatusForbidden || len(got.body) != 0 {
@@ -607,7 +611,7 @@ func TestMediaPublicConsumer(t *testing.T) {
 	// Public immutable-ID keyset traversal is bounded, distinct and terminates.
 	seen := make(map[string]bool)
 	cursor := ""
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 6; i++ {
 		page, err := f.service.List(ctx, actor, cursor, 1)
 		if err != nil || len(page.Assets) != 1 || seen[page.Assets[0].ID] {
 			t.Fatal("bounded Media list contract failed")
@@ -621,7 +625,7 @@ func TestMediaPublicConsumer(t *testing.T) {
 		}
 		cursor = page.NextCursor
 	}
-	if len(seen) != 4 || !seen[pngAsset.ID] || !seen[jpegAsset.ID] {
+	if len(seen) != 5 || !seen[pngAsset.ID] || !seen[jpegAsset.ID] {
 		t.Fatal("retained Media listing differs")
 	}
 	for _, limit := range []int{0, 101} {
@@ -701,7 +705,7 @@ func TestMediaPublicConsumer(t *testing.T) {
 		t.Fatal("authorized bounded explicit reconciliation failed", err)
 	}
 	page, err := f.service.List(ctx, actor, "", 100)
-	if err != nil || len(page.Assets) != 4 {
+	if err != nil || len(page.Assets) != 5 {
 		t.Fatal("failed upload/delete polluted retained ready collection")
 	}
 	// Close ingress first, then stop all participating Modules before native
@@ -729,7 +733,7 @@ func TestMediaTrustedRestore(t *testing.T) {
 	f.policy.account.Store(string(session.Principal))
 	f.policy.list.Store(true)
 	page, err := f.service.List(ctx, session.Principal, "", 100)
-	if err != nil || len(page.Assets) != 4 || page.NextCursor != "" {
+	if err != nil || len(page.Assets) != 5 || page.NextCursor != "" {
 		t.Fatal("coherently restored Media collection differs")
 	}
 	bodies := mediaDocumentBytes(t)
@@ -740,7 +744,7 @@ func TestMediaTrustedRestore(t *testing.T) {
 		if !ok {
 			t.Fatal("unexpected retained asset")
 		}
-		format := map[string]string{retainedPNGName: "png", retainedJPEGName: "jpeg", "document.pdf": "application/pdf", "bundle.zip": "application/zip"}[asset.Filename]
+		format := map[string]string{retainedPNGName: "png", retainedJPEGName: "jpeg", "document.pdf": "application/pdf", "bundle.zip": "application/zip", "drawing.svg": "image/svg+xml"}[asset.Filename]
 		mediaCheckAsset(t, asset, asset.Filename, format, body)
 		if _, err := f.service.Status(ctx, session.Principal, asset.ID); !errors.Is(err, achrix.ErrDenied) {
 			t.Fatal("restored collection discovery widened byte rights")

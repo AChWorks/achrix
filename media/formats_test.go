@@ -42,10 +42,13 @@ func validationFile(t testing.TB, body []byte) *os.File {
 }
 func TestCommonFormatsAndEveryExtension(t *testing.T) {
 	m := &Module{config: Config{AllowedMIMEs: CommonMIMEs()}, decoders: make(chan struct{}, 2)}
-	if len(SupportedFormats()) != 36 {
+	if len(SupportedFormats()) != 37 || len(CommonMIMEs()) != 36 || slices.Contains(CommonMIMEs(), "image/svg+xml") {
 		t.Fatal("finite catalog changed without fixture review")
 	}
 	for _, format := range SupportedFormats() {
+		if !slices.Contains(CommonMIMEs(), format.MIME) {
+			continue
+		}
 		t.Run(format.MIME, func(t *testing.T) {
 			body := formatFixture(t, format)
 			f := validationFile(t, body)
@@ -112,7 +115,7 @@ func TestDisabledRecognitionAndOpaqueDecodeResources(t *testing.T) {
 	body := bytes.Repeat([]byte("ordinary text "), 1024)
 	f := validationFile(t, body)
 	m := &Module{} // no decoder slots; disabled formats cannot use them
-	for _, name := range []string{"sample.pdf", "sample.txt", "sample.exe", "sample"} {
+	for _, name := range []string{"sample.pdf", "sample.txt", "sample.exe", "sample.svg", "sample"} {
 		if _, _, _, err := m.validateUpload(context.Background(), f, name); !errors.Is(err, ErrInput) {
 			t.Fatal("disabled", name, err)
 		}

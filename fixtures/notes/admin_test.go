@@ -218,7 +218,7 @@ func TestAdminBrowserFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mm, err := media.NewPostgres(dsn, media.Config{StorageRoot: assets, AllowedMIMEs: media.CommonMIMEs()}, logger)
+	mm, err := media.NewPostgres(dsn, media.Config{StorageRoot: assets, AllowedMIMEs: append(media.CommonMIMEs(), "image/svg+xml")}, logger)
 	if err != nil {
 		t.Fatal(err)
 	}

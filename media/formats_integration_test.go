@@ -20,6 +20,9 @@ func TestCommonFormatPublicRoundTrips(t *testing.T) {
 	ctx, cancel := operationContext(t)
 	defer cancel()
 	for _, format := range SupportedFormats() {
+		if format.MIME == "image/svg+xml" {
+			continue
+		}
 		body := formatFixture(t, format)
 		a, err := f.service.Create(ctx, testActor, "sample."+format.Extensions[0], bytes.NewReader(body))
 		if err != nil || a.MIME != format.MIME {
@@ -115,8 +118,8 @@ func TestRetainedV1UpgradeConcurrentLedgerAndOldSource(t *testing.T) {
 	if count == 1 && version == 1 && checksum == oldChecksum {
 		t.Fatal("old source ledger check silently accepts upgrade")
 	}
-	if count != 2 {
-		t.Fatal("exact two-entry ledger", count)
+	if count != 3 {
+		t.Fatal("exact three-entry ledger", count)
 	}
 	stored, err := scanAsset(f.db.QueryRow(ctx, "SELECT "+assetColumns+" FROM media.assets WHERE id=$1", a.ID))
 	if err != nil || stored != a {
@@ -175,7 +178,7 @@ func TestMigrationRejectsUnknownChangedMissingLedgerWithoutEffects(t *testing.T)
 	for _, mutation := range []string{
 		"UPDATE media.schema_migrations SET checksum=repeat('0',64) WHERE version=1",
 		"DELETE FROM media.schema_migrations WHERE version=1",
-		"INSERT INTO media.schema_migrations VALUES(3,repeat('0',64))",
+		"INSERT INTO media.schema_migrations VALUES(4,repeat('0',64))",
 		"DELETE FROM media.schema_migrations",
 		"UPDATE media.schema_migrations SET version=4 WHERE version=2",
 	} {
@@ -273,7 +276,7 @@ func TestConcurrentFreshInstall(t *testing.T) {
 		}
 		count++
 	}
-	if rows.Err() != nil || count != 2 {
+	if rows.Err() != nil || count != 3 {
 		t.Fatal("fresh ledger length", count, rows.Err())
 	}
 }
