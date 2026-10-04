@@ -13,6 +13,7 @@ import (
 	"image/png"
 	"io"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,6 +22,8 @@ import (
 	"time"
 
 	"github.com/AChWorks/achrix"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const publicImageActor achrix.Principal = "public-image-preparer"
@@ -307,5 +310,64 @@ func TestPostgresPublicImageDestinationErrorsAreSafe(t *testing.T) {
 	var output bytes.Buffer
 	if _, err := f.service.PreparePublicImage(ctx, publicImageActor, PreparePublicImageRequest{asset.ID, asset.Revision}, &output); err != nil {
 		t.Fatal("safe failure prevented later preparation", err)
+	}
+}
+
+// The actual driver constructs a ConnectError around a private dial failure while
+// the caller context remains live. Only preparation adopts safe error identities.
+func TestPostgresPublicImageDependencyErrorsAreSafe(t *testing.T) {
+	for _, category := range []error{context.DeadlineExceeded, context.Canceled} {
+		t.Run(category.Error(), func(t *testing.T) {
+			f := newFixture(t)
+			ctx, cancel := operationContext(t)
+			defer cancel()
+			asset, err := f.service.Create(ctx, testActor, "dependency.png", bytes.NewReader(imageBytes(t, "png", 2, 2)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var logs bytes.Buffer
+			f.module.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+			config := f.module.pool.Config()
+			const private = "private-connection-detail"
+			config.ConnConfig.DialFunc = func(context.Context, string, string) (net.Conn, error) {
+				return nil, fmt.Errorf("%s: %w", private, category)
+			}
+			pool, err := pgxpool.NewWithConfig(ctx, config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Establish that the actual pinned driver retains private details and
+			// cancellation identity before the Service boundary removes them.
+			connection, dependencyErr := pool.Acquire(ctx)
+			if connection != nil {
+				connection.Release()
+			}
+			var wrapped *pgconn.ConnectError
+			if !errors.Is(dependencyErr, category) || !errors.As(dependencyErr, &wrapped) || !strings.Contains(dependencyErr.Error(), private) || ctx.Err() != nil {
+				pool.Close()
+				t.Fatal("driver did not produce the expected wrapped private dependency error")
+			}
+			// No ingress/operations run concurrently in this owned fixture. Its
+			// normal shutdown retains ownership of the replacement lazy pool.
+			f.module.pool.Close()
+			f.module.mu.Lock()
+			f.module.pool = pool
+			f.module.mu.Unlock()
+			var output bytes.Buffer
+			result, got := f.service.PreparePublicImage(ctx, publicImageActor, PreparePublicImageRequest{asset.ID, asset.Revision}, &output)
+			var connectionError *pgconn.ConnectError
+			if got != category || errors.As(got, &connectionError) || ctx.Err() != nil || result != (PublicImage{}) || output.Len() != 0 {
+				t.Fatal("dependency failure was not canonical with a live caller", got, result)
+			}
+			if strings.Contains(logs.String(), private) || strings.Contains(got.Error(), private) || f.module.FailureCount() != 0 {
+				t.Fatal("dependency error leaked or changed expected cancellation diagnostics")
+			}
+			f.module.mu.Lock()
+			active := f.module.active
+			f.module.mu.Unlock()
+			if active != 0 || len(f.module.decoders) != 0 || pool.Stat().AcquiredConns() != 0 {
+				t.Fatal("dependency failure leaked preparation ownership")
+			}
+		})
 	}
 }

@@ -736,11 +736,11 @@ func TestPublicImageWriterCanonicalizesWrappedCategories(t *testing.T) {
 		})
 	}
 	joined := errors.Join(fmt.Errorf("%s: %w", private, context.Canceled), fmt.Errorf("%s: %w", private, ErrLimited))
-	got := canonicalPublicWriteError(joined)
+	got := canonicalPreparationError(joined)
 	if !errors.Is(got, context.Canceled) || !errors.Is(got, ErrLimited) || bytes.Contains([]byte(got.Error()), []byte("private")) {
 		t.Fatal("joined safe identities", got)
 	}
-	if err := canonicalPublicWriteError(errors.New(private)); err != ErrUnavailable {
+	if err := canonicalPreparationError(errors.New(private)); err != ErrUnavailable {
 		t.Fatal("raw writer detail", err)
 	}
 }

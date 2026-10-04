@@ -82,17 +82,17 @@ func (m *Module) preparePublicImage(parent context.Context, request PreparePubli
 	}
 	releaseStorage, err := storage.lock(true)
 	if err != nil {
-		return PublicImage{}, m.failure(ctx, "prepare_storage_lock", err)
+		return PublicImage{}, m.failure(ctx, "prepare_storage_lock", canonicalPreparationError(err))
 	}
 	defer releaseStorage()
 	connection, releaseAsset, err := lockAsset(ctx, pool, request.AssetID, true)
 	if err != nil {
-		return PublicImage{}, m.failure(ctx, "prepare_asset_lock", err)
+		return PublicImage{}, m.failure(ctx, "prepare_asset_lock", canonicalPreparationError(err))
 	}
 	defer releaseAsset()
 	asset, err := findAsset(ctx, connection, request.AssetID)
 	if err != nil {
-		return PublicImage{}, m.failure(ctx, "prepare_source", err)
+		return PublicImage{}, m.failure(ctx, "prepare_source", canonicalPreparationError(err))
 	}
 	if asset.State != "ready" {
 		return PublicImage{}, ErrNotFound
@@ -104,39 +104,39 @@ func (m *Module) preparePublicImage(parent context.Context, request PreparePubli
 		return PublicImage{}, ErrInput
 	}
 	if asset.Size < 1 || asset.Size > MaxUploadBytes || !publicDimensions(asset.Width, asset.Height) {
-		return PublicImage{}, m.failure(ctx, "prepare_source_metadata", ErrUnavailable)
+		return PublicImage{}, m.failure(ctx, "prepare_source_metadata", canonicalPreparationError(ErrUnavailable))
 	}
 	file, err := storage.open(asset.ID)
 	if err != nil {
-		return PublicImage{}, m.failure(ctx, "prepare_source_storage", err)
+		return PublicImage{}, m.failure(ctx, "prepare_source_storage", canonicalPreparationError(err))
 	}
 	defer func() { _ = file.Close() }()
 	info, err := file.Stat()
 	if err != nil || info.Size() != asset.Size {
-		return PublicImage{}, m.failure(ctx, "prepare_source_size", ErrUnavailable)
+		return PublicImage{}, m.failure(ctx, "prepare_source_size", canonicalPreparationError(ErrUnavailable))
 	}
 	snapshot := make([]byte, int(asset.Size))
 	if _, err = io.ReadFull(contextReader{ctx, file}, snapshot); err != nil {
-		return PublicImage{}, m.failure(ctx, "prepare_snapshot", err)
+		return PublicImage{}, m.failure(ctx, "prepare_snapshot", canonicalPreparationError(err))
 	}
 	var extra [1]byte
 	if n, e := (contextReader{ctx, file}).Read(extra[:]); n != 0 || e != io.EOF {
-		return PublicImage{}, m.failure(ctx, "prepare_snapshot_size", ErrUnavailable)
+		return PublicImage{}, m.failure(ctx, "prepare_snapshot_size", canonicalPreparationError(ErrUnavailable))
 	}
 	sourceHash := sha256.Sum256(snapshot)
 	if hex.EncodeToString(sourceHash[:]) != asset.SHA256 {
-		return PublicImage{}, m.failure(ctx, "prepare_source_integrity", ErrUnavailable)
+		return PublicImage{}, m.failure(ctx, "prepare_source_integrity", canonicalPreparationError(ErrUnavailable))
 	}
 	profile, err := inspectPublicImage(ctx, snapshot, asset.MIME)
 	if err != nil {
 		return PublicImage{}, err
 	}
 	if profile.width != asset.Width || profile.height != asset.Height {
-		return PublicImage{}, m.failure(ctx, "prepare_source_dimensions", ErrUnavailable)
+		return PublicImage{}, m.failure(ctx, "prepare_source_dimensions", canonicalPreparationError(ErrUnavailable))
 	}
 	width, height, size, outputHash, err := encodePublicImage(ctx, snapshot, profile, destination)
 	if err != nil {
-		return PublicImage{}, m.failure(ctx, "prepare_output", err)
+		return PublicImage{}, m.failure(ctx, "prepare_output", canonicalPreparationError(err))
 	}
 	return PublicImage{SourceAssetID: asset.ID, SourceRevision: asset.Revision, SourceSHA256: asset.SHA256, Profile: PublicImageProfile, ColorBasis: profile.colorBasis(), MIME: asset.MIME, Size: size, SHA256: outputHash, Width: width, Height: height}, nil
 }
@@ -370,12 +370,13 @@ func (w *publicImageWriter) Write(body []byte) (int, error) {
 	if n != len(body) && err == nil {
 		err = io.ErrShortWrite
 	}
-	return n, canonicalPublicWriteError(err)
+	return n, canonicalPreparationError(err)
 }
 
-// Trusted destinations can wrap errors with private paths or credentials.
-// Preserve recognized safe category/cancellation identities, never their text.
-func canonicalPublicWriteError(err error) error {
+// Dependencies and trusted destinations can wrap errors with private configuration.
+// Rebuild only recognized safe category/cancellation identities, never their text
+// or unwrap chain. Apply before the existing failure classifier on preparation.
+func canonicalPreparationError(err error) error {
 	if err == nil {
 		return nil
 	}
