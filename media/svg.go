@@ -54,8 +54,11 @@ func (m *Module) validateSVG(ctx context.Context, f *os.File) error {
 	if err != nil {
 		return err
 	}
-	if len(body) > maxSVGBytes || !utf8.Valid(body) {
+	if len(body) > maxSVGBytes {
 		return ErrInput
+	}
+	if err := validateXMLCharacters(ctx, body); err != nil {
+		return err
 	}
 	// XML permits a UTF-8 byte-order mark. It is retained in stored bytes.
 	body = bytes.TrimPrefix(body, []byte{0xef, 0xbb, 0xbf})
@@ -79,6 +82,9 @@ func (m *Module) validateSVG(ctx context.Context, f *os.File) error {
 		}
 		switch token := token.(type) {
 		case xml.StartElement:
+			if err := validateSVGAttributeSeparators(ctx, body[offset:decoder.InputOffset()]); err != nil {
+				return err
+			}
 			if depth == 0 {
 				if rootSeen || token.Name != (xml.Name{Space: "http://www.w3.org/2000/svg", Local: "svg"}) {
 					return ErrInput
@@ -124,4 +130,50 @@ func xmlWhitespace(body []byte) bool {
 		}
 	}
 	return true
+}
+
+// encoding/xml checks text/attribute characters but does not check comments.
+// Validate UTF-8 and XML 1.0 Char ranges across the entire bounded document.
+func validateXMLCharacters(ctx context.Context, body []byte) error {
+	nextCheck := 0
+	for offset := 0; offset < len(body); {
+		if offset >= nextCheck {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			nextCheck = offset + recognitionBytes
+		}
+		r, size := utf8.DecodeRune(body[offset:])
+		if r == utf8.RuneError && size == 1 || !(r == 0x9 || r == 0xa || r == 0xd ||
+			0x20 <= r && r <= 0xd7ff || 0xe000 <= r && r <= 0xfffd || 0x10000 <= r && r <= 0x10ffff) {
+			return ErrInput
+		}
+		offset += size
+	}
+	return ctx.Err()
+}
+
+// Token has already parsed this start tag. Check only the lexical whitespace
+// between attributes that encoding/xml's optional space() loop does not enforce.
+// Literal opposite quotes and entities inside a quoted value are not separators.
+func validateSVGAttributeSeparators(ctx context.Context, tag []byte) error {
+	var quote byte
+	for i, b := range tag {
+		if i%recognitionBytes == 0 {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
+		if quote == 0 {
+			if b == '\'' || b == '"' {
+				quote = b
+			}
+		} else if b == quote {
+			quote = 0
+			if i+1 >= len(tag) || tag[i+1] != '/' && tag[i+1] != '>' && !xmlWhitespace(tag[i+1:i+2]) {
+				return ErrInput
+			}
+		}
+	}
+	return ctx.Err()
 }

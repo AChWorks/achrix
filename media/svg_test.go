@@ -222,3 +222,76 @@ func TestSVGSharedAdmissionAndCancellation(t *testing.T) {
 		t.Fatal("admission not recovered", err)
 	}
 }
+
+func TestSVGXMLCharacterRanges(t *testing.T) {
+	m := svgModule()
+	for _, r := range []rune{0, 1, 8, 11, 12, 0x1f, 0xfffe, 0xffff} {
+		comment := "<!--owned " + string(r) + " comment-->"
+		for i, body := range []string{comment + svgOpen + svgClose, svgOpen + comment + svgClose, svgOpen + svgClose + comment} {
+			t.Run(fmt.Sprintf("illegal-%U-position-%d", r, i), func(t *testing.T) {
+				if _, _, _, err := m.validateUpload(context.Background(), validationFile(t, []byte(body)), "owned.svg"); !errors.Is(err, ErrInput) {
+					t.Fatal("illegal XML character in comment admitted", err)
+				}
+				if len(m.decoders) != 0 {
+					t.Fatal("invalid character leaked expensive-validation admission")
+				}
+			})
+		}
+	}
+	// XML 1.0 permits these exact range boundaries, including C1 characters.
+	// Avoid a broad Unicode-control/noncharacter filter that changes the profile.
+	for _, r := range []rune{9, 10, 13, 0x20, 0x7f, 0x85, 0xd7ff, 0xe000, 0xfffd, 0x10000, 0x10ffff} {
+		comment := "<!--owned " + string(r) + " comment-->"
+		body := comment + svgOpen + comment + svgClose + comment
+		t.Run(fmt.Sprintf("legal-%U", r), func(t *testing.T) {
+			if _, _, _, err := m.validateUpload(context.Background(), validationFile(t, []byte(body)), "owned.svg"); err != nil {
+				t.Fatal("legal XML character rejected", err)
+			}
+		})
+	}
+}
+
+func TestSVGAttributeWhitespace(t *testing.T) {
+	m := svgModule()
+	for _, tag := range []string{
+		`<svg xmlns="http://www.w3.org/2000/svg"a="1"/>`,
+		`<svg xmlns='http://www.w3.org/2000/svg'a='1'/>`,
+		`<g a="1"b="2"/>`, `<g a='1'b='2'/>`,
+		`<g a="1"b='2'/>`, `<g a='1'b="2"/>`,
+		`<g a="first &quot; value"b="second"/>`,
+		`<g xmlns:s="urn:owned"s:a="1"/>`,
+	} {
+		body := tag
+		if strings.HasPrefix(tag, "<g") {
+			body = svgOpen + tag + svgClose
+		}
+		t.Run(tag, func(t *testing.T) {
+			if _, _, _, err := m.validateUpload(context.Background(), validationFile(t, []byte(body)), "owned.svg"); !errors.Is(err, ErrInput) {
+				t.Fatal("attributes without required XML whitespace admitted", err)
+			}
+			if len(m.decoders) != 0 {
+				t.Fatal("invalid attribute spacing leaked admission")
+			}
+		})
+	}
+	for i, whitespace := range []string{" ", "\t", "\r", "\n", "\r\n"} {
+		// Both quote styles, whitespace around =, literal opposite quotes and >,
+		// escaped quotes, namespace attributes and directly closed tags are valid.
+		body := `<svg xmlns = 'http://www.w3.org/2000/svg'` + whitespace + `a = "literal ' and >"` + whitespace + `b='literal " and &apos;'>` +
+			`<!--a="1"b="2", &#0; and &unknown; are ordinary comment text-->` +
+			`<g xmlns:s="urn:owned"` + whitespace + `s:a='value'/>` +
+			`<g a="&quot;"` + whitespace + `b='&apos;'></g>` + svgClose
+		t.Run(fmt.Sprintf("valid-whitespace-%d", i), func(t *testing.T) {
+			if _, _, _, err := m.validateUpload(context.Background(), validationFile(t, []byte(body)), "owned.svg"); err != nil {
+				t.Fatal("valid quotes/attribute whitespace/comment rejected", err)
+			}
+		})
+	}
+}
+
+func TestSVGXMLCharacterScanCancellation(t *testing.T) {
+	ctx := &svgCancelContext{Context: context.Background(), remaining: 2}
+	if err := validateXMLCharacters(ctx, []byte(strings.Repeat("a", recognitionBytes*2))); !errors.Is(err, context.Canceled) {
+		t.Fatal("whole-document XML character scan ignored cancellation", err)
+	}
+}
