@@ -31,6 +31,14 @@ type fixture struct {
 
 func newFixture(t *testing.T, allowed ...[]string) *fixture {
 	t.Helper()
+	config := Config{}
+	if len(allowed) != 0 {
+		config.AllowedMIMEs = allowed[0]
+	}
+	return newFixtureConfig(t, config)
+}
+func newFixtureConfig(t *testing.T, config Config) *fixture {
+	t.Helper()
 	dsn := os.Getenv("ACHRIX_MEDIA_TEST_DSN")
 	if dsn == "" {
 		t.Skip("ACHRIX_MEDIA_TEST_DSN absent: real PostgreSQL Media proof not run")
@@ -61,10 +69,7 @@ func newFixture(t *testing.T, allowed ...[]string) *fixture {
 		t.Fatal(err)
 	}
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	config := Config{StorageRoot: root}
-	if len(allowed) != 0 {
-		config.AllowedMIMEs = allowed[0]
-	}
+	config.StorageRoot = root
 	m, err := NewPostgres(dsn, config, logger)
 	if err != nil {
 		t.Fatal(err)
@@ -256,7 +261,7 @@ func TestMalformedUploadCleanupAndStorageIntegrity(t *testing.T) {
 	}
 }
 func TestUnknownPublicationAcknowledgement(t *testing.T) {
-	f := newFixture(t)
+	f := newFixtureConfig(t, Config{MaxConns: 6, MaxOperations: 8})
 	ctx, cancel := operationContext(t)
 	defer cancel()
 	if _, err := f.db.Exec(ctx, "CREATE FUNCTION media.lose_ready_ack() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.state='ready' THEN PERFORM pg_terminate_backend(pg_backend_pid()); END IF; RETURN NEW; END $$; CREATE TRIGGER lose_ready_ack BEFORE UPDATE ON media.assets FOR EACH ROW EXECUTE FUNCTION media.lose_ready_ack()"); err != nil {
@@ -337,11 +342,23 @@ func TestDatabaseSessionLossCannotRaceActiveFilesystemTransfer(t *testing.T) {
 	}
 }
 func TestBoundedAdmissionCancellationAndShutdown(t *testing.T) {
-	f := newFixture(t)
+	for _, profile := range []struct {
+		name   string
+		config Config
+	}{
+		{"default", Config{}},
+		{"minimum", Config{MaxConns: 1, MaxOperations: 1}},
+		{"raised", Config{MaxConns: 8, MaxOperations: 8}},
+	} {
+		t.Run(profile.name, func(t *testing.T) { testBoundedAdmissionCancellationAndShutdown(t, profile.config) })
+	}
+}
+func testBoundedAdmissionCancellationAndShutdown(t *testing.T, config Config) {
+	f := newFixtureConfig(t, config)
 	parent, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	readers := make([]*blockingReader, 4)
-	done := make(chan error, 4)
+	readers := make([]*blockingReader, f.module.config.MaxOperations)
+	done := make(chan error, len(readers))
 	data := imageBytes(t, "png", 2, 2)
 	for i := range readers {
 		readers[i] = &blockingReader{ctx: parent, started: make(chan struct{}), continueRead: make(chan struct{}), r: bytes.NewReader(data)}
@@ -352,7 +369,7 @@ func TestBoundedAdmissionCancellationAndShutdown(t *testing.T) {
 			t.Fatal("operation not admitted")
 		}
 	}
-	if _, err := f.service.Create(parent, testActor, "fifth.png", bytes.NewReader(data)); !errors.Is(err, ErrLimited) {
+	if _, err := f.service.Create(parent, testActor, "over-cap.png", bytes.NewReader(data)); !errors.Is(err, ErrLimited) {
 		t.Fatal("unbounded admission", err)
 	}
 	cancel()
@@ -536,7 +553,7 @@ func TestDurableCommitPolicyOverridesAsyncDSN(t *testing.T) {
 }
 
 func TestUnknownCleanupAndDeleteAcknowledgementsRetainState(t *testing.T) {
-	f := newFixture(t)
+	f := newFixtureConfig(t, Config{MaxConns: 6, MaxOperations: 8})
 	ctx, cancel := operationContext(t)
 	defer cancel()
 	ready, err := f.service.Create(ctx, testActor, "retained.png", bytes.NewReader(imageBytes(t, "png", 2, 2)))
@@ -574,5 +591,66 @@ func TestUnknownCleanupAndDeleteAcknowledgementsRetainState(t *testing.T) {
 	status, err = f.service.Status(ctx, testActor, ready.ID)
 	if err != nil || status.State != "ready" {
 		t.Fatal("reconcile changed retained ready asset", status, err)
+	}
+}
+
+func TestPostgresConfiguredPoolAndIndependentValidationBudget(t *testing.T) {
+	f := newFixtureConfig(t, Config{MaxConns: 6, MaxOperations: 8, AllowedMIMEs: []string{"image/png", "image/svg+xml"}})
+	m := f.module
+	if stat := m.pool.Stat(); stat.MaxConns() != 6 || stat.TotalConns() != 1 || cap(m.decoders) != 2 {
+		t.Fatal("raised pool startup or fixed validation budget changed", stat)
+	}
+	ctx, cancel := operationContext(t)
+	defer cancel()
+	var release []func()
+	defer func() {
+		for _, done := range release {
+			done()
+		}
+	}()
+	for range 6 {
+		lease, pool, _, finish, err := m.acquire(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		conn, err := pool.Acquire(lease)
+		if err != nil {
+			finish()
+			t.Fatal(err)
+		}
+		release = append(release, func() { conn.Release(); finish() })
+	}
+	if stat := m.pool.Stat(); stat.TotalConns() != 6 || stat.AcquiredConns() != 6 {
+		t.Fatal("explicit Media pool above four was ineffective", stat)
+	}
+	wait, done := context.WithTimeout(ctx, 50*time.Millisecond)
+	if err := m.Ready(wait); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("native Media pool wait lost deadline", err)
+	}
+	done()
+	if m.active != 6 {
+		t.Fatal("pool wait leaked its owned lease")
+	}
+	for _, finish := range release {
+		finish()
+	}
+	release = nil
+	// Raising general admission cannot turn expensive work into eight slots.
+	m.decoders <- struct{}{}
+	m.decoders <- struct{}{}
+	for _, input := range []struct {
+		name string
+		data []byte
+	}{
+		{"owned.svg", []byte(svgOriginal)}, {"owned.png", imageBytes(t, "png", 2, 2)},
+	} {
+		if _, err := f.service.Create(ctx, testActor, input.name, bytes.NewReader(input.data)); !errors.Is(err, ErrLimited) {
+			t.Fatal("raised general admission expanded expensive validation", err)
+		}
+	}
+	<-m.decoders
+	<-m.decoders
+	if err := m.Ready(ctx); err != nil || m.active != 0 || m.pool.Stat().TotalConns() != 6 {
+		t.Fatal("configured pool or operation admission not reusable", err)
 	}
 }

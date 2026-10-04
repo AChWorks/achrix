@@ -52,6 +52,11 @@ const ModuleVersion = "0.2.0-development"
 // Now controls security time decisions and must be trusted, monotonic in use and
 // concurrency-safe. Zero fields use explicit bounded defaults.
 type Config struct {
+	// MaxConns bounds this instance's pool. Zero uses four; negatives are invalid.
+	MaxConns int32
+	// MaxOperations bounds active owned leases, including nested database work.
+	// Zero uses 16; explicit values must be at least two.
+	MaxOperations   int
 	Password        PasswordPolicy
 	HashConcurrency int
 	SessionLifetime time.Duration
@@ -59,6 +64,15 @@ type Config struct {
 }
 
 func (c Config) defaults() (Config, error) {
+	if c.MaxConns < 0 || c.MaxOperations < 0 || c.MaxOperations == 1 {
+		return c, ErrConfiguration
+	}
+	if c.MaxConns == 0 {
+		c.MaxConns = 4
+	}
+	if c.MaxOperations == 0 {
+		c.MaxOperations = 16
+	}
 	if c.Password == (PasswordPolicy{}) {
 		c.Password = DefaultPasswordPolicy()
 	}

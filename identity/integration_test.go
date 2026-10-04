@@ -55,6 +55,10 @@ func newIdentityFixture(t *testing.T) *identityFixture {
 }
 func newIdentityFixturePolicy(t *testing.T, passwordPolicy PasswordPolicy) *identityFixture {
 	t.Helper()
+	return newIdentityFixtureConfig(t, Config{Password: passwordPolicy}, audit.Config{})
+}
+func newIdentityFixtureConfig(t *testing.T, config Config, auditConfig audit.Config) *identityFixture {
+	t.Helper()
 	dsn := os.Getenv("ACHRIX_IDENTITY_TEST_DSN")
 	if dsn == "" {
 		t.Skip("ACHRIX_IDENTITY_TEST_DSN absent: real PostgreSQL Identity proof not run")
@@ -83,11 +87,13 @@ func newIdentityFixturePolicy(t *testing.T, passwordPolicy PasswordPolicy) *iden
 	f.clock.Store(time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC).UnixNano())
 	now := func() time.Time { return time.Unix(0, f.clock.Load()).UTC() }
 	logger := slog.New(slog.NewJSONHandler(&f.logs, nil))
-	am, err := audit.NewPostgres(dsn, audit.Config{Now: now}, logger)
+	auditConfig.Now = now
+	am, err := audit.NewPostgres(dsn, auditConfig, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.module, err = NewPostgres(dsn, Config{Now: now, SessionLifetime: time.Minute, Password: passwordPolicy}, logger)
+	config.Now, config.SessionLifetime = now, time.Minute
+	f.module, err = NewPostgres(dsn, config, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -807,5 +813,104 @@ func TestPostgresStaleRehashCannotDowngradeCommittedPHC(t *testing.T) {
 	}
 	if count != 2 {
 		t.Fatal("one same-password rehash completion lost its session")
+	}
+}
+
+func TestPostgresMinimumResourceCapsCreateAndLogin(t *testing.T) {
+	f := newIdentityFixtureConfig(t, Config{MaxConns: 1, MaxOperations: 2}, audit.Config{MaxConns: 1, MaxOperations: 2})
+	a := f.create(t, "minimum-caps")
+	session := f.login(t, a.Login, testPassword)
+	if string(session.Principal) != a.ID || f.countAudit(t, a.ID) != 1 {
+		t.Fatal("isolated nested create/login lost supported minimum behavior")
+	}
+	if f.module.active != 0 || f.module.pool.Stat().MaxConns() != 1 {
+		t.Fatal("minimum resource configuration or lease accounting lost")
+	}
+}
+
+func TestPostgresConfiguredPoolAdmissionAndCanceledWait(t *testing.T) {
+	f := newIdentityFixtureConfig(t, Config{MaxConns: 6, MaxOperations: 8}, audit.Config{})
+	m := f.module
+	if stat := m.pool.Stat(); stat.MaxConns() != 6 || stat.TotalConns() != 1 {
+		t.Fatal("start filled the configured maximum instead of demand", stat)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var release []func()
+	defer func() {
+		for _, done := range release {
+			done()
+		}
+	}()
+	for range 6 {
+		lease, pool, finish, err := m.acquire(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		conn, err := pool.Acquire(lease)
+		if err != nil {
+			finish()
+			t.Fatal(err)
+		}
+		release = append(release, func() { conn.Release(); finish() })
+	}
+	if stat := m.pool.Stat(); stat.TotalConns() != 6 || stat.AcquiredConns() != 6 {
+		t.Fatal("explicit pool above four was ineffective", stat)
+	}
+	// Readiness owns a lease while the native pool waits. Cancellation/deadline
+	// must return the context category and release only that waiting lease.
+	for _, cancelEarly := range []bool{false, true} {
+		wait, done := context.WithTimeout(ctx, 50*time.Millisecond)
+		result := make(chan error, 1)
+		go func() { result <- m.Ready(wait) }()
+		until := time.After(time.Second)
+		for {
+			m.mu.Lock()
+			active := m.active
+			m.mu.Unlock()
+			if active == 7 {
+				break
+			}
+			select {
+			case <-until:
+				t.Fatal("native pool wait did not own a lease")
+			case <-time.After(time.Millisecond):
+			}
+		}
+		want := context.DeadlineExceeded
+		if cancelEarly {
+			done()
+			want = context.Canceled
+		}
+		if err := <-result; !errors.Is(err, want) {
+			t.Fatal("pool wait lost context category", err)
+		}
+		done()
+		m.mu.Lock()
+		active := m.active
+		m.mu.Unlock()
+		if active != 6 {
+			t.Fatal("canceled pool wait leaked its lease", active)
+		}
+	}
+	for range 2 {
+		_, _, finish, err := m.acquire(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		release = append(release, finish)
+	}
+	if err := m.Ready(ctx); !errors.Is(err, ErrLimited) {
+		t.Fatal("configured admission did not fail fast", err)
+	}
+	for _, done := range release {
+		done()
+	}
+	release = nil
+	if err := m.Ready(ctx); err != nil || m.active != 0 || m.pool.Stat().TotalConns() != 6 {
+		t.Fatal("released resources were not reusable", err)
+	}
+	if err := f.app.Shutdown(ctx); err != nil || m.pool != nil || m.active != 0 {
+		t.Fatal("configured resources failed to stop", err)
 	}
 }

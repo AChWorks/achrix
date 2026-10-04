@@ -58,6 +58,7 @@ func NewPostgres(dsn string, config Config, logger *slog.Logger) (*Module, error
 	if err != nil {
 		return nil, err
 	}
+	db.MaxConns = c.MaxConns
 	h, err := newPasswords(c.Password, c.HashConcurrency)
 	if err != nil {
 		return nil, err
@@ -154,7 +155,7 @@ func (m *Module) acquire(parent context.Context) (context.Context, *pgxpool.Pool
 	if m.state != "ready" || m.pool == nil {
 		return nil, nil, nil, ErrUnavailable
 	}
-	if m.active >= 16 {
+	if m.active >= m.config.MaxOperations {
 		return nil, nil, nil, ErrLimited
 	}
 	ctx, cancel := context.WithCancel(parent)

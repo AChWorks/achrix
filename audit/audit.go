@@ -39,7 +39,14 @@ var (
 
 // Config.Now is a trusted, concurrent-safe product time source. Records store UTC
 // microsecond instants; it conveys no trusted timestamp or clock attestation.
-type Config struct{ Now func() time.Time }
+type Config struct {
+	// MaxConns bounds this instance's pool. Zero uses four; negatives are invalid.
+	MaxConns int32
+	// MaxOperations bounds active owned leases, including nested AppendInTx work.
+	// Zero uses 16; explicit values must be at least two.
+	MaxOperations int
+	Now           func() time.Time
+}
 
 // Event deliberately has no caller-selected actor, time, ID or arbitrary payload.
 // Authority identifies the owning domain capability, not an authorization grant.

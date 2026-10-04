@@ -56,7 +56,7 @@ func TestPostgresRetainedAudit(t *testing.T) {
 		}
 	}
 	fixed := time.Date(2026, 10, 2, 1, 2, 3, 456789123, time.FixedZone("fixture", 3600))
-	m, err := NewPostgres(dsn, Config{Now: func() time.Time { return fixed }}, nil)
+	m, err := NewPostgres(dsn, Config{Now: func() time.Time { return fixed }, MaxConns: 1, MaxOperations: 2}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,6 +80,9 @@ func TestPostgresRetainedAudit(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = app.Shutdown(context.Background()) })
+	if m.pool.Stat().MaxConns() != m.config.MaxConns || m.pool.Stat().TotalConns() != 1 {
+		t.Fatal("configured Audit pool start allocated beyond demand")
+	}
 	s, err := NewService(app, m)
 	if err != nil {
 		t.Fatal(err)
@@ -217,7 +220,7 @@ func TestPostgresRetainedAudit(t *testing.T) {
 	if err = Migrate(ctx, dsn); err == nil {
 		t.Fatal("changed immutable migration identity admitted")
 	}
-	bad, err := NewPostgres(dsn, Config{}, nil)
+	bad, err := NewPostgres(dsn, Config{MaxConns: 6, MaxOperations: 24}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +272,7 @@ func TestPostgresStopCancelsOwnedAppend(t *testing.T) {
 	if err = Migrate(ctx, dsn); err != nil {
 		t.Fatal(err)
 	}
-	m, err := NewPostgres(dsn, Config{}, nil)
+	m, err := NewPostgres(dsn, Config{MaxConns: 6, MaxOperations: 24}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,9 +284,59 @@ func TestPostgresStopCancelsOwnedAppend(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = app.Shutdown(context.Background()) })
+	if m.pool.Stat().MaxConns() != m.config.MaxConns || m.pool.Stat().TotalConns() != 1 {
+		t.Fatal("configured Audit pool start allocated beyond demand")
+	}
 	s, err := NewService(app, m)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Exercise the raised pool independently from caller-owned AppendInTx SQL.
+	var release []func()
+	defer func() {
+		for _, done := range release {
+			done()
+		}
+	}()
+	for range 6 {
+		lease, pool, finish, err := m.acquire(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		conn, err := pool.Acquire(lease)
+		if err != nil {
+			finish()
+			t.Fatal(err)
+		}
+		release = append(release, func() { conn.Release(); finish() })
+	}
+	if m.pool.Stat().AcquiredConns() != 6 {
+		t.Fatal("raised Audit pool did not create demanded connections")
+	}
+	wait, done := context.WithTimeout(ctx, 50*time.Millisecond)
+	if err := m.Ready(wait); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("native Audit acquisition lost deadline", err)
+	}
+	done()
+	if m.active != 6 {
+		t.Fatal("native acquisition leaked Audit lease")
+	}
+	for range 18 {
+		_, _, finish, err := m.acquire(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		release = append(release, finish)
+	}
+	if err := m.Ready(ctx); !errors.Is(err, ErrLimited) {
+		t.Fatal("raised Audit admission did not saturate safely", err)
+	}
+	for _, done := range release {
+		done()
+	}
+	release = nil
+	if err := m.Ready(ctx); err != nil || m.active != 0 || m.pool.Stat().TotalConns() != 6 {
+		t.Fatal("Audit pool was not reusable", err)
 	}
 	p, err := s.Prepare(ctx, "operator", Event{Action: "identity.account.create", Target: "ACCOUNT", Authority: "achrix.identity.account-create", Outcome: "succeeded"})
 	if err != nil {
