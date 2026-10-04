@@ -7,12 +7,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -265,5 +268,44 @@ func TestPublicImagePNGConcreteModels(t *testing.T) {
 	models := []image.Image{image.NewGray(image.Rect(0, 0, 3, 2)), image.NewRGBA(image.Rect(0, 0, 3, 2)), image.NewPaletted(image.Rect(0, 0, 3, 2), color.Palette{color.NRGBA{R: 21, A: 1}, color.NRGBA{R: 99, G: 98, B: 97, A: 0}})}
 	for _, pixels := range models {
 		preparedBytes(t, publicPNG(t, pixels), "image/png")
+	}
+}
+
+func TestPostgresPublicImageDestinationErrorsAreSafe(t *testing.T) {
+	f := newFixture(t)
+	ctx, cancel := operationContext(t)
+	defer cancel()
+	asset, err := f.service.Create(ctx, testActor, "safe-writer.png", bytes.NewReader(imageBytes(t, "png", 2, 2)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var logs bytes.Buffer
+	f.module.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+	const private = "private-path password=private-credential"
+	for _, category := range []error{context.Canceled, context.DeadlineExceeded, ErrInput, ErrConflict, ErrLimited, ErrNotFound, ErrUnavailable, ErrUnknownOutcome} {
+		want := category
+		if category == ErrUnknownOutcome {
+			want = ErrUnavailable
+		}
+		result, got := f.service.PreparePublicImage(ctx, publicImageActor, PreparePublicImageRequest{asset.ID, asset.Revision}, wrappedPublicWriter{fmt.Errorf("%s: %w", private, category)})
+		if got != want || result != (PublicImage{}) {
+			t.Fatal("private destination error escaped", got, result)
+		}
+	}
+	if strings.Contains(logs.String(), "private") || strings.Contains(logs.String(), "password=") {
+		t.Fatal("private writer details logged")
+	}
+	if f.module.FailureCount() != 2 {
+		t.Fatal("unexpected safe diagnostic classification", f.module.FailureCount())
+	}
+	f.module.mu.Lock()
+	active := f.module.active
+	f.module.mu.Unlock()
+	if active != 0 || len(f.module.decoders) != 0 {
+		t.Fatal("failed output leaked ownership")
+	}
+	var output bytes.Buffer
+	if _, err := f.service.PreparePublicImage(ctx, publicImageActor, PreparePublicImageRequest{asset.ID, asset.Revision}, &output); err != nil {
+		t.Fatal("safe failure prevented later preparation", err)
 	}
 }

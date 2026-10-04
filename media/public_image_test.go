@@ -707,3 +707,40 @@ func TestPublicImageMetadataEntryAndSegmentLimits(t *testing.T) {
 		t.Fatal("metadata size", err)
 	}
 }
+
+func TestPublicImagePNGTransparencyCountsTowardMetadata(t *testing.T) {
+	pixels := image.NewGray(image.Rect(0, 0, 2, 2))
+	// tRNS contributes its two encoded data bytes and twelve framing bytes.
+	// A text chunk has two keyword/separator bytes and twelve framing bytes.
+	textSize := maxImageMetadata - (2 + 12) - (2 + 12)
+	text := append([]byte("K\x00"), bytes.Repeat([]byte{'a'}, textSize)...)
+	atLimit := publicPNG(t, pixels, pngChunk("tRNS", []byte{0, 0}), pngChunk("tEXt", text))
+	preparedBytes(t, atLimit, "image/png")
+	over := publicPNG(t, pixels, pngChunk("tRNS", []byte{0, 0}), pngChunk("tEXt", append(text, 'a')))
+	if _, err := inspectPublicImage(context.Background(), over, "image/png"); !errors.Is(err, ErrInput) {
+		t.Fatal("ancillary transparency exceeded metadata bound", err)
+	}
+}
+
+type wrappedPublicWriter struct{ err error }
+
+func (w wrappedPublicWriter) Write([]byte) (int, error) { return 0, w.err }
+func TestPublicImageWriterCanonicalizesWrappedCategories(t *testing.T) {
+	private := "private-path password=private-credential"
+	for _, category := range []error{context.Canceled, context.DeadlineExceeded, ErrInput, ErrConflict, ErrLimited, ErrNotFound, ErrUnavailable} {
+		t.Run(category.Error(), func(t *testing.T) {
+			writer := publicImageWriter{ctx: context.Background(), destination: wrappedPublicWriter{fmt.Errorf("%s: %w", private, category)}, digest: sha256.New(), limit: 100}
+			if _, err := writer.Write([]byte("test")); err != category {
+				t.Fatal("noncanonical error", err)
+			}
+		})
+	}
+	joined := errors.Join(fmt.Errorf("%s: %w", private, context.Canceled), fmt.Errorf("%s: %w", private, ErrLimited))
+	got := canonicalPublicWriteError(joined)
+	if !errors.Is(got, context.Canceled) || !errors.Is(got, ErrLimited) || bytes.Contains([]byte(got.Error()), []byte("private")) {
+		t.Fatal("joined safe identities", got)
+	}
+	if err := canonicalPublicWriteError(errors.New(private)); err != ErrUnavailable {
+		t.Fatal("raw writer detail", err)
+	}
+}

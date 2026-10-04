@@ -62,7 +62,7 @@ func (p *imageProfile) inspectPNG(ctx context.Context, source []byte) error {
 		if idat && kind != "IDAT" {
 			idatEnded = true
 		}
-		if kind != "IHDR" && kind != "PLTE" && kind != "tRNS" && kind != "IDAT" && kind != "IEND" {
+		if kind != "IHDR" && kind != "PLTE" && kind != "IDAT" && kind != "IEND" {
 			if len(data)+12 > maxImageMetadata-metadata {
 				return ErrInput
 			}

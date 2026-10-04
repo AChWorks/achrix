@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"hash"
 	"image"
 	"image/color"
@@ -369,7 +370,28 @@ func (w *publicImageWriter) Write(body []byte) (int, error) {
 	if n != len(body) && err == nil {
 		err = io.ErrShortWrite
 	}
-	return n, err
+	return n, canonicalPublicWriteError(err)
+}
+
+// Trusted destinations can wrap errors with private paths or credentials.
+// Preserve recognized safe category/cancellation identities, never their text.
+func canonicalPublicWriteError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var safe []error
+	for _, category := range []error{context.Canceled, context.DeadlineExceeded, ErrInput, ErrConflict, ErrLimited, ErrNotFound} {
+		if errors.Is(err, category) {
+			safe = append(safe, category)
+		}
+	}
+	if len(safe) == 1 {
+		return safe[0]
+	}
+	if len(safe) > 1 {
+		return errors.Join(safe...)
+	}
+	return ErrUnavailable
 }
 
 // Native encoders are used unchanged; only a small fresh finite header is
