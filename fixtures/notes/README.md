@@ -78,6 +78,12 @@ The test-only `media_test.go` composes public Core, Identity, Audit and Media co
 
 Full validation uses separate private Media test/consumer/restore databases and mode-0700 storage roots. It stops ingress and all participating Modules before native PostgreSQL capture and a manifested private asset archive, verifies paths/types/checksums before extraction, compares the whole participating metadata/ledger datasets and reads all four retained files through the restored public services. A missing or corrupt asset must fail before destination bytes are written. The tested coherent quiesced local capture has no live snapshot, off-host delivery or RPO/RTO guarantee. See [Media](../../media/README.md) for lifecycle, resource and recovery obligations; #19 and #49 remain separately gated.
 
+## Optional Multi-Site resolver composition
+
+The test-only [multisite_test.go](multisite_test.go) consumes the normally downloaded public `multisite` package. It composes two stable site IDs on the same hostname with absent versus explicit `:443` ports, authorizes each exact authority, rejects an ungranted principal and proves that unknown `:8443` never falls back. An actual product-local Core participant declares the resolver optional; when omitted, the fixture selects its explicit single-site identity without a resolver provider.
+
+The pinned development pseudoversion resolves the pushed resolver source; it is not a released successor. Full validation compares Core and all composed Foundation Module runtime/embedded-asset source, including Multi-Site, with that normal dependency before running the consumer. The existing Notes PostgreSQL/restore proof remains separate. This small composition proof establishes neither Rixa account/store/TLS isolation nor preservation of site-owned state under a shared update; [AChrix #4](https://github.com/AChWorks/achrix/issues/4) and [Rixa #3](https://github.com/AChWorks/rixa/issues/3) retain those downstream criteria.
+
 ## Admin browser proving composition
 
 The opt-in `admin_test.go` composes the real Admin shell with Identity-owned account forms and Media-owned library forms using only the normally downloaded Foundation dependency. It owns synthetic administrator/viewer/denied accounts, explicit product policy, two trusted local HTTPS origins and a private database/assets/control directory. The viewer's collection metadata grant does not permit file bytes/deletion or exact-login discovery. Durable state snapshots compare real denied/stale/malformed calls independently of displayed buttons.
