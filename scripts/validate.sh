@@ -86,7 +86,7 @@ export ACHRIX_AUDIT_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achr
 export ACHRIX_MEDIA_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_media_test sslmode=disable"
 export ACHRIX_ADMIN_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_admin_test sslmode=disable"
 export ACHRIX_MEDIA_TEST_ROOT="$validation_root/media-module"
-go test -race -count=1 -timeout=90s ./identity/... ./audit/... ./media/... ./admin/...
+go test -race -count=1 -timeout=90s ./identity/... ./audit/... ./media/... ./admin/... ./multisite/...
 unset ACHRIX_IDENTITY_TEST_DSN ACHRIX_AUDIT_TEST_DSN ACHRIX_MEDIA_TEST_DSN ACHRIX_MEDIA_TEST_ROOT ACHRIX_ADMIN_TEST_DSN
 
 # Copy consumer-owned source only. Foundation source is downloaded as a pinned
@@ -107,7 +107,7 @@ assert m.get('Sum') and m.get('GoModSum')
 print('Verified isolated pinned Foundation:',m['Version'])
 root=pathlib.Path(sys.argv[2]); dependency=pathlib.Path(m['Dir'])
 paths=[pathlib.Path('achrix.go')]
-for package in ['identity','audit','media','admin']:
+for package in ['identity','audit','media','admin','multisite']:
     assert (root/package).is_dir() and (dependency/package).is_dir()
     paths += sorted(p.relative_to(root) for p in (root/package).rglob('*')
                     if p.is_file() and p.suffix in ['.go','.sql','.js','.css','.html']
@@ -117,7 +117,7 @@ for relative in paths:
     source=(root/relative).read_bytes(); downloaded=(dependency/relative).read_bytes()
     assert source==downloaded, 'normal consumer source drift: '+str(relative)
     digest.update(str(relative).encode()+b'\0'+source)
-print('Verified normal-module Core/Identity/Audit/Media/Admin source SHA-256:',digest.hexdigest())
+print('Verified normal-module Core/Identity/Audit/Media/Admin/Multi-Site source SHA-256:',digest.hexdigest())
 PY
 if go mod edit -json | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("Replace") else 1)'; then
   echo 'Local dependency replacements are prohibited in this proof' >&2; exit 1
