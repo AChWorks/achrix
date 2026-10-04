@@ -44,10 +44,20 @@ type Module struct {
 }
 
 func NewPostgres(dsn string, config Config, logger *slog.Logger) (*Module, error) {
+	if config.MaxConns < 0 || config.MaxOperations < 0 {
+		return nil, ErrConfiguration
+	}
+	if config.MaxConns == 0 {
+		config.MaxConns = 4
+	}
+	if config.MaxOperations == 0 {
+		config.MaxOperations = 4
+	}
 	c, err := databaseConfig(dsn)
 	if err != nil {
 		return nil, err
 	}
+	c.MaxConns = config.MaxConns
 	if runtime.GOOS != "linux" || config.StorageRoot == "" || len(config.StorageRoot) > 4096 || !strings.HasPrefix(config.StorageRoot, "/") {
 		return nil, ErrConfiguration
 	}
@@ -163,7 +173,7 @@ func (m *Module) acquire(parent context.Context) (context.Context, *pgxpool.Pool
 	if m.state != "ready" || m.pool == nil || m.storage == nil {
 		return nil, nil, nil, nil, ErrUnavailable
 	}
-	if m.active >= 4 {
+	if m.active >= m.config.MaxOperations {
 		return nil, nil, nil, nil, ErrLimited
 	}
 	ctx, cancel := context.WithCancel(parent)

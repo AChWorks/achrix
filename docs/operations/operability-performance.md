@@ -10,6 +10,25 @@ When composed, the reusable [Settings Module](../architecture/module-model.md#se
 
 Shutdown is graceful. Readiness probes only dependencies necessary for local readiness, not every external service synchronously. A Module readiness check must be side-effect-free, bounded and cheap enough for repeated probes; shared infrastructure should not be pinged redundantly once per Module merely because several Modules use it. Deep diagnostics belong to explicit operator/debug actions rather than health-probe fan-out.
 
+## Module resource configuration
+
+Identity, Audit and Media receive copied instance-owned `Config` values. `NewPostgres` rejects invalid maxima before creating owned runtime resources; zero selects the existing default and never means unlimited. DSN pool options cannot override the typed effective maximum or fixed lifecycle bounds. Products own the configuration source and precedence; this is not hot reload or durable Settings.
+
+| Config field | Identity | Audit | Media |
+| --- | --- | --- | --- |
+| `MaxConns int32` | Default 4, explicit minimum 1 | Default 4, explicit minimum 1 | Default 4, explicit minimum 1 |
+| `MaxOperations int` | Default 16, explicit minimum 2 | Default 16, explicit minimum 2 | Default 4, explicit minimum 1 |
+
+Negative values and positive values below the stated minimum are invalid. Positive values through each Go type's maximum are representable; those representation bounds are not supported hardware/deployment capacity. There is no required pool-to-lease ratio: a larger pool than admission can be underused without being invalid. Raising maxima changes available capacity, not actual demand, security floors or a throughput/RSS promise.
+
+`MaxOperations` counts simultaneously active owned **leases**, including nested work, rather than public requests or database connections. Identity credential mutations/login can hold an outer work lease plus a nested database lease. Standalone Audit `Append` holds a transaction lease plus its `AppendInTx` lease; caller-owned `AppendInTx` connections add separately to the database budget. Minimum two preserves an isolated supported operation, without promising fairness or successful simultaneous nested mutations. Admission still fails fast with `ErrLimited`; native pool acquisition may wait within the existing operation context. Cancellation releases the owned waiting lease; a canceled acquisition may briefly leave native connection construction running within the one-second connect bound, and pool closure still drains native resources.
+
+Native pgxpool keeps `MinConns=0` and `MinIdleConns=0`: construction opens no connections and startup acquires only what its checks need. Demand creates connections up to the maximum, later calls reuse idle connections, and native health checks reclaim them. Idle time and health period remain one minute, lifetime one hour, jitter zero, connect/ping one second. Health scheduling is not an exact idle-expiry SLA. Module operation deadlines, cancellation/drain/partial-start cleanup and safe error/diagnostic categories remain unchanged. Explicit migration pools and Audit database-profile checks retain their existing connection semantics; pool/admission limits are not database identity.
+
+Budget each independently owned pool/Module, then sum the actual composition and replicas. Product-owned pools, caller transactions, migrations/observers/admin connections and PostgreSQL reserve add to the owned runtime maxima. The [default eight-pool fixture measurement](https://github.com/AChWorks/achrix/issues/76#issuecomment-5976870760) composed control Identity+Audit and two separate Identity+Audit+Media sites: defaults imply at most 32 owned connections and 104 owned leases per replica, including nesting. Actual observed constructor/start/burst/reclamation/shutdown counts were 0/8/32/0/0. This Foundation fixture is not the real product's aggregate/fairness or site-isolation proof; Rixa owns that evidence. The optional [raised-profile observation](../../fixtures/notes/README.md#resource-capacity-observation) uses ordinary public consumption to distinguish maxima from demand.
+
+Identity hash concurrency/security/session/HTTP bounds and Media upload/image/SVG/parser/private-storage/durable-outcome invariants remain independent. Media expensive validation stays two even when general admission is raised. Products choose and measure their aggregate workload/deployment budget; no adaptive controller, shared fairness scheduler, security knob or Core tenancy is introduced.
+
 ## Supported environment
 
 This document owns the runtime/database support matrix; manifests own pins and Git/CI own proof. The first executable baseline supports one Go line and PostgreSQL major; expand only for real consumers and tested compatibility.

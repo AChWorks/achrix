@@ -46,7 +46,12 @@ var (
 // Config identifies an existing product-owned private 0700 directory outside any
 // webroot. Now is a trusted concurrent-safe UTC time source, not an attestation.
 type Config struct {
-	StorageRoot string
+	// MaxConns bounds this instance's pool. Zero uses four; negatives are invalid.
+	MaxConns int32
+	// MaxOperations bounds active owned leases. Zero uses four; negatives are invalid.
+	// The separate expensive-validation budget remains two.
+	MaxOperations int
+	StorageRoot   string
 	// AllowedMIMEs selects a finite supported upload profile. Nil preserves
 	// PNG/JPEG-only behavior; CommonMIMEs opts into the common profile. An
 	// explicit empty selection, duplicates or unsupported entries are invalid.

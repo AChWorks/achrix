@@ -377,3 +377,36 @@ func BenchmarkStorageHashCopy10MiB(b *testing.B) {
 		cancel()
 	}
 }
+
+func TestMediaResourceConfigurationAndOwnership(t *testing.T) {
+	const dsn = "host=127.0.0.1 port=1 user=fixture dbname=fixture sslmode=disable pool_max_conns=128 pool_min_conns=8 pool_min_idle_conns=8 synchronous_commit=off"
+	for _, config := range []Config{{}, {MaxConns: 4, MaxOperations: 4}, {MaxConns: 1, MaxOperations: 1}, {MaxConns: 6, MaxOperations: 8}, {MaxConns: 6, MaxOperations: 1}, {MaxConns: 1<<31 - 1, MaxOperations: int(^uint(0) >> 1)}} {
+		config.StorageRoot = "/missing-product-owned-media-root"
+		config.AllowedMIMEs = []string{"image/png", "image/svg+xml"}
+		m, err := NewPostgres(dsn, config, nil)
+		if err != nil {
+			t.Fatal("valid resource configuration rejected", err)
+		}
+		wantConns, wantOperations := config.MaxConns, config.MaxOperations
+		if wantConns == 0 {
+			wantConns = 4
+		}
+		if wantOperations == 0 {
+			wantOperations = 4
+		}
+		config.MaxConns, config.MaxOperations = 1, 1
+		config.AllowedMIMEs[0] = "application/pdf"
+		if m.config.MaxConns != wantConns || m.dbConfig.MaxConns != wantConns || m.config.MaxOperations != wantOperations || m.dbConfig.MinConns != 0 || m.dbConfig.MinIdleConns != 0 || m.pool != nil || m.storage != nil || m.state != "new" || !m.allows("image/png") || cap(m.decoders) != 2 || m.dbConfig.ConnConfig.RuntimeParams["synchronous_commit"] != "on" {
+			t.Fatal("DSN precedence, copied config, decoder/durability bounds or construction changed")
+		}
+		if err := m.Stop(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, config := range []Config{{MaxConns: -1}, {MaxOperations: -1}} {
+		config.StorageRoot = "/missing-product-owned-media-root"
+		if m, err := NewPostgres(dsn, config, nil); m != nil || !errors.Is(err, ErrConfiguration) {
+			t.Fatal("invalid resource configuration admitted", err)
+		}
+	}
+}

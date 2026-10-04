@@ -172,3 +172,35 @@ func TestDiagnosticsAreBoundedAndSecretFree(t *testing.T) {
 		t.Fatal("expected input/capacity traffic became operational evidence")
 	}
 }
+
+func TestAuditResourceConfigurationAndOwnership(t *testing.T) {
+	const dsn = "host=127.0.0.1 port=1 user=fixture dbname=fixture sslmode=disable pool_max_conns=128 pool_min_conns=8 pool_min_idle_conns=8"
+	for _, config := range []Config{{}, {MaxConns: 4, MaxOperations: 16}, {MaxConns: 1, MaxOperations: 2}, {MaxConns: 6, MaxOperations: 24}, {MaxConns: 6, MaxOperations: 2}, {MaxConns: 1<<31 - 1, MaxOperations: int(^uint(0) >> 1)}} {
+		m, err := NewPostgres(dsn, config, nil)
+		if err != nil {
+			t.Fatal("valid resource configuration rejected", err)
+		}
+		wantConns, wantOperations := config.MaxConns, config.MaxOperations
+		if wantConns == 0 {
+			wantConns = 4
+		}
+		if wantOperations == 0 {
+			wantOperations = 16
+		}
+		config.MaxConns, config.MaxOperations = 1, 2
+		if m.config.MaxConns != wantConns || m.dbConfig.MaxConns != wantConns || m.config.MaxOperations != wantOperations || m.dbConfig.MinConns != 0 || m.dbConfig.MinIdleConns != 0 || m.pool != nil || m.state != "new" {
+			t.Fatal("DSN precedence, copied config or side-effect-free construction changed")
+		}
+		if err := (&Service{module: m}).CheckDatabase(dsn + " pool_max_conns=1"); err != nil {
+			t.Fatal("pool limits became database identity", err)
+		}
+		if err := m.Stop(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, config := range []Config{{MaxConns: -1}, {MaxOperations: -1}, {MaxOperations: 1}} {
+		if m, err := NewPostgres(dsn, config, nil); m != nil || !errors.Is(err, ErrConfiguration) {
+			t.Fatal("invalid resource configuration admitted", err)
+		}
+	}
+}
