@@ -68,6 +68,22 @@ func TestPostgresPublicImagePermissionSnapshotAndFailures(t *testing.T) {
 		t.Fatal("derivative persisted", entries, err)
 	} // The original is the only stored file.
 	output.Reset()
+	pendingID := newID()
+	if _, err = f.db.Exec(ctx, "INSERT INTO media.assets(id,state,revision,filename,mime,size,width,height,sha256,created_at) VALUES($1,'pending',1,'pending','',0,0,0,'',now())", pendingID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.service.PreparePublicImage(ctx, publicImageActor, PreparePublicImageRequest{pendingID, 1}, &output); !errors.Is(err, ErrNotFound) || output.Len() != 0 {
+		t.Fatal("nonready", err)
+	}
+	if err = os.Truncate(filepath.Join(f.root, asset.ID), int64(len(source)-1)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.service.PreparePublicImage(ctx, publicImageActor, request, &output); !errors.Is(err, ErrUnavailable) || output.Len() != 0 {
+		t.Fatal("stored size mismatch", err)
+	}
+	if err = os.WriteFile(filepath.Join(f.root, asset.ID), source, 0600); err != nil {
+		t.Fatal(err)
+	}
 	stale := request
 	stale.ExpectedRevision--
 	if _, err = f.service.PreparePublicImage(ctx, publicImageActor, stale, &output); !errors.Is(err, ErrConflict) || output.Len() != 0 {

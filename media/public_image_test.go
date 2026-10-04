@@ -654,3 +654,56 @@ func TestPublicImagePNGLowDepthGrayAndIndexed(t *testing.T) {
 		}
 	}
 }
+
+func TestPublicImageJPEGValidRefinementAndSOF1(t *testing.T) {
+	base := progressiveJPEG(16, 8, "ycbcr")
+	initial := jpegTransformSegments(base, func(marker byte, body []byte) ([]byte, bool) {
+		if marker == 218 {
+			body[len(body)-1] = 1
+		}
+		return body, true
+	})
+	out := append([]byte(nil), initial[:len(initial)-2]...)
+	out = append(out, jpegSegment(218, []byte{3, 1, 0, 2, 0, 3, 0, 0, 0, 0x10})...)
+	out = append(out, 3) // Six zero DC refinement bits and two one pad bits.
+	for _, id := range []byte{1, 2, 3} {
+		out = append(out, jpegSegment(218, []byte{1, id, 0, 1, 63, 0x10})...)
+		out = append(out, 0x3f)
+	} // Two EOB bits, six pad bits.
+	out = append(out, 255, 217)
+	preparedBytes(t, out, "image/jpeg")
+	sequential := imageBytes(t, "jpeg", 16, 16)
+	for i := 0; i < len(sequential)-1; i++ {
+		if sequential[i] == 255 && sequential[i+1] == 192 {
+			sequential[i+1] = 193
+			break
+		}
+	}
+	preparedBytes(t, sequential, "image/jpeg")
+}
+func TestPublicImageMetadataEntryAndSegmentLimits(t *testing.T) {
+	data := make([]byte, 10)
+	copy(data, []byte{'I', 'I', 42, 0, 8, 0, 0, 0})
+	binary.LittleEndian.PutUint16(data[8:], 4097)
+	p := imageProfile{width: 2, height: 2}
+	if err := p.inspectExif(context.Background(), data); !errors.Is(err, ErrInput) {
+		t.Fatal("entry count", err)
+	}
+	base := imageBytes(t, "jpeg", 16, 16)
+	segments := append([]byte(nil), base[:2]...)
+	for i := 0; i < maxImageSegments; i++ {
+		segments = append(segments, jpegSegment(254, nil)...)
+	}
+	segments = append(segments, base[2:]...)
+	if _, err := inspectPublicImage(context.Background(), segments, "image/jpeg"); !errors.Is(err, ErrInput) {
+		t.Fatal("segment count", err)
+	}
+	metadata := append([]byte(nil), base[:2]...)
+	for i := 0; i < 5; i++ {
+		metadata = append(metadata, jpegSegment(254, bytes.Repeat([]byte{'a'}, 60000))...)
+	}
+	metadata = append(metadata, base[2:]...)
+	if _, err := inspectPublicImage(context.Background(), metadata, "image/jpeg"); !errors.Is(err, ErrInput) {
+		t.Fatal("metadata size", err)
+	}
+}
