@@ -181,7 +181,7 @@ for path in sorted(root.rglob('*')):
     assert stat.S_IMODE(info.st_mode)&0o077==0, 'private asset capture permissions widened'
     if path.is_file():
         files[str(path.relative_to(root))]=hashlib.sha256(path.read_bytes()).hexdigest()
-assert len(files)==4, 'capture must retain PNG/JPEG, PDF and ZIP public-consumer assets'
+assert len(files)==5, 'capture must retain PNG/JPEG, PDF, ZIP and private SVG consumer assets'
 pathlib.Path(sys.argv[2]).write_text(json.dumps(files,sort_keys=True))
 print('Verified quiesced private asset capture:',len(files),'files')
 PYMEDIA

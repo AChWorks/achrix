@@ -1,5 +1,5 @@
-github.com/AChWorks/achrix v0.2.1-0.20261004043134-793a1d5801d2 h1:NxZOIBF5c7R2VGDmpuNT/o7THnwWsn+F7av7e7my0JA=
-github.com/AChWorks/achrix v0.2.1-0.20261004043134-793a1d5801d2/go.mod h1:ZrFzzqT2IfjT8U5EElBlHnS2yAWdjkFRYwAMNccTePE=
+github.com/AChWorks/achrix v0.2.1-0.20261004051130-215eb55e2036 h1:1o32VyN/EFhRYSDY197DUSiDD3fF3lfo0lKfipQJwtI=
+github.com/AChWorks/achrix v0.2.1-0.20261004051130-215eb55e2036/go.mod h1:ZrFzzqT2IfjT8U5EElBlHnS2yAWdjkFRYwAMNccTePE=
 github.com/alexedwards/argon2id v1.0.0 h1:wJzDx66hqWX7siL/SRUmgz3F8YMrd/nfX/xHHcQQP0w=
 github.com/alexedwards/argon2id v1.0.0/go.mod h1:tYKkqIjzXvZdzPvADMWOEZ+l6+BD6CtBXMj5fnJppiw=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
