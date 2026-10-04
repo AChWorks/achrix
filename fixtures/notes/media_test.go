@@ -157,15 +157,18 @@ func composeMediaConsumer(t *testing.T, restore bool) *mediaConsumer {
 		}
 	}
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	auditModule, err := audit.NewPostgres(dsn, audit.Config{}, logger)
+	// Normal public keyed configuration proves independent pool/lease budgets:
+	// minimum Identity nested work, raised Audit/Media, and the same database.
+	// Retained restore reconstructs this identical explicit profile.
+	auditModule, err := audit.NewPostgres(dsn, audit.Config{MaxConns: 6, MaxOperations: 24}, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	identityModule, err := identity.NewPostgres(dsn, identity.Config{}, logger)
+	identityModule, err := identity.NewPostgres(dsn, identity.Config{MaxConns: 1, MaxOperations: 2}, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mediaModule, err := media.NewPostgres(dsn, media.Config{StorageRoot: root, AllowedMIMEs: []string{"image/png", "image/jpeg", "application/pdf", "application/zip", "image/svg+xml"}}, logger)
+	mediaModule, err := media.NewPostgres(dsn, media.Config{MaxConns: 6, MaxOperations: 8, StorageRoot: root, AllowedMIMEs: []string{"image/png", "image/jpeg", "application/pdf", "application/zip", "image/svg+xml"}}, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
