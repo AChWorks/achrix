@@ -116,7 +116,7 @@ func safeHostTLS(host string, c *tls.Config) bool {
 	return local || c != nil && !c.InsecureSkipVerify && c.ServerName != ""
 }
 func (m *Module) Descriptor() achrix.Descriptor {
-	caps := []achrix.Capability{{ID: Create, Version: 1}, {ID: List, Version: 1}, {ID: Read, Version: 1}, {ID: Delete, Version: 1}, {ID: Reconcile, Version: 1}}
+	caps := []achrix.Capability{{ID: Create, Version: 1}, {ID: List, Version: 1}, {ID: Read, Version: 1}, {ID: Delete, Version: 1}, {ID: Reconcile, Version: 1}, {ID: PreparePublicImage, Version: 1}}
 	return achrix.Descriptor{ID: "achrix.media", Version: achrix.Version(), Provides: caps, Requires: []achrix.Capability{{ID: "achrix.authorization", Version: 2}}}
 }
 func (m *Module) Start(ctx context.Context) error {
