@@ -50,6 +50,7 @@ type Config struct {
 	// AllowedMIMEs selects a finite supported upload profile. Nil preserves
 	// PNG/JPEG-only behavior; CommonMIMEs opts into the common profile. An
 	// explicit empty selection, duplicates or unsupported entries are invalid.
+	// SVG requires explicit image/svg+xml selection, separate from CommonMIMEs.
 	// Construction copies the selection; it does not revoke retained reads.
 	AllowedMIMEs []string
 	Now          func() time.Time

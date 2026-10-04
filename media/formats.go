@@ -20,7 +20,7 @@ import (
 // Format describes upload admission, not complete validity or safe-to-open
 // attestation. Extensions are lower-case aliases without a leading dot. PNG and
 // JPEG retain their existing byte-selected, extension-independent full decoding;
-// the other supported files require a listed extension and recognized type.
+// the other supported files require a listed extension and bounded format admission.
 type Format struct {
 	MIME       string
 	Extensions []string
@@ -71,6 +71,7 @@ var supportedFormats = []formatSpec{
 	{Format{"audio/wav", []string{"wav"}}, []string{"audio/x-wav", "audio/vnd.wave", "audio/wave"}},
 	{Format{"audio/flac", []string{"flac"}}, nil},
 	{Format{"audio/aac", []string{"aac"}}, nil},
+	{Format{"image/svg+xml", []string{"svg"}}, nil},
 }
 
 // SupportedFormats returns a fresh deep copy of the finite owning catalog.
@@ -84,11 +85,14 @@ func SupportedFormats() []Format {
 	return result
 }
 
-// CommonMIMEs returns a fresh selection of every supported common upload type.
+// CommonMIMEs returns a fresh selection of the 36 common upload types.
+// SVG requires separate explicit selection and is never added to this profile.
 func CommonMIMEs() []string {
 	result := make([]string, 0, len(supportedFormats))
 	for _, spec := range supportedFormats {
-		result = append(result, spec.format.MIME)
+		if spec.format.MIME != "image/svg+xml" {
+			result = append(result, spec.format.MIME)
+		}
 	}
 	return result
 }
@@ -172,6 +176,12 @@ func (m *Module) validateUpload(ctx context.Context, f *os.File, filename string
 		if spec.format.MIME == "image/png" || spec.format.MIME == "image/jpeg" ||
 			!m.allows(spec.format.MIME) || !slices.Contains(spec.format.Extensions, extension) {
 			continue
+		}
+		if spec.format.MIME == "image/svg+xml" {
+			if err := m.validateSVG(ctx, f); err != nil {
+				return "", 0, 0, err
+			}
+			return spec.format.MIME, 0, 0, nil
 		}
 		// The dependency sees at most our fixed prefix even if another package
 		// changes its process-global limit; Media never mutates that limit.

@@ -273,8 +273,8 @@ type migration struct {
 }
 
 func migrationPlan() []migration {
-	plan := make([]migration, 0, 2)
-	for _, name := range []string{"001_media.sql", "002_common_formats.sql"} {
+	plan := make([]migration, 0, 3)
+	for _, name := range []string{"001_media.sql", "002_common_formats.sql", "003_private_svg.sql"} {
 		b, err := migrations.ReadFile("migrations/" + name)
 		if err != nil {
 			panic("missing embedded Media migration")

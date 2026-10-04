@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"html"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -327,6 +328,7 @@ func TestScreenUsesEffectiveFormatsAndOmitsUnknownDimensions(t *testing.T) {
 			(&libraryStub{}).Formats(),
 			media.SupportedFormats(),
 			{{MIME: "application/pdf", Extensions: []string{"pdf"}}},
+			{{MIME: "image/svg+xml", Extensions: []string{"svg"}}},
 		} {
 			a := sample()
 			a.MIME, a.Filename, a.Width, a.Height = "application/pdf", "report.pdf", 0, 0
@@ -339,7 +341,7 @@ func TestScreenUsesEffectiveFormatsAndOmitsUnknownDimensions(t *testing.T) {
 				return p.Template.ExecuteTemplate(w, "content", p.Data)
 			}
 			handlerFor(s).serve(w, httptest.NewRequest("GET", "/", nil), v)
-			body := w.Body.String()
+			body := html.UnescapeString(w.Body.String())
 			if !strings.Contains(body, `id="media-file"`) || strings.Contains(body, "0×0") || strings.Contains(body, "Image library") || strings.Contains(body, "Ready images") {
 				t.Fatal("opaque file screen is inaccurate", body)
 			}
@@ -374,7 +376,7 @@ func TestRetainedSupportedAttachmentsIgnoreNarrowedUploadSelection(t *testing.T)
 			}
 		})
 	}
-	for _, unsupported := range []string{"image/svg+xml", "text/html", "application/octet-stream", "image/png; injected=true", "application/pdf\r\nX-Injected: true"} {
+	for _, unsupported := range []string{"image/svg+xml; injected=true", "text/html", "application/octet-stream", "image/png; injected=true", "application/pdf\r\nX-Injected: true"} {
 		a := sample()
 		a.MIME = unsupported
 		s := &libraryStub{asset: a, image: []byte("raw")}
