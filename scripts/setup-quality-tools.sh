@@ -34,17 +34,20 @@ print("Verified quality tool source:", module["Path"], module["Version"], module
 PY
 }
 
-# Staticcheck 2026.2.1, official tag commit:
+# Staticcheck verified source identity; official tag commit:
 # https://github.com/dominikh/go-tools/commit/1285a6a5ec1e0ebb658f49e82b6c566a878cc3cb
-verify_module honnef.co/go/tools v0.8.1 \
+staticcheck_version=v0.8.1
+verify_module honnef.co/go/tools "$staticcheck_version" \
   'h1:+JKf3xJ1ni4CwrhVg4/pqsfPGP6vNAXcKbMXJodYx3w=' \
   'h1:XA+OnlRA9EDh/ukGvXMNSZNKGwFQJ+5dER0ioUkOxks='
-go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
-# govulncheck v1.8.0, official tag commit:
+go install "honnef.co/go/tools/cmd/staticcheck@$staticcheck_version"
+
+# govulncheck verified source identity; official tag commit:
 # https://go.googlesource.com/vuln/+/709015412431dd2b5b28a53c06c70bc02d49074c
-verify_module golang.org/x/vuln v1.8.0 \
+govulncheck_version=v1.8.0
+verify_module golang.org/x/vuln "$govulncheck_version" \
   'h1:clG4qBU6zH5VKjti8n5j8BBuYzoSha392xXMkXS351U=' \
   'h1:Fzm4XK3Hbl1ZvZ7JpNTEWb7CJWOZ7m2LX0GLu4Fsrwo='
-go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+go install "golang.org/x/vuln/cmd/govulncheck@$govulncheck_version"
 # Emit compiled identity without consulting the network vulnerability database.
 go version -m "$GOBIN/staticcheck" "$GOBIN/govulncheck"
