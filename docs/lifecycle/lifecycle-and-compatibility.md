@@ -83,25 +83,39 @@ Consumers updating to this source must:
 - Stop ingress and drain product-owned domain work before shutdown. Core cancels/drains its admitted readiness/policy callbacks before stopping Modules, within one shutdown waiting/drain/stop budget. A wait/drain timeout leaves admission closed; retry Shutdown only to complete cleanup after callbacks return. Startup cancellation uses fresh bounded partial-start cleanup. Completed cleanup's result is retained; repeated calls do not retry failed Module stops. Arbitrary noncompliant in-process code still requires operator/process recovery.
 - Cheaply bound/normalize untrusted resource references at the owning Application before expensive policy work without reading authorization-sensitive state. The Notes fixture now preflights its opaque ID; create's explicit global scope remains valid.
 
-The isolated Notes consumer pins the reviewed source revision through ordinary Go module resolution/checksums; its schema and immutable migration are unchanged. Validate the complete candidate with Core race tests and isolated PostgreSQL/consumer/restore proof. Release preparation uses the exact integrated source and separately verified Lifecycle evidence; #44 itself required integration only. The [product quick start](../architecture/consumption-and-packaging.md#start-a-v02-product) owns ordinary versioned installation and deliberate consumer updates.
+The isolated Notes consumer pins the reviewed source revision through ordinary Go module resolution/checksums; its schema and immutable migration are unchanged. Validate the complete candidate with Core race tests and isolated PostgreSQL/consumer/restore proof. Release preparation uses the exact integrated source and separately verified Lifecycle evidence; #44 itself required integration only. Historical v0.2 installation remains recoverable from its immutable tag and release.
 
-## Private SVG successor schema boundary
+## v0.2 to v0.3 development minor migration
 
-The explicitly selected private SVG attachment slice in [Issue #78](https://github.com/AChWorks/achrix/issues/78) belongs to the next **v0 minor** successor after published v0.2.0. It does not change the published v0.1/v0.2 tags or their compatibility commitments, and no successor release or product activation is implied. Nil Media configuration remains PNG/JPEG and `CommonMIMEs()` retains its 36 types; SVG requires explicit `image/svg+xml` selection.
+`v0.3.0` is the next reviewed pre-v1 developer minor after published `v0.2.0`; [GitHub Releases](https://github.com/AChWorks/achrix/releases) owns actual publication and exact release evidence. It does not rewrite or retire v0.1/v0.2. A consumer adopting v0.3.0 must deliberately inspect/rebuild its product and apply every participating migration before ingress.
+
+Compared with v0.2.0:
+
+- Media schema version 3 adds explicitly selected private SVG support. Quiesce old writers, preserve a coherent database/private-original capture, run explicit Media migration with a deadline, then start only the new composition. Published v0.2 source rejects the newer ledger; source downgrade is not database rollback.
+- Identity/Audit/Media exported `Config` structs add bounded resource fields. Replace positional literals with keyed fields before compiling against v0.3.0; zero retains documented defaults and never means unlimited.
+- Media adds separately authorized `achrix.media.prepare-public-image` ABI 1 for clean PNG/JPEG preparation. It grants neither original `Read` nor publication, derivative storage or public URLs.
+- The optional `achrix.multisite.resolve` ABI 1 resolver becomes available in the shared Foundation release. Single-site composition remains valid without it; ingress trust and all site-bound authorization/data/storage/configuration remain product-owned.
+- Media and Identity/Audit dependency-error boundaries now return only documented safe categories/context identities instead of retaining private provider/destination wrapper text or objects. Consumers must not depend on driver-specific unwrap chains as public API. Existing mutation acknowledgement/reconciliation semantics and capability ABIs are unchanged.
+
+The [v0.3 product quick start](../architecture/consumption-and-packaging.md#start-a-v03-product) owns ordinary versioned installation. Updating a Go dependency alone never migrates a database or replaces a deployed product artifact.
+
+## Private SVG v0.3 schema boundary
+
+The explicitly selected private SVG attachment slice in [Issue #78](https://github.com/AChWorks/achrix/issues/78) belongs to the **v0.3.0** source line after published v0.2.0. It does not change the published v0.1/v0.2 tags or their compatibility commitments, and source publication still does not activate any product. Nil Media configuration remains PNG/JPEG and `CommonMIMEs()` retains its 36 types; SVG requires explicit `image/svg+xml` selection.
 
 Media schema version 3 adds immutable `003_private_svg.sql` after byte-identical 001/002. Before adopting this source, quiesce all participating product instances and preserve a coherent PostgreSQL metadata/ledger plus private-original capture. Explicitly migrate with a deadline, then start the new composition and verify retained reads; startup never upgrades. Fresh install, retained v1/v2 upgrade and rollback of a failed upgrade transaction are tested on the supported PostgreSQL profile. Overlapping old/new source is unsupported: published v0.2 source rejects the newer three-entry ledger, even when SVG has never been enabled.
 
 Source rollback is **not database rollback**. Removing SVG from new-upload configuration preserves authorized reads of retained SVG. Reverting source alone cannot reverse the ledger or remove durable originals. Recover through the reviewed forward source or restore the pre-upgrade coherent database-plus-assets capture into an isolated compatible target, validating retained relationships and authorized reads before ingress. Such a restore loses changes made after its capture; no automatic down migration or removal of SVG state is supplied. [Media](../../media/README.md#capture-and-restore-boundary) owns exact bounds and coherent original-file recovery obligations.
 
-## Resource configuration successor boundary
+## Resource configuration v0.3 boundary
 
-The Identity/Audit/Media `Config.MaxConns int32` and `Config.MaxOperations int` additions in [Issue #76](https://github.com/AChWorks/achrix/issues/76) belong to the already required next **v0 minor** successor after published v0.2.0. Exported struct shape changes require replacing positional Config literals with keyed fields before adopting the source, for example `identity.Config{MaxConns: 6, MaxOperations: 24}` or `media.Config{StorageRoot: privatePath}`. Omitted/zero and explicit-default resource fields preserve the existing default behavior; zero never means unlimited. [Operations](../operations/operability-performance.md#module-resource-configuration) owns the exact default/minimum and lease semantics.
+The Identity/Audit/Media `Config.MaxConns int32` and `Config.MaxOperations int` additions in [Issue #76](https://github.com/AChWorks/achrix/issues/76) belong to the **v0.3.0** source line after published v0.2.0. Exported struct shape changes require replacing positional Config literals with keyed fields before adopting the source, for example `identity.Config{MaxConns: 6, MaxOperations: 24}` or `media.Config{StorageRoot: privatePath}`. Omitted/zero and explicit-default resource fields preserve the existing default behavior; zero never means unlimited. [Operations](../operations/operability-performance.md#module-resource-configuration) owns the exact default/minimum and lease semantics.
 
-This configuration addition changes no schema, migration bytes/checksums or capability ABI, and is not part of a compatible v0.2 patch. The same source also carries the private SVG schema boundary above, whose explicit migration/recovery requirements still apply when upgrading from published v0.2.0. Published tags remain unchanged; no release or production activation is implied. Pool/admission limits are instance runtime policy, not database identity or a fleet capacity promise.
+This configuration addition changes no schema, migration bytes/checksums or capability ABI, and is not part of a compatible v0.2 patch. The same source also carries the private SVG schema boundary above, whose explicit migration/recovery requirements still apply when upgrading from published v0.2.0. Published older tags remain unchanged; a source release never implies product or production activation. Pool/admission limits are instance runtime policy, not database identity or a fleet capacity promise.
 
-## Public-image successor boundary
+## Public-image v0.3 boundary
 
-The stateless [Media preparation API](../../media/README.md#clean-public-image-preparation) in [Issue #77](https://github.com/AChWorks/achrix/issues/77) belongs to the same next **v0 minor** successor. It adds exact-asset `achrix.media.prepare-public-image` ABI1 without changing original `Read` ABI1, private upload defaults, existing durable state or immutable migrations. Published tags remain immutable; no release or product activation is implied. Unsupported preparation inputs retain their existing private attachment semantics.
+The stateless [Media preparation API](../../media/README.md#clean-public-image-preparation) in [Issue #77](https://github.com/AChWorks/achrix/issues/77) belongs to the same **v0.3.0** source line. It adds exact-asset `achrix.media.prepare-public-image` ABI1 without changing original `Read` ABI1, private upload defaults, existing durable state or immutable migrations. Published tags remain immutable; no release or product activation is implied. Unsupported preparation inputs retain their existing private attachment semantics.
 
 Preparation grants no publication and stores no derivative. Its complete result binds a source snapshot only; the product owns future source/revision/hash and permission checks, staged artifact activation, relationships, withdrawal/cache invalidation and retention. A product capture must cover its active representations plus those source relationships/manifests or a reproducible compatible regeneration path. Restoring originals alone does not establish correctness of an already published artifact. Partial private output is discarded on failure and never activated. New source still includes the separate SVG schema3 upgrade boundary above; reverting source is not data rollback or automatic withdrawal of product-owned public artifacts.
 
@@ -114,7 +128,7 @@ Preparation has no tag/release publication permission, runs no PostgreSQL or rep
 From a maintainer environment with a GitHub CLI supporting artifact-attestation verification:
 
 ```bash
-ACHRIX_RELEASE_VERSION=v0.2.0
+ACHRIX_RELEASE_VERSION=v0.3.0
 gh workflow run release.yml --repo AChWorks/achrix --ref main -f version="$ACHRIX_RELEASE_VERSION"
 gh run list --repo AChWorks/achrix --workflow release.yml --branch main --limit 5 --json databaseId,headSha,status,conclusion
 ```
