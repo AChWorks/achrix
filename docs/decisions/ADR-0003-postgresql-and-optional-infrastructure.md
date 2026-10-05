@@ -24,7 +24,7 @@ Use ordinary PostgreSQL for the first implementation and integration tests. Auxi
 | Orchestration | [Kubernetes](https://kubernetes.io/docs/setup/production-environment/) later | Concrete multi-node scheduling, isolation, rollout/availability and operator requirements |
 | Interactive frontend | TypeScript | Product selects framework and any Node production need |
 | AI/data runtime | Python where ecosystem value warrants it | Calling a model API from Go alone requires no Python service |
-| Time-series profile | [TimescaleDB](https://github.com/timescale/timescaledb) when justified | Check extension/PG compatibility, hypertable constraints, [license](https://github.com/timescale/timescaledb/blob/main/LICENSE), migrations/restore and exit path |
+| Time-series profile | [TimescaleDB](https://github.com/timescale/timescaledb) when justified | Check extension/PG compatibility, hypertable constraints, [license](https://github.com/timescale/timescaledb/blob/HEAD/LICENSE), migrations/restore and exit path |
 
 ## Correctness and operating constraints
 
