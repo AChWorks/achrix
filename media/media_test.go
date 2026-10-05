@@ -349,6 +349,32 @@ func TestFailureCanonicalizesWrappedSafeIdentities(t *testing.T) {
 	}
 }
 
+type privateWrappedFailure struct {
+	marker string
+	err    error
+}
+
+func (e *privateWrappedFailure) Error() string { return e.marker + ": " + e.err.Error() }
+func (e *privateWrappedFailure) Unwrap() error { return e.err }
+
+func TestFailureAccountsUnknownOutcomeJoinedWithExpectedCategory(t *testing.T) {
+	var log bytes.Buffer
+	m := &Module{logger: slog.New(slog.NewJSONHandler(&log, nil))}
+	const private = "private-provider path=/secret password=hidden"
+	privateErr := &privateWrappedFailure{marker: private, err: ErrInput}
+	got := m.failure(context.Background(), "create_publish", errors.Join(ErrUnknownOutcome, privateErr))
+	var leaked *privateWrappedFailure
+	if !errors.Is(got, ErrUnknownOutcome) || !errors.Is(got, ErrInput) || errors.As(got, &leaked) || strings.Contains(got.Error(), private) {
+		t.Fatalf("unknown outcome did not retain only safe identities: %v", got)
+	}
+	if m.FailureCount() != 1 {
+		t.Fatalf("unknown outcome was not accounted: %d", m.FailureCount())
+	}
+	if !strings.Contains(log.String(), `"reason":"unknown_outcome"`) || strings.Contains(log.String(), private) {
+		t.Fatalf("unknown outcome diagnostic was not bounded: %s", log.String())
+	}
+}
+
 func TestDescriptorAndConstructorWithoutIO(t *testing.T) {
 	m, err := NewPostgres("host=localhost sslmode=disable", Config{StorageRoot: "/missing-product-owned-media-root"}, nil)
 	if err != nil {

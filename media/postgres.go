@@ -263,7 +263,7 @@ func canonicalFailureError(err error) error {
 
 func (m *Module) failure(ctx context.Context, operation string, err error) error {
 	err = canonicalFailureError(err)
-	if !errors.Is(err, ErrUnknownOutcome) && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) || errors.Is(err, ErrInput) || errors.Is(err, ErrConflict) || errors.Is(err, ErrLimited) || errors.Is(err, ErrNotFound) {
+	if !errors.Is(err, ErrUnknownOutcome) && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrInput) || errors.Is(err, ErrConflict) || errors.Is(err, ErrLimited) || errors.Is(err, ErrNotFound)) {
 		return err
 	}
 	m.failures.Add(1)
