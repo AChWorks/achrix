@@ -70,7 +70,7 @@ Keep patches within `v0.1.x` compatible with the published public surface/capabi
 
 Consumers pin a reviewed version, inspect the dependency/contract diff, validate affected behavior and deliberately rebuild/deploy. A source release does not activate an installed product. Whole-product recovery, remote deployment, administrator update UI, product-level Multi-Site isolation and Gateway integration require their own product/module evidence and authorized implementation; this lifecycle guide does not mirror live work-item status. Unicode storage is proven by Notes, while localized UI/RTL rendering follows [Web](../web/seo-and-semantic-web.md#internationalization-and-directionality) when a real renderer exists.
 
-## Next development minor migration
+## v0.1 to v0.2 development minor migration
 
 The Core correction in [Issue #44](https://github.com/AChWorks/achrix/issues/44) belongs to **v0.2**, not a compatible v0.1 patch. These migration steps apply when an existing v0.1 consumer adopts v0.2. [GitHub Releases](https://github.com/AChWorks/achrix/releases) owns actual publication and exact evidence. v0.2 is the developer line for new consumers; this successor does not retire v0.1 or alter its patch compatibility commitment. The published v0.1 tag/source is unchanged; no permanent LTS/backport promise is introduced.
 
@@ -97,7 +97,7 @@ Compared with v0.2.0:
 - The optional `achrix.multisite.resolve` ABI 1 resolver becomes available in the shared Foundation release. Single-site composition remains valid without it; ingress trust and all site-bound authorization/data/storage/configuration remain product-owned.
 - Media and Identity/Audit dependency-error boundaries now return only documented safe categories/context identities instead of retaining private provider/destination wrapper text or objects. Consumers must not depend on driver-specific unwrap chains as public API. Existing mutation acknowledgement/reconciliation semantics and capability ABIs are unchanged.
 
-The [v0.3 product quick start](../architecture/consumption-and-packaging.md#start-a-v03-product) owns ordinary versioned installation. Updating a Go dependency alone never migrates a database or replaces a deployed product artifact.
+The [product quick start](../architecture/consumption-and-packaging.md#start-a-product) owns ordinary versioned installation. Updating a Go dependency alone never migrates a database or replaces a deployed product artifact.
 
 ## Private SVG v0.3 schema boundary
 
