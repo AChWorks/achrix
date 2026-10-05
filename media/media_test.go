@@ -334,8 +334,19 @@ func TestDescriptorAndConstructorWithoutIO(t *testing.T) {
 		t.Fatal("constructor performed storage/database IO", err)
 	}
 	d := m.Descriptor()
-	if d.ID != "achrix.media" || d.Version != achrix.Version() || len(d.Requires) != 1 || d.Requires[0].ID != "achrix.authorization" || d.Requires[0].Version != 2 || len(d.Provides) != 5 || len(d.Optional) != 0 {
+	if d.ID != "achrix.media" || d.Version != achrix.Version() || len(d.Requires) != 1 || d.Requires[0].ID != "achrix.authorization" || d.Requires[0].Version != 2 || len(d.Provides) != 6 || len(d.Optional) != 0 {
 		t.Fatal("composition/source identity", d)
+	}
+	wanted := map[string]uint32{Create: 1, List: 1, Read: 1, Delete: 1, Reconcile: 1, PreparePublicImage: 1}
+	for _, capability := range d.Provides {
+		version, ok := wanted[capability.ID]
+		if !ok || capability.Version != version {
+			t.Fatal("unexpected capability ABI", capability)
+		}
+		delete(wanted, capability.ID)
+	}
+	if len(wanted) != 0 {
+		t.Fatal("missing capabilities", wanted)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()

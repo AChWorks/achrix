@@ -99,6 +99,12 @@ The Identity/Audit/Media `Config.MaxConns int32` and `Config.MaxOperations int` 
 
 This configuration addition changes no schema, migration bytes/checksums or capability ABI, and is not part of a compatible v0.2 patch. The same source also carries the private SVG schema boundary above, whose explicit migration/recovery requirements still apply when upgrading from published v0.2.0. Published tags remain unchanged; no release or production activation is implied. Pool/admission limits are instance runtime policy, not database identity or a fleet capacity promise.
 
+## Public-image successor boundary
+
+The stateless [Media preparation API](../../media/README.md#clean-public-image-preparation) in [Issue #77](https://github.com/AChWorks/achrix/issues/77) belongs to the same next **v0 minor** successor. It adds exact-asset `achrix.media.prepare-public-image` ABI1 without changing original `Read` ABI1, private upload defaults, existing durable state or immutable migrations. Published tags remain immutable; no release or product activation is implied. Unsupported preparation inputs retain their existing private attachment semantics.
+
+Preparation grants no publication and stores no derivative. Its complete result binds a source snapshot only; the product owns future source/revision/hash and permission checks, staged artifact activation, relationships, withdrawal/cache invalidation and retention. A product capture must cover its active representations plus those source relationships/manifests or a reproducible compatible regeneration path. Restoring originals alone does not establish correctness of an already published artifact. Partial private output is discarded on failure and never activated. New source still includes the separate SVG schema3 upgrade boundary above; reverting source is not data rollback or automatic withdrawal of product-owned public artifacts.
+
 ## Source release preparation and verification
 
 `.github/workflows/release.yml` is a manually dispatched preparer on canonical trusted `main`. It requires successful existing `baseline` evidence for that exact source, exports its tracked tree, and produces a source archive, SPDX source inventory, source/run identity metadata, checksums and signed build/SBOM bundles. The archive includes repository documentation, fixtures and tooling; it ships no product executable or vendored dependency implementation. The SBOM catalogs that exported source/declared manifest scope, not a deployed runtime or tested compatibility for every listed dependency.

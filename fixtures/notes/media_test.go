@@ -52,10 +52,11 @@ type mediaConsumerPolicy struct {
 	mu      sync.Mutex
 	read    map[string]bool
 	delete  map[string]bool
+	prepare map[string]bool
 }
 
 func newMediaConsumerPolicy() *mediaConsumerPolicy {
-	p := &mediaConsumerPolicy{read: make(map[string]bool), delete: make(map[string]bool)}
+	p := &mediaConsumerPolicy{read: make(map[string]bool), delete: make(map[string]bool), prepare: make(map[string]bool)}
 	p.account.Store("")
 	return p
 }
@@ -87,7 +88,7 @@ func (p *mediaConsumerPolicy) Authorize(_ context.Context, actor achrix.Principa
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if capability == media.Read && p.read[target] || capability == media.Delete && p.delete[target] {
+	if capability == media.Read && p.read[target] || capability == media.Delete && p.delete[target] || capability == media.PreparePublicImage && p.prepare[target] {
 		return nil
 	}
 	return achrix.ErrDenied
@@ -581,6 +582,8 @@ func TestMediaPublicConsumer(t *testing.T) {
 	}
 	mediaCheckAsset(t, jpegAsset, retainedJPEGName, "jpeg", jpegBody)
 	f.policy.grant(jpegAsset.ID, false)
+	checkMediaPreparation(t, f, actor, pngAsset)
+	checkMediaPreparation(t, f, actor, jpegAsset)
 	retained := []media.Asset{pngAsset, jpegAsset}
 	for _, name := range []string{"document.pdf", "bundle.zip", "drawing.svg"} {
 		body := mediaDocumentBytes(t)[name]
@@ -757,6 +760,9 @@ func TestMediaTrustedRestore(t *testing.T) {
 		if err != nil || status.ID != asset.ID || status.SHA256 != asset.SHA256 || status.Revision != asset.Revision {
 			t.Fatal("restored public asset identity differs")
 		}
+		if asset.MIME == "image/png" || asset.MIME == "image/jpeg" {
+			checkMediaPreparation(t, f, session.Principal, asset)
+		}
 		var restored bytes.Buffer
 		if _, err := f.service.Read(ctx, session.Principal, asset.ID, &restored); err != nil || !bytes.Equal(restored.Bytes(), body) {
 			t.Fatal("restored public Media bytes differ", err)
@@ -801,5 +807,47 @@ func TestMediaTrustedRestore(t *testing.T) {
 	}
 	if _, err := f.service.Read(ctx, session.Principal, a.ID, &escaped); err != nil || !bytes.Equal(escaped.Bytes(), original) {
 		t.Fatal("repaired private restore remained unavailable", err)
+	}
+}
+
+// Public preparation is a distinct exact-asset grant and only creates private
+// transient output. No extra original/derivative joins the coherent five files.
+func checkMediaPreparation(t *testing.T, f *mediaConsumer, actor achrix.Principal, asset media.Asset) {
+	t.Helper()
+	ctx, cancel := mediaDeadline()
+	defer cancel()
+	request := media.PreparePublicImageRequest{AssetID: asset.ID, ExpectedRevision: asset.Revision}
+	var output bytes.Buffer
+	before := mediaSnapshot(t, f)
+	if _, err := f.service.PreparePublicImage(ctx, actor, request, &output); !errors.Is(err, achrix.ErrDenied) || output.Len() != 0 {
+		t.Fatal("existing rights implied public preparation", err)
+	}
+	f.policy.mu.Lock()
+	f.policy.prepare[asset.ID] = true
+	hadRead := f.policy.read[asset.ID]
+	f.policy.read[asset.ID] = false
+	f.policy.mu.Unlock()
+	if _, err := f.service.Read(ctx, actor, asset.ID, &output); !errors.Is(err, achrix.ErrDenied) {
+		t.Fatal("prepare grant implied original Read", err)
+	}
+	result, err := f.service.PreparePublicImage(ctx, actor, request, &output)
+	f.policy.mu.Lock()
+	f.policy.read[asset.ID] = hadRead
+	f.policy.mu.Unlock()
+	sum := sha256.Sum256(output.Bytes())
+	if err != nil || result.SourceAssetID != asset.ID || result.SourceRevision != asset.Revision || result.SourceSHA256 != asset.SHA256 || result.SHA256 != hex.EncodeToString(sum[:]) || result.Size != int64(output.Len()) || result.Width != asset.Width || result.Height != asset.Height || result.MIME != asset.MIME || result.Profile != media.PublicImageProfile || result.ColorBasis != "assumed-untagged" {
+		t.Fatal("normal dependency preparation binding", result, err)
+	}
+	var decoded image.Image
+	if asset.MIME == "image/png" {
+		decoded, err = png.Decode(bytes.NewReader(output.Bytes()))
+	} else {
+		decoded, err = jpeg.Decode(bytes.NewReader(output.Bytes()))
+	}
+	if err != nil || decoded.Bounds().Dx() != asset.Width || decoded.Bounds().Dy() != asset.Height {
+		t.Fatal("complete prepared image", err)
+	}
+	if mediaSnapshot(t, f) != before {
+		t.Fatal("stateless preparation changed original durable state")
 	}
 }
