@@ -33,6 +33,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_VERSION: ${{ inputs.version }}
+      SYFT_VERSION: v1.52.0
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -54,7 +55,7 @@ jobs:
           path: ${{ runner.temp }}/achrix-release/source/achrix-${{ inputs.version }}
           format: spdx-json
           output-file: ${{ runner.temp }}/achrix-release/assets/achrix-${{ inputs.version }}-source.spdx.json
-          syft-version: v1.52.0
+          syft-version: ${{ env.SYFT_VERSION }}
           upload-artifact: false
           upload-release-assets: false
           dependency-snapshot: false
