@@ -28,7 +28,7 @@ Supported external contracts and deliberate upgrades preserve future options; th
 
 ## Canonical owners and proof
 
-[Consumption and packaging](../architecture/consumption-and-packaging.md) owns the durable constraints. [Module model](../architecture/module-model.md) owns capability placement. [Licensing](../legal/licensing.md) owns artifact terms. [Lifecycle](../lifecycle/lifecycle-and-compatibility.md) owns compatibility/release evidence. [Issue #1](https://github.com/AChWorks/achrix/issues/1) owns executable acceptance and its current start gate.
+[Consumption and packaging](../architecture/consumption-and-packaging.md) owns the durable constraints. [Module model](../architecture/module-model.md) owns capability placement. [Licensing](../legal/licensing.md) owns artifact terms. [Lifecycle](../lifecycle/lifecycle-and-compatibility.md) owns compatibility/release evidence. [Issue #1](https://github.com/AChWorks/achrix/issues/1) remains the stable executable-baseline acceptance/evidence reference; live gates and task state belong to GitHub rather than this ADR.
 
 Do not infer that a public repository is a runnable module, that `internal` is a sandbox, or that this ADR validates an unimplemented extension API.
 
