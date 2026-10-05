@@ -29,6 +29,8 @@ def api(endpoint):
 def release_gate(version):
     if not VERSION.fullmatch(version):
         raise ValueError("version must be an unpublished v0.MINOR.PATCH")
+    if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?", os.environ.get("SYFT_VERSION", "")):
+        raise ValueError("release inventory tool version must be explicitly pinned")
     source = os.environ["GITHUB_SHA"]
     if (
         os.environ["GITHUB_REPOSITORY"] != REPOSITORY
@@ -151,7 +153,7 @@ def main():
             "workflow": BASELINE,
             "source_sha": baseline["head_sha"],
         },
-        "inventory_scope": "Syft v1.52.0 SPDX source/manifest inventory of the exact exported tracked tree; not a compiled-runtime SBOM",
+        "inventory_scope": f"Syft {os.environ['SYFT_VERSION']} SPDX source/manifest inventory of the exact exported tracked tree; not a compiled-runtime SBOM",
     }
     (assets / "release.json").write_text(json.dumps(metadata, indent=2) + "\n")
     print(f"Prepared {args.version} source at {source}; baseline {baseline['id']}")
