@@ -67,7 +67,7 @@ def release_gate(version):
             and run["conclusion"] == "success"
             and any(
                 check["name"] == "baseline"
-                and check["app"]["slug"] == "github-actions"
+                and check["app"]["id"] == 15368
                 and check["status"] == "completed"
                 and check["conclusion"] == "success"
                 and check["details_url"].startswith(f"{run['html_url']}/job/")
