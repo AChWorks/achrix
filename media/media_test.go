@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -325,6 +326,26 @@ func TestBoundedSafeOperationalDiagnostics(t *testing.T) {
 	}
 	if m.FailureCount() != 3 || strings.Count(log.String(), "media operation failed") != 2 {
 		t.Fatal("operational diagnostics missing")
+	}
+}
+
+func TestFailureCanonicalizesWrappedSafeIdentities(t *testing.T) {
+	var log bytes.Buffer
+	m := &Module{logger: slog.New(slog.NewJSONHandler(&log, nil))}
+	const private = "private-path password=private-credential"
+	for _, category := range []error{context.Canceled, context.DeadlineExceeded, ErrInput, ErrConflict, ErrLimited, ErrNotFound} {
+		got := m.failure(context.Background(), "read_copy", fmt.Errorf("%s: %w", private, category))
+		if got != category || strings.Contains(got.Error(), private) {
+			t.Fatalf("wrapped safe identity escaped: %v", got)
+		}
+	}
+	unknown := errors.Join(ErrUnknownOutcome, fmt.Errorf("%s: %w", private, context.Canceled))
+	got := m.failure(context.Background(), "create_publish", unknown)
+	if !errors.Is(got, ErrUnknownOutcome) || !errors.Is(got, context.Canceled) || strings.Contains(got.Error(), private) {
+		t.Fatalf("unknown outcome retained private wrapper: %v", got)
+	}
+	if got := m.failure(context.Background(), "read_storage", fmt.Errorf("%s: %w", private, ErrUnavailable)); got != ErrUnavailable || strings.Contains(got.Error(), private) {
+		t.Fatalf("unavailable retained private wrapper: %v", got)
 	}
 }
 
