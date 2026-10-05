@@ -263,9 +263,33 @@ func (m *Module) Stop(ctx context.Context) error {
 
 // FailureCount counts bounded operational failures, not durable accountability.
 func (m *Module) FailureCount() uint64 { return m.failures.Load() }
+
+// Dependencies can wrap supported public identities with private connection,
+// configuration or provider details. Rebuild only the identities this Module
+// already exposes; never return the original text or unwrap chain.
+func canonicalFailureError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var safe []error
+	for _, category := range []error{context.Canceled, context.DeadlineExceeded, ErrConflict, ErrLimited, ErrInput, ErrUnavailable} {
+		if errors.Is(err, category) {
+			safe = append(safe, category)
+		}
+	}
+	if len(safe) == 1 {
+		return safe[0]
+	}
+	if len(safe) > 1 {
+		return errors.Join(safe...)
+	}
+	return ErrUnavailable
+}
+
 func (m *Module) failure(ctx context.Context, operation string, err error) error {
+	public := canonicalFailureError(err)
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrConflict) || errors.Is(err, ErrLimited) || errors.Is(err, ErrInput) || errors.Is(err, ErrUnavailable) {
-		return err
+		return public
 	}
 	m.failures.Add(1)
 	now := time.Now().UnixNano()
