@@ -68,7 +68,7 @@ The Core import is `github.com/AChWorks/achrix`. [Package source](../../achrix.g
 | `Application.Components`, `Version` | Defensive component metadata and actual source-backed Foundation dependency version; local/replacement builds identify themselves as development |
 | `ErrComposition`, `ErrDenied`, `ErrAuthorizationUnavailable`, `ErrNotReady` | Inspectable Core categories; explicit denial is distinct from safe evaluation failure. Caller context errors are preserved; raw lifecycle extension errors remain restricted operator-level results |
 
-Current source targets the next development minor; the published `v0.1.x` surface remains immutable. [Migration](../lifecycle/lifecycle-and-compatibility.md#next-development-minor-migration) owns that distinction. `achrix.authorization` ABI 2 is Core-owned for the new deadline/error/admission semantics; ABI 1 belongs to the published `v0.1` line. The separate consumer still provides `example.notes.create`/`example.notes.read` ABI 1. It owns its typed Service, Domain, PostgreSQL schema, migration and HTTP mapping; none is a shared Content/Identity Module or additional Foundation export.
+Published release-specific compatibility history belongs to the [lifecycle and migration guide](../lifecycle/lifecycle-and-compatibility.md); published tags remain immutable. The current Core authorization contract is `achrix.authorization` ABI 2 with bounded deadline/error/admission semantics. The separate Notes consumer provides its own `example.notes.create`/`example.notes.read` ABI 1 contracts and owns their typed Service, Domain, PostgreSQL schema, migration and HTTP mapping; none is a shared Content/Identity Module or additional Foundation export.
 
 ### Capability ABI and composition
 

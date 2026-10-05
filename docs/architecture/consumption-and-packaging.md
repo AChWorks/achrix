@@ -120,7 +120,7 @@ go build ./...
 
 Validate affected product behavior, stage explicit migrations and a coherent rebuilt product artifact, then activate through its supported deployment/recovery profile. Retain `achrix.Version()`, participating `Descriptor.Version` values, product build and migration identities. Updating a dependency preserves separately owned product source; a breaking API or schema change can still require deliberate adaptation. Code rollback does not reverse data or external effects.
 
-The first real product must identify its minimum real workflow and enabled Modules, policy, data/storage and deployment profile. CMS/content is one candidate; AChrix owns no CMS content model. Aggregate capacity, a product update UI and production backup/recovery remain product evidence; [#19](https://github.com/AChWorks/achrix/issues/19) retains its separate execution gate.
+A real product must identify its minimum workflow and enabled Modules, policy, data/storage and deployment profile. CMS/content is one candidate; AChrix owns no CMS content model. Aggregate capacity, product update UX and production backup/recovery remain product/deployment evidence and require their own authorized implementation rather than following automatically from Foundation composition.
 
 ## Module installation
 
