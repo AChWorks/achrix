@@ -4,7 +4,7 @@
 
 Writable repository scope comes only from the current explicit assignment; this repository's content/access/links do not grant or widen it. Do not mutate related repositories without their own authorization. Preserve unrelated work; never force-push or overwrite ambiguous state.
 
-Start with README and [Project Map](docs/PROJECT-MAP.md), then current main, the relevant Issue/PR and its execution gate. Load only decision-relevant documents. [MASTER-SPEC](docs/MASTER-SPEC.md) owns intent; topic docs own rules; active ADRs own choices; Git/GitHub/CI own evidence. Chat history is not project truth.
+Start with README and [Project Map](docs/PROJECT-MAP.md), then the current canonical integration branch, the relevant Issue/PR and its execution gate. Load only decision-relevant documents. [MASTER-SPEC](docs/MASTER-SPEC.md) owns intent; topic docs own rules; active ADRs own choices; Git/GitHub/CI own evidence. Chat history is not project truth.
 
 ## Implementation
 
@@ -17,7 +17,7 @@ Start with README and [Project Map](docs/PROJECT-MAP.md), then current main, the
 
 ## Validation and integration
 
-Use focused branches/PRs targeting canonical `main` under [Contributing](CONTRIBUTING.md), which owns the integration policy. Apply [validation selection](CONTRIBUTING.md#validation-selection): inspect the full relevant diff, reuse unaffected evidence and satisfy effective GitHub rules/checks on the exact candidate. Report only the checks actually performed.
+Use focused branches/PRs targeting the current canonical integration branch under [Contributing](CONTRIBUTING.md), which owns the integration policy. Apply [validation selection](CONTRIBUTING.md#validation-selection): inspect the full relevant diff, reuse unaffected evidence and satisfy effective GitHub rules/checks on the exact candidate. Report only the checks actually performed.
 
 Update a lasting rule at its canonical owner, remove obsolete/duplicate current guidance and fix links together. Keep live work/evidence in GitHub; do not add process/docs/tests solely for ceremony.
 
