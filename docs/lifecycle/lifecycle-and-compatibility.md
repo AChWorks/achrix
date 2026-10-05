@@ -87,7 +87,7 @@ The isolated Notes consumer pins the reviewed source revision through ordinary G
 
 ## v0.2 to v0.3 development minor migration
 
-`v0.3.0` is the next reviewed pre-v1 developer minor after published `v0.2.0`; [GitHub Releases](https://github.com/AChWorks/achrix/releases) owns actual publication and exact release evidence. It does not rewrite or retire v0.1/v0.2. A consumer adopting v0.3.0 must deliberately inspect/rebuild its product and apply every participating migration before ingress.
+`v0.3.0` is the reviewed pre-v1 developer minor after published `v0.2.0`; [GitHub Releases](https://github.com/AChWorks/achrix/releases) owns actual publication and exact release evidence. It does not rewrite or retire v0.1/v0.2. A consumer adopting v0.3.0 must deliberately inspect/rebuild its product and apply every participating migration before ingress.
 
 Compared with v0.2.0:
 
@@ -128,7 +128,7 @@ Preparation has no tag/release publication permission, runs no PostgreSQL or rep
 From a maintainer environment with a GitHub CLI supporting artifact-attestation verification:
 
 ```bash
-ACHRIX_RELEASE_VERSION=v0.3.0
+ACHRIX_RELEASE_VERSION="<reviewed-unpublished-version>"
 gh workflow run release.yml --repo AChWorks/achrix --ref main -f version="$ACHRIX_RELEASE_VERSION"
 gh run list --repo AChWorks/achrix --workflow release.yml --branch main --limit 5 --json databaseId,headSha,status,conclusion
 ```

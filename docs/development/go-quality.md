@@ -4,12 +4,12 @@
 
 ## Tool acquisition and scope
 
-| Tool | Reviewed pin | Official source |
+| Tool | Reviewed identity owner | Official source |
 | --- | --- | --- |
-| Staticcheck | 2026.2.1, `honnef.co/go/tools v0.8.1` | [Release](https://github.com/dominikh/go-tools/releases/tag/2026.2.1), [usage](https://staticcheck.dev/docs/getting-started/) |
-| govulncheck | `golang.org/x/vuln v1.8.0` | [Go vulnerability analysis](https://go.dev/doc/security/vuln/), [command](https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck) |
+| Staticcheck | Exact reviewed module/checksum identity is machine-owned by `scripts/setup-quality-tools.sh` | [Releases](https://github.com/dominikh/go-tools/releases), [usage](https://staticcheck.dev/docs/getting-started/) |
+| govulncheck | Exact reviewed module/checksum identity is machine-owned by `scripts/setup-quality-tools.sh` | [Go vulnerability analysis](https://go.dev/doc/security/vuln/), [command](https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck) |
 
-`scripts/setup-quality-tools.sh` owns exact module/archive and manifest checksums plus source commit links. It requires Go 1.27.1 and enabled checksum verification, checks both pinned sums before building, and installs into a new absolute task-owned directory. Go verifies transitive downloads through its checksum database. Installation uses versioned `go install`, changes no repository manifest, and emits compiled build identities. No global installation or binary cache is required.
+`scripts/setup-quality-tools.sh` owns exact module/archive and manifest checksums plus source commit links. It requires the exact validation Go pin from the [supported environment](../operations/operability-performance.md#supported-environment) and enabled checksum verification, checks both pinned sums before building, and installs into a new absolute task-owned directory. Go verifies transitive downloads through its checksum database. Installation uses versioned `go install`, changes no repository manifest, and emits compiled build identities. No global installation or binary cache is required.
 
 `scripts/check-gofmt.sh` checks all tracked Go source, including the consumer, without rewriting it. Runtime validation invokes it on the supported toolchain. Core scope analyzes only the root module; full scope also analyzes the existing isolated pinned consumer after its cold dependency download. Unknown paths and runtime/dependency changes select full. Documentation-only changes acquire no Go tools and perform no security scan. Known regular-file Core benchmark additions/modifications select Core; symlinks, deletion/type change retain full. Routing/tool changes validate failure guards before acquiring tools. Checkout credentials are not persisted, workflow permissions remain read-only, and tools receive no production secrets or repository write credentials.
 
@@ -33,7 +33,7 @@ Prefer the narrow compatible dependency/toolchain fix, refresh sums, and rerun a
 
 ## Benchmark semantics and comparison
 
-`achrix_bench_test.go` exercises the next-development-minor Core authorization ABI 2 after successful startup:
+`achrix_bench_test.go` exercises Core authorization ABI 2 after successful startup:
 
 | Benchmark | Measured work |
 | --- | --- |
@@ -42,7 +42,7 @@ Prefer the narrow compatible dependency/toolchain fix, refresh sums, and rerun a
 
 Setup/startup/shutdown and the caller's parent-deadline construction are outside timed work. Each operation uses a valid reused parent deadline; Core's per-call context/cancellation/accounting remains measured. Allocations are reported. Module callbacks perform no network/database work. Composition/startup benchmarks wait for a concrete startup/module-count regression need.
 
-On Go 1.27.1, run a quick local observation:
+On the supported validation Go pin, run a quick local observation:
 
 ```bash
 GOWORK=off go test -run '^$' -bench '^BenchmarkApplication(AuthorizeAllowed|ReadyThreeModules)$' -benchmem -count=1 .
@@ -57,6 +57,6 @@ GOWORK=off go test -run '^$' -bench '^BenchmarkApplication(AuthorizeAllowed|Read
 benchstat before.txt after.txt
 ```
 
-Use one reviewed benchstat version for both inputs and record `go version -m` for it. A currently compatible optional installation is `GOBIN=/absolute/owned/bin go install golang.org/x/perf/cmd/benchstat@v0.0.0-20260929162123-406019bb8b68`; it is not a CI dependency. Inspect effect size, confidence intervals, sample count and allocation changes before attributing a regression; use profiles when a measured difference needs explanation.
+Use one exact reviewed benchstat version for both inputs and record `go version -m` for it. For an optional local installation, set `BENCHSTAT_VERSION` to that reviewed version and run `GOBIN=/absolute/owned/bin go install "golang.org/x/perf/cmd/benchstat@$BENCHSTAT_VERSION"`; benchstat is not a CI dependency. Inspect effect size, confidence intervals, sample count and allocation changes before attributing a regression; use profiles when a measured difference needs explanation.
 
 CI compiles these benchmarks with Core tests but imposes no hosted-runner timing threshold. These Foundation measurements establish no HTTP/database/media throughput, product latency budget or capacity promise; the first real product owns those workload budgets.
