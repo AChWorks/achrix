@@ -314,8 +314,9 @@ func TestPostgresPublicImageDestinationErrorsAreSafe(t *testing.T) {
 }
 
 // The actual driver constructs a ConnectError around a private dial failure while
-// the caller context remains live. Only preparation adopts safe error identities.
-func TestPostgresPublicImageDependencyErrorsAreSafe(t *testing.T) {
+// the caller context remains live. Both legacy Read and preparation must expose
+// only canonical safe identities and discard the driver/configuration unwrap chain.
+func TestPostgresReadAndPublicImageDependencyErrorsAreSafe(t *testing.T) {
 	for _, category := range []error{context.DeadlineExceeded, context.Canceled} {
 		t.Run(category.Error(), func(t *testing.T) {
 			f := newFixture(t)
@@ -353,6 +354,12 @@ func TestPostgresPublicImageDependencyErrorsAreSafe(t *testing.T) {
 			f.module.mu.Lock()
 			f.module.pool = pool
 			f.module.mu.Unlock()
+			var privateRead bytes.Buffer
+			readAsset, readErr := f.service.Read(ctx, testActor, asset.ID, &privateRead)
+			var readConnectionError *pgconn.ConnectError
+			if readErr != category || errors.As(readErr, &readConnectionError) || ctx.Err() != nil || readAsset != (Asset{}) || privateRead.Len() != 0 {
+				t.Fatal("Read dependency failure was not canonical with a live caller", readErr, readAsset)
+			}
 			var output bytes.Buffer
 			result, got := f.service.PreparePublicImage(ctx, publicImageActor, PreparePublicImageRequest{asset.ID, asset.Revision}, &output)
 			var connectionError *pgconn.ConnectError

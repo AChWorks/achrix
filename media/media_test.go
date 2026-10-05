@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -325,6 +326,52 @@ func TestBoundedSafeOperationalDiagnostics(t *testing.T) {
 	}
 	if m.FailureCount() != 3 || strings.Count(log.String(), "media operation failed") != 2 {
 		t.Fatal("operational diagnostics missing")
+	}
+}
+
+func TestFailureCanonicalizesWrappedSafeIdentities(t *testing.T) {
+	var log bytes.Buffer
+	m := &Module{logger: slog.New(slog.NewJSONHandler(&log, nil))}
+	const private = "private-path password=private-credential"
+	for _, category := range []error{context.Canceled, context.DeadlineExceeded, ErrInput, ErrConflict, ErrLimited, ErrNotFound} {
+		got := m.failure(context.Background(), "read_copy", fmt.Errorf("%s: %w", private, category))
+		if got != category || strings.Contains(got.Error(), private) {
+			t.Fatalf("wrapped safe identity escaped: %v", got)
+		}
+	}
+	unknown := errors.Join(ErrUnknownOutcome, fmt.Errorf("%s: %w", private, context.Canceled))
+	got := m.failure(context.Background(), "create_publish", unknown)
+	if !errors.Is(got, ErrUnknownOutcome) || !errors.Is(got, context.Canceled) || strings.Contains(got.Error(), private) {
+		t.Fatalf("unknown outcome retained private wrapper: %v", got)
+	}
+	if got := m.failure(context.Background(), "read_storage", fmt.Errorf("%s: %w", private, ErrUnavailable)); got != ErrUnavailable || strings.Contains(got.Error(), private) {
+		t.Fatalf("unavailable retained private wrapper: %v", got)
+	}
+}
+
+type privateWrappedFailure struct {
+	marker string
+	err    error
+}
+
+func (e *privateWrappedFailure) Error() string { return e.marker + ": " + e.err.Error() }
+func (e *privateWrappedFailure) Unwrap() error { return e.err }
+
+func TestFailureAccountsUnknownOutcomeJoinedWithExpectedCategory(t *testing.T) {
+	var log bytes.Buffer
+	m := &Module{logger: slog.New(slog.NewJSONHandler(&log, nil))}
+	const private = "private-provider path=/secret password=hidden"
+	privateErr := &privateWrappedFailure{marker: private, err: ErrInput}
+	got := m.failure(context.Background(), "create_publish", errors.Join(ErrUnknownOutcome, privateErr))
+	var leaked *privateWrappedFailure
+	if !errors.Is(got, ErrUnknownOutcome) || !errors.Is(got, ErrInput) || errors.As(got, &leaked) || strings.Contains(got.Error(), private) {
+		t.Fatalf("unknown outcome did not retain only safe identities: %v", got)
+	}
+	if m.FailureCount() != 1 {
+		t.Fatalf("unknown outcome was not accounted: %d", m.FailureCount())
+	}
+	if !strings.Contains(log.String(), `"reason":"unknown_outcome"`) || strings.Contains(log.String(), private) {
+		t.Fatalf("unknown outcome diagnostic was not bounded: %s", log.String())
 	}
 }
 

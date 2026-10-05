@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -263,6 +264,34 @@ func TestMalformedUploadCleanupAndStorageIntegrity(t *testing.T) {
 		t.Fatal("corrupt bytes returned")
 	}
 }
+
+type wrappedReadWriter struct{ err error }
+
+func (w wrappedReadWriter) Write([]byte) (int, error) { return 0, w.err }
+
+func TestReadDestinationErrorsAreCanonical(t *testing.T) {
+	f := newFixture(t)
+	ctx, cancel := operationContext(t)
+	defer cancel()
+	asset, err := f.service.Create(ctx, testActor, "destination.png", bytes.NewReader(imageBytes(t, "png", 2, 2)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const private = "private-destination path=/secret password=hidden"
+	for _, category := range []error{context.Canceled, context.DeadlineExceeded, ErrInput, ErrConflict, ErrLimited, ErrNotFound, ErrUnavailable, ErrUnknownOutcome} {
+		t.Run(category.Error(), func(t *testing.T) {
+			_, got := f.service.Read(ctx, testActor, asset.ID, wrappedReadWriter{fmt.Errorf("%s: %w", private, category)})
+			if !errors.Is(got, category) || strings.Contains(got.Error(), private) {
+				t.Fatalf("private destination error escaped: %v", got)
+			}
+		})
+	}
+	_, err = f.service.Read(ctx, testActor, asset.ID, wrappedReadWriter{errors.New(private)})
+	if err != ErrUnavailable || strings.Contains(err.Error(), private) {
+		t.Fatalf("raw destination error escaped: %v", err)
+	}
+}
+
 func TestUnknownPublicationAcknowledgement(t *testing.T) {
 	f := newFixtureConfig(t, Config{MaxConns: 6, MaxOperations: 8})
 	ctx, cancel := operationContext(t)

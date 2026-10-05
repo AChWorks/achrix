@@ -238,8 +238,32 @@ func (m *Module) Stop(ctx context.Context) error {
 	return err
 }
 func (m *Module) FailureCount() uint64 { return m.failures.Load() }
+
+// Dependencies and trusted destinations can wrap safe identities with private
+// configuration or payload details. Rebuild only the supported identities and
+// never retain the original text or unwrap chain at the public Module boundary.
+func canonicalFailureError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var safe []error
+	for _, category := range []error{context.Canceled, context.DeadlineExceeded, ErrInput, ErrConflict, ErrLimited, ErrNotFound, ErrUnknownOutcome} {
+		if errors.Is(err, category) {
+			safe = append(safe, category)
+		}
+	}
+	if len(safe) == 1 {
+		return safe[0]
+	}
+	if len(safe) > 1 {
+		return errors.Join(safe...)
+	}
+	return ErrUnavailable
+}
+
 func (m *Module) failure(ctx context.Context, operation string, err error) error {
-	if !errors.Is(err, ErrUnknownOutcome) && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) || errors.Is(err, ErrInput) || errors.Is(err, ErrConflict) || errors.Is(err, ErrLimited) || errors.Is(err, ErrNotFound) {
+	err = canonicalFailureError(err)
+	if !errors.Is(err, ErrUnknownOutcome) && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrInput) || errors.Is(err, ErrConflict) || errors.Is(err, ErrLimited) || errors.Is(err, ErrNotFound)) {
 		return err
 	}
 	m.failures.Add(1)
