@@ -8,9 +8,9 @@ The consumer must identify/pin its Foundation version, deliberately review updat
 
 Generated bootstrap files may transfer to the product. Shared runtime is not an unmanaged permanent source copy. A justified fork has explicit independent ownership/maintenance and follows [Trademark Policy](../../TRADEMARKS.md); ordinary dependency consumption remains the default shared path.
 
-## Start a v0.3 product
+## Start a product
 
-Use the reviewed `v0.3.0` source dependency; [GitHub Releases](https://github.com/AChWorks/achrix/releases) owns actual availability and artifact evidence. This is a pre-v1 developer release. Existing v0.2 consumers must read the [v0.2 to v0.3 migration](../lifecycle/lifecycle-and-compatibility.md#v02-to-v03-development-minor-migration); v0.1 consumers first apply the existing [v0.1 to v0.2 migration](../lifecycle/lifecycle-and-compatibility.md#next-development-minor-migration). Use Go 1.27.1; the implemented database/storage Modules have the narrower [supported environment](../operations/operability-performance.md#supported-environment) and owning profiles linked below.
+Choose an exact reviewed release from [GitHub Releases](https://github.com/AChWorks/achrix/releases), then keep that exact dependency identity in the consumer's module files and build evidence. AChrix remains pre-v1 until explicitly changed. Existing consumers must apply every relevant step in the [lifecycle and migration guide](../lifecycle/lifecycle-and-compatibility.md) before adopting a newer release. Use the toolchain and database/storage profile from the current [supported environment](../operations/operability-performance.md#supported-environment) and the owning Module guides linked below.
 
 Create your own Go module and pin the exact version:
 
@@ -18,7 +18,8 @@ Create your own Go module and pin the exact version:
 mkdir my-product
 cd my-product
 go mod init example.com/my-product
-go get github.com/AChWorks/achrix@v0.3.0
+ACHRIX_VERSION="<reviewed-release-tag>"
+go get "github.com/AChWorks/achrix@$ACHRIX_VERSION"
 ```
 
 Save this complete minimal composition as `main.go`:
@@ -78,7 +79,7 @@ go mod verify
 go run .
 ```
 
-Expected output is `v0.3.0`. This Core-only program opens no database, file store or HTTP listener. It proves the dependency and bounded composition entry point; it supplies no authentication or product domain operation. Commit the product's `go.mod`/`go.sum`. Use ordinary module resolution, without `replace`, `go.work` overrides or copied Foundation runtime source.
+Expected output is the exact selected Foundation version. This Core-only program opens no database, file store or HTTP listener. It proves the dependency and bounded composition entry point; it supplies no authentication or product domain operation. Commit the product's `go.mod`/`go.sum`. Use ordinary module resolution, without `replace`, `go.work` overrides or copied Foundation runtime source.
 
 ### Add only the Modules the product needs
 
