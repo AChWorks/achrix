@@ -8,9 +8,9 @@ The consumer must identify/pin its Foundation version, deliberately review updat
 
 Generated bootstrap files may transfer to the product. Shared runtime is not an unmanaged permanent source copy. A justified fork has explicit independent ownership/maintenance and follows [Trademark Policy](../../TRADEMARKS.md); ordinary dependency consumption remains the default shared path.
 
-## Start a v0.2 product
+## Start a v0.3 product
 
-Use the reviewed `v0.2.0` source dependency; [GitHub Releases](https://github.com/AChWorks/achrix/releases) owns actual availability and artifact evidence. This is a pre-v1 developer release. Read the [v0.1 to v0.2 migration](../lifecycle/lifecycle-and-compatibility.md#next-development-minor-migration) before updating an existing consumer. Use Go 1.27.1; the implemented database/storage Modules have the narrower [supported environment](../operations/operability-performance.md#supported-environment) and owning profiles linked below.
+Use the reviewed `v0.3.0` source dependency; [GitHub Releases](https://github.com/AChWorks/achrix/releases) owns actual availability and artifact evidence. This is a pre-v1 developer release. Existing v0.2 consumers must read the [v0.2 to v0.3 migration](../lifecycle/lifecycle-and-compatibility.md#v02-to-v03-development-minor-migration); v0.1 consumers first apply the existing [v0.1 to v0.2 migration](../lifecycle/lifecycle-and-compatibility.md#next-development-minor-migration). Use Go 1.27.1; the implemented database/storage Modules have the narrower [supported environment](../operations/operability-performance.md#supported-environment) and owning profiles linked below.
 
 Create your own Go module and pin the exact version:
 
@@ -18,7 +18,7 @@ Create your own Go module and pin the exact version:
 mkdir my-product
 cd my-product
 go mod init example.com/my-product
-go get github.com/AChWorks/achrix@v0.2.0
+go get github.com/AChWorks/achrix@v0.3.0
 ```
 
 Save this complete minimal composition as `main.go`:
@@ -78,7 +78,7 @@ go mod verify
 go run .
 ```
 
-Expected output is `v0.2.0`. This Core-only program opens no database, file store or HTTP listener. It proves the dependency and bounded composition entry point; it supplies no authentication or product domain operation. Commit the product's `go.mod`/`go.sum`. Use ordinary module resolution, without `replace`, `go.work` overrides or copied Foundation runtime source.
+Expected output is `v0.3.0`. This Core-only program opens no database, file store or HTTP listener. It proves the dependency and bounded composition entry point; it supplies no authentication or product domain operation. Commit the product's `go.mod`/`go.sum`. Use ordinary module resolution, without `replace`, `go.work` overrides or copied Foundation runtime source.
 
 ### Add only the Modules the product needs
 
@@ -88,7 +88,8 @@ All official packages below share the same Foundation version; do not select unr
 | --- | --- | --- |
 | Accounts, passwords and sessions | [Identity](../../identity/README.md): `identity.NewPostgres`, `identity.NewService`, `identity.NewWeb` | Identity requires Audit and Core authorization ABI 2. Product owns profiles, explicit grants and trusted HTTPS ingress. |
 | Accountable events and bounded query/export | [Audit](../../audit/README.md): `audit.NewPostgres`, `audit.NewService` | Identity/Audit use the same supported PostgreSQL consistency boundary. Atomic append uses the caller's native transaction; it is not distributed atomicity. |
-| Private original attachments | [Media](../../media/README.md): `media.NewPostgres`, `media.NewService` | Core authorization ABI 2; private Linux storage and explicit product permissions. Default PNG/JPEG; `AllowedMIMEs: media.CommonMIMEs()` opts into the finite common profile. No public inline image serving or conversion is supplied. |
+| Private original attachments and clean image preparation | [Media](../../media/README.md): `media.NewPostgres`, `media.NewService` | Core authorization ABI 2; private Linux storage and explicit product permissions. Default PNG/JPEG; explicit SVG opt-in is private-only. `PreparePublicImage` is a separate exact-asset capability and grants no publication or public URL. |
+| Optional exact authority-to-site resolution | [Multi-Site](../../multisite/README.md): `multisite.New`, `multisite.NewService` | Optional capability using Core authorization ABI 2. Product owns trusted ingress and all site-bound accounts/data/storage/configuration; single-site products may omit it entirely. |
 | Account/Media administration | [Admin](../../admin/README.md): `admin.New`, `Handler()`, `ConfigureServer`; [Media surface](../../media/admin/README.md) | Compose Identity/Web authentication plus explicit owning surfaces and product policy. The presentation shell is mounted separately, not an `achrix.Module`; owning database Modules still participate in Core lifecycle. |
 
 For a stateful product, follow the owning public signatures/examples:
