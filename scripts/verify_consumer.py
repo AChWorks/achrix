@@ -14,6 +14,22 @@ from modules import inventory, owns_path
 EXTENSIONS = {".go", ".sql", ".js", ".css", ".html"}
 
 
+def runtime_sources(root, module, modules):
+    """Map the complete owned runtime file set, including unexpected files."""
+    result = {}
+    for source in sorted(root.rglob("*")):
+        relative = source.relative_to(root)
+        repository_relative = relative if module["directory"] == "." else Path(module["directory"]) / relative
+        if (source.suffix not in EXTENSIONS or source.name.endswith("_test.go")
+                or not owns_path(module, repository_relative.as_posix(), modules)):
+            continue
+        if source.is_symlink():
+            raise ValueError("source boundary contains symlink")
+        if source.is_file():
+            result[relative.as_posix()] = source.read_bytes()
+    return result
+
+
 def verify_sources(repository, destination):
     modules = inventory(repository)
     resolved = {}
@@ -29,22 +45,17 @@ def verify_sources(repository, destination):
         if not downloaded_root.is_relative_to(cache):
             raise ValueError("dependency is outside the cold module cache")
         source_root = repository / module["directory"]
-        found = False
-        for source in sorted(source_root.rglob("*")):
-            relative = source.relative_to(repository)
-            if (not source.is_file() or source.suffix not in EXTENSIONS or source.name.endswith("_test.go")
-                    or not owns_path(module, relative.as_posix(), modules)):
-                continue
-            if source.is_symlink():
-                raise ValueError("source boundary contains symlink")
-            local = source.read_bytes()
-            downloaded = downloaded_root / source.relative_to(source_root)
-            if local != downloaded.read_bytes():
-                raise ValueError("normal consumer source drift: " + relative.as_posix())
-            digest.update(relative.as_posix().encode() + b"\0" + local)
-            found = True
-        if not found:
+        local_files = runtime_sources(source_root, module, modules)
+        downloaded_files = runtime_sources(downloaded_root, module, modules)
+        if not local_files:
             raise ValueError("module has no runtime source: " + module["name"])
+        if local_files.keys() != downloaded_files.keys():
+            raise ValueError("normal consumer runtime file set drift: " + module["name"])
+        for name, local in sorted(local_files.items()):
+            if local != downloaded_files[name]:
+                raise ValueError("normal consumer source drift: " + module["name"] + "/" + name)
+            relative = name if module["directory"] == "." else module["directory"] + "/" + name
+            digest.update(relative.encode() + b"\0" + local)
         resolved[module["path"]] = {key: value[key] for key in ("Path", "Version", "Sum", "GoModSum")}
     destination.write_text(json.dumps(resolved, sort_keys=True) + "\n")
     print("Verified independently pinned module source SHA-256:", digest.hexdigest())

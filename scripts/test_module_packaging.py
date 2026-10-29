@@ -167,6 +167,29 @@ class ReleaseGateTests(unittest.TestCase):
                 prepare_release.release_gate("v0.1.0", "media")
 
 
+class ConsumerSourceTests(unittest.TestCase):
+    def test_removed_runtime_source_is_not_silently_accepted(self):
+        with tempfile.TemporaryDirectory(prefix="achrix-source-proof-") as temporary:
+            root = Path(temporary)
+            repo, cache = root / "repo", root / "cache"
+            repo.mkdir()
+            downloaded = cache / "component"
+            downloaded.mkdir(parents=True)
+            module = {"name": "core", "directory": ".", "path": modules.MODULE_PATH}
+            (repo / "achrix.go").write_text("package achrix\n")
+            (downloaded / "achrix.go").write_text("package achrix\n")
+            (downloaded / "removed.go").write_text("package achrix\n")
+            value = {"Path": modules.MODULE_PATH, "Version": "v0.4.0",
+                     "Sum": "h1:fixture", "GoModSum": "h1:fixture", "Dir": str(downloaded)}
+            with mock.patch.dict(os.environ, {"GOMODCACHE": str(cache)}), \
+                    mock.patch.object(verify_consumer, "inventory", return_value=[module]), \
+                    mock.patch.object(verify_consumer.subprocess, "check_output", return_value=json.dumps(value)):
+                with self.assertRaisesRegex(ValueError, "runtime file set drift"):
+                    verify_consumer.verify_sources(repo, root / "resolved.json")
+                (downloaded / "removed.go").unlink()
+                verify_consumer.verify_sources(repo, root / "resolved.json")
+
+
 class CompiledIdentityTests(unittest.TestCase):
     def test_independent_versions_and_descriptor_binding(self):
         with tempfile.TemporaryDirectory(prefix="achrix-version-proof-") as temporary:
