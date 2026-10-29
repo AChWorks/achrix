@@ -1,44 +1,41 @@
 # AChrix
 
-**AChrix** (pronounced `ATCH-riks`; Persian: `اَچ‌ریکس`) is an AChWorks Foundation being built as a reusable, versioned application base for web-connected products. A minimal Core and optional Modules share useful engineering capabilities while products own their business behavior.
+**AChrix** (pronounced `ATCH-riks`; Persian: `اَچ‌ریکس`) is a reusable Go application foundation from [AChWorks](https://github.com/AChWorks). Build a product with a small Core and the optional Modules it needs, while keeping your product's behavior, data and deployment under your control.
 
-The accepted starting stack is Go and ordinary PostgreSQL. Optional infrastructure is introduced for real workloads; see [ADR-0002](docs/decisions/ADR-0002-go-primary-implementation.md) and [ADR-0003](docs/decisions/ADR-0003-postgresql-and-optional-infrastructure.md).
+Use AChrix when you want shared application capabilities that you can consume and upgrade as ordinary versioned dependencies. Core and official components have independent versions; you choose a compatible set and keep your product source in its own repository.
 
-## Start here
+## What you can use
 
-- [Master Specification](docs/MASTER-SPEC.md): mission, durable constraints and success criteria.
-- [Project Map](docs/PROJECT-MAP.md): the authoritative document and work navigation.
-- [Contributing](CONTRIBUTING.md) and [Agent instructions](AGENTS.md): how to work in this repository.
-- [GitHub Issues](https://github.com/AChWorks/achrix/issues) and [Pull Requests](https://github.com/AChWorks/achrix/pulls): current work and review evidence.
-- [achworks.yaml](achworks.yaml): machine-readable Foundation identity and discovery metadata.
+| Component | What it provides |
+| --- | --- |
+| Core | Application composition, authorization and startup/shutdown lifecycle |
+| [Identity](identity/README.md) and [Audit](audit/README.md) | Accounts, passwords, sessions and accountable operations |
+| [Media](media/README.md) | Private attachments and clean PNG/JPEG preparation |
+| [Multi-Site](multisite/README.md) | Site resolution, authorized inventory and per-site Module selection planning |
+| [Admin](admin/README.md) | A composable administration shell with Identity and Media screens, including Persian/RTL presentation |
+| [Installation](installation/README.md) | Installation requirement assessment and safe re-entry planning |
 
-## Implementation status
+The first supported stack is Go with ordinary PostgreSQL for the components that need persistence. See the [supported environment](docs/operations/operability-performance.md#supported-environment) before installing.
 
-The executable baseline supplies minimal instance-owned Go composition, authorization and lifecycle contracts. The separately composed [Notes consumer](fixtures/notes/README.md) proves a pinned dependency, consumer-owned PostgreSQL persistence/migrations, direct invocation and one HTTP adapter through the same Application policy. [Operations](docs/operations/operability-performance.md#supported-environment) owns the supported matrix and the shared local/CI validation command. Historical baseline acceptance/evidence remains recoverable in GitHub work history; this fixture does not establish a production product/deployment profile.
+## Get started
 
-Suitable products will consume a versioned AChrix dependency rather than permanently copy its shared source. Product-specific behavior stays with the product. [Koinon](https://github.com/AChWorks/koinon) owns ecosystem governance/discovery and is not an AChrix runtime dependency.
-
-## Consume and extend
-
-For a new product, choose an exact reviewed Core release and a compatible set of the Modules it needs. Core and official components have independent Go-module versions in this repository; [modules.json](modules.json) identifies their import paths. [GitHub Releases](https://github.com/AChWorks/achrix/releases) owns actual availability and release evidence; the consumer's `go.mod`/`go.sum` own its exact dependency set. This Core-only command starts the dependency path:
+Create your product's Go module and choose an exact reviewed Core version from [Releases](https://github.com/AChWorks/achrix/releases):
 
 ```bash
-ACHRIX_VERSION="<reviewed-release-tag>"
-go get "github.com/AChWorks/achrix@$ACHRIX_VERSION"
+mkdir my-product
+cd my-product
+go mod init example.com/my-product
+ACHRIX_CORE_VERSION="<reviewed-core-version>"
+go get "github.com/AChWorks/achrix@$ACHRIX_CORE_VERSION"
 ```
 
-The [product quick start](docs/architecture/consumption-and-packaging.md#start-a-product) supplies a complete runnable Core example, selective Module entry points, the monolithic-to-independent transition, installation and upgrade steps. Compose through [public contracts](docs/architecture/contracts-and-interfaces.md#initial-go-public-surface); products own their account/profile meaning, permission policy, domain/business semantics and data. Keep custom product source in the product and update AChrix as a normal reviewed dependency. [Internationalization](docs/web/seo-and-semantic-web.md#internationalization-and-directionality) owns multilingual and RTL/LTR evolution.
+Follow the [product quick start](docs/architecture/consumption-and-packaging.md#start-a-product) for a runnable application, compatible Module selection and explicit database setup. The [Notes example](fixtures/notes/README.md) shows a separately composed consumer.
 
-The public surface retains Core authorization ABI 2 and the established Core/Identity/Audit/Media/Admin contracts. Optional [Multi-Site](multisite/README.md) supplies exact site resolution and normal-authorized management/activation planning; [installation tooling](installation/README.md) supplies requirement/evidence assessment and safe re-entry planning before a product runtime is ready. Bounded Module resources, explicit private SVG and separately authorized clean PNG/JPEG preparation retain their owning contracts. Existing consumers must follow the release-specific [lifecycle and migration guidance](docs/lifecycle/lifecycle-and-compatibility.md) for every intervening version; published tags and their recorded compatibility remain immutable.
+AChrix is currently a **pre-v1 developer foundation**. Review each component's release notes before adoption. Existing consumers should follow the [upgrade guide](docs/lifecycle/lifecycle-and-compatibility.md#monolithic-to-independent-module-packaging), especially when moving from a shared-version release to independent components. Products own their permission policy, actual installation/activation and deployment.
 
-That surface includes product-local [Identity](identity/README.md) accounts, maintained Argon2id passwords and revocable server-side sessions with a same-origin HTTPS cookie/CSRF adapter. [Audit](audit/README.md) records the five accountable account/credential/status/revocation operations in the same PostgreSQL transaction, with authorized bounded query/export. The independent Notes test composition proves authentication followed by separate product authorization and retained-dataset restore; it establishes no production deployment, CMS, central identity service or permission roles.
+## Learn more and contribute
 
-It also includes a private [Media](media/README.md) file library: PNG/JPEG by default, with explicit opt-in to a finite common attachment profile, separately authorized create/list/read/conditional-delete operations and bounded explicit reconciliation. It uses real PostgreSQL metadata and private Linux filesystem storage; products own permissions, content relationships, ingress and their production recovery profile. The current reviewed Media surface includes separately selected private SVG and separately authorized clean PNG/JPEG preparation. Exact release/schema compatibility and upgrade requirements live in the [lifecycle guide](docs/lifecycle/lifecycle-and-compatibility.md). The independent consumer proves trusted HTTPS and coherent quiesced metadata plus asset restore.
-
-The [Admin shell](admin/README.md) composes real [Identity-owned](identity/admin/) and [Media-owned](media/admin/README.md) screens through their public services. Products own explicit grants and HTTPS ingress; the shell supplies bounded presentation, navigation, English/Persian direction and safe form feedback. Its independent trusted-TLS browser proof covers both real surfaces without copying Foundation source or adding a frontend framework.
-
-## Licensing and participation
-
-First-party repository content defaults to [MPL-2.0](LICENSE). Compatible independent commercial/third-party Modules are possible; any Apache-2.0 SDK designation requires an explicit artifact scope. [Licensing](docs/legal/licensing.md) owns the details.
-
-[Governance](GOVERNANCE.md), [Trademark Policy](TRADEMARKS.md) and the [Contribution Agreement](docs/legal/cla.md) cover canonical authority, honest representation and incoming rights. Publishing the agreement or opening a PR does not constitute signed consent.
+- [Documentation](docs/PROJECT-MAP.md): architecture, component contracts and operating guides.
+- [Issues](https://github.com/AChWorks/achrix/issues): bugs, requests and planned work.
+- [Contributing](CONTRIBUTING.md): development and contribution requirements.
+- [MPL-2.0 license](LICENSE), [licensing guide](docs/legal/licensing.md) and [trademark policy](TRADEMARKS.md).
