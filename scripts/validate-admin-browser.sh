@@ -7,7 +7,7 @@ repository=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repository"
 export GOWORK=off
 if [[ $(id -u) == 0 ]]; then echo 'Run browser validation as a non-root user' >&2; exit 1; fi
-if [[ $(go env GOVERSION) != go1.27.1 || $(go env GOSUMDB) == off ]]; then echo 'Go 1.27.1 with checksum verification is required' >&2; exit 1; fi
+if [[ $(go env GOVERSION) != go1.27.3 || $(go env GOSUMDB) == off ]]; then echo 'Go 1.27.3 with checksum verification is required' >&2; exit 1; fi
 node=${ACHRIX_BROWSER_NODE:-node}
 if [[ $("$node" --version) != v24.21.0 ]]; then echo 'Node 24.21.0 is required for this test-only browser profile' >&2; exit 1; fi
 : "${ACHRIX_PLAYWRIGHT_MODULE:?set the installed Playwright module directory}"

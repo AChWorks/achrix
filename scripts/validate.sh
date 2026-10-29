@@ -11,8 +11,8 @@ fi
 repository=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repository"
 export GOWORK=off
-if [[ $(go env GOVERSION) != go1.27.1 ]]; then
-  echo 'Go 1.27.1 is required for the documented proof' >&2; exit 1
+if [[ $(go env GOVERSION) != go1.27.3 ]]; then
+  echo 'Go 1.27.3 is required for the documented proof' >&2; exit 1
 fi
 if [[ $(go env GOSUMDB) == off ]]; then
   echo 'Checksum verification must remain enabled' >&2; exit 1

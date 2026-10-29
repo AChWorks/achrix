@@ -7,8 +7,8 @@ if [[ $# != 1 || -z $1 || -e $1 || -L $1 ]]; then
 fi
 case "$1" in /*) ;; *) echo 'An absolute directory is required' >&2; exit 2;; esac
 export GOWORK=off
-if [[ $(go env GOVERSION) != go1.27.1 ]]; then
-  echo 'Go 1.27.1 is required for quality tools' >&2; exit 1
+if [[ $(go env GOVERSION) != go1.27.3 ]]; then
+  echo 'Go 1.27.3 is required for quality tools' >&2; exit 1
 fi
 if [[ $(go env GOSUMDB) == off ]]; then
   echo 'Checksum verification must remain enabled' >&2; exit 1

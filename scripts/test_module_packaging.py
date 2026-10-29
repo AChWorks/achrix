@@ -78,11 +78,11 @@ class ReleaseArchiveTests(unittest.TestCase):
         ]}
         (self.repo / "modules.json").write_text(json.dumps(data))
         (self.repo / "LICENSE").write_text("Core source license\n")
-        (self.repo / "go.mod").write_text("module " + modules.MODULE_PATH + "\n\ngo 1.27.1\n")
+        (self.repo / "go.mod").write_text("module " + modules.MODULE_PATH + "\n\ngo 1.27.3\n")
         (self.repo / "achrix.go").write_text("package achrix\n")
         (self.repo / "media").mkdir()
         (self.repo / "media/LICENSE").write_text("Media source license\n")
-        (self.repo / "media/go.mod").write_text("module " + modules.MODULE_PATH + "/media\n\ngo 1.27.1\n")
+        (self.repo / "media/go.mod").write_text("module " + modules.MODULE_PATH + "/media\n\ngo 1.27.3\n")
         (self.repo / "media/media.go").write_text("package media\n")
         (self.repo / "fixtures/notes").mkdir(parents=True)
         (self.repo / "fixtures/notes/private.go").write_text("consumer only\n")
