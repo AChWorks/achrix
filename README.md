@@ -12,7 +12,7 @@ Use AChrix when you want shared application capabilities that you can consume an
 | [Identity](identity/README.md) and [Audit](audit/README.md) | Accounts, passwords, sessions and accountable operations |
 | [Media](media/README.md) | Private attachments and clean PNG/JPEG preparation |
 | [Multi-Site](multisite/README.md) | Site resolution, authorized inventory and per-site Module selection planning |
-| [Admin](admin/README.md) | A composable administration shell with Identity and Media screens, including Persian/RTL presentation |
+| [Admin](admin/README.md) | A composable administration shell with Identity and Media screens, including file-based English/Persian localization and RTL/LTR presentation |
 | [Installation](installation/README.md) | Installation requirement assessment and safe re-entry planning |
 
 The first supported stack is Go with ordinary PostgreSQL for the components that need persistence. See the [supported environment](docs/operations/operability-performance.md#supported-environment) before installing.

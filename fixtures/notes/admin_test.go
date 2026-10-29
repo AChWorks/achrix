@@ -278,6 +278,7 @@ func TestAdminBrowserFixture(t *testing.T) {
 	for filename, data := range mediaDocumentBytes(t) {
 		metadata.Files[filename] = base64.StdEncoding.EncodeToString(data)
 	}
+	adminRuntimeCatalogProof(t, root, app, ids, ms, achrix.Principal(policy.administrator.Load().(string)))
 	var certificates []byte
 	for _, language := range []string{"en", "fa"} {
 		server := httptest.NewUnstartedServer(http.NotFoundHandler())

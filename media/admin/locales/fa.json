@@ -1,0 +1,96 @@
+{
+  "schema": 1,
+  "locale": "fa",
+  "name": "فارسی",
+  "direction": "rtl",
+  "domain": "media",
+  "messages": {
+    "library.help": {
+      "other": "فایل‌ها خصوصی هستند. مجوز دیدن فهرست به معنی مجوز دانلود یا حذف نیست."
+    },
+    "upload.title": {
+      "other": "افزودن فایل"
+    },
+    "upload.file": {
+      "other": "فایل با فرمت مجاز"
+    },
+    "upload.action": {
+      "other": "افزودن"
+    },
+    "library.ready": {
+      "other": "فایل‌های آماده"
+    },
+    "library.refresh": {
+      "other": "تازه‌سازی فهرست"
+    },
+    "library.next": {
+      "other": "صفحهٔ بعد"
+    },
+    "library.empty": {
+      "other": "در این صفحه فایلی نیست."
+    },
+    "library.page_help": {
+      "other": "حداکثر ۲۵ فایل در هر صفحه؛ فهرست snapshot چندصفحه‌ای نیست."
+    },
+    "asset.name_id": {
+      "other": "نام و شناسه"
+    },
+    "asset.details": {
+      "other": "مشخصات"
+    },
+    "asset.actions": {
+      "other": "عملیات مجاز"
+    },
+    "download.action": {
+      "other": "دانلود خصوصی"
+    },
+    "delete.confirm": {
+      "other": "حذف همین فایل را تأیید می‌کنم."
+    },
+    "delete.action": {
+      "other": "حذف فایل"
+    },
+    "asset.denied": {
+      "other": "دانلود یا حذف این فایل مجاز نیست."
+    },
+    "status.title": {
+      "other": "بررسی وضعیت یک شناسهٔ معلوم"
+    },
+    "asset.id": {
+      "other": "شناسهٔ فایل"
+    },
+    "status.action": {
+      "other": "بررسی وضعیت"
+    },
+    "status.help": {
+      "other": "اگر نتیجهٔ افزودن نامعلوم است، خودکار تکرار نکنید. شناسهٔ معلوم را بررسی کنید. بدون شناسه، فهرست فقط شاهد است: نام‌ها یکتا نیستند؛ اپراتور محصول باید کار ناتمام را بررسی کند."
+    },
+    "library.title": {
+      "other": "کتابخانهٔ فایل‌ها"
+    },
+    "upload.help": {
+      "other": "حداکثر ۱۰ MiB. فرمت‌های مجاز: {Extensions}. دانلود با بایت‌های اصلی؛ بدون پیش‌نمایش یا تبدیل. نام فایل یکتا نیست."
+    },
+    "upload.help.images": {
+      "other": "حداکثر ۱۰ MiB. فرمت‌های مجاز: {Extensions}. برای PNG/JPEG: حداکثر {MaxDimension} در هر ضلع و {MaxPixels} پیکسل. دانلود با بایت‌های اصلی؛ بدون پیش‌نمایش یا تبدیل. نام فایل یکتا نیست."
+    },
+    "state.pending": {
+      "other": "در انتظار"
+    },
+    "state.ready": {
+      "other": "آماده"
+    },
+    "state.deleting": {
+      "other": "در حال حذف"
+    },
+    "state.deleted": {
+      "other": "حذف شده"
+    },
+    "status.result": {
+      "other": "فایل {ID}: {State}، بازبینی {Revision}. فایل‌های آماده را در فهرست بررسی کنید."
+    },
+    "upload.unknown": {
+      "other": "نتیجه نامعلوم است. افزودن را خودکار تکرار نکنید. شناسهٔ معلوم را بررسی کنید؛ در غیر این صورت فهرست مجاز را ببینید و با اپراتور محصول هماهنگ کنید. نام فایل‌ها یکتا نیست و این عملیات را مشخص نمی‌کند."
+    }
+  }
+}

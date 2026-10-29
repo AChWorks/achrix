@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 "use strict";
 (() => {
-  const fa = document.documentElement.lang === "fa";
+  const text = (key, params) => window.AChrixI18n.text("identity", key, params);
   const account = document.getElementById("account");
   const empty = document.getElementById("account-empty");
   if (!account || !empty) return;
@@ -18,7 +18,7 @@
     document.getElementById("account-id").textContent = value.id;
     document.getElementById("account-login").textContent = value.login;
     document.getElementById("account-revision").textContent = String(value.revision);
-    document.getElementById("account-enabled").textContent = value.enabled ? (fa ? "فعال" : "Enabled") : (fa ? "غیرفعال" : "Disabled");
+    document.getElementById("account-enabled").textContent = text(value.enabled ? "state.enabled" : "state.disabled");
     document.getElementById("lookup-id").value = value.id;
     document.getElementById("lookup-login").value = value.login;
     let any = false;

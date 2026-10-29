@@ -1,0 +1,114 @@
+{
+  "schema": 1,
+  "locale": "fa",
+  "name": "فارسی",
+  "direction": "rtl",
+  "domain": "identity",
+  "messages": {
+    "accounts.help": {
+      "other": "شناسهٔ حساب را از نتیجهٔ ایجاد نگه دارید؛ جستجوی فهرست کاربران در این نسخه وجود ندارد."
+    },
+    "create.title": {
+      "other": "ایجاد حساب"
+    },
+    "login.label": {
+      "other": "شناسهٔ ورود"
+    },
+    "password.initial": {
+      "other": "رمز اولیه"
+    },
+    "password.help": {
+      "other": "۱۵ تا ۲۵۶ کاراکتر، حداکثر ۱۰۲۴ بایت. رمز نمایش یا ذخیرهٔ مرورگر نمی‌شود."
+    },
+    "create.action": {
+      "other": "ایجاد"
+    },
+    "create.denied": {
+      "other": "مجوز ایجاد حساب را ندارید."
+    },
+    "lookup.title": {
+      "other": "بررسی یک حساب"
+    },
+    "account.id": {
+      "other": "شناسهٔ حساب"
+    },
+    "lookup.action": {
+      "other": "بررسی"
+    },
+    "lookup.login.label": {
+      "other": "شناسهٔ ورود دقیق برای بررسی نتیجهٔ ایجاد"
+    },
+    "lookup.login.help": {
+      "other": "این بررسی مجوز جداگانه می‌خواهد. اگر نتیجهٔ ایجاد نامعلوم است، شناسهٔ ورود را بررسی کنید؛ ایجاد را تکرار نکنید."
+    },
+    "lookup.login.action": {
+      "other": "بررسی شناسهٔ ورود"
+    },
+    "account.empty": {
+      "other": "هنوز حسابی انتخاب نشده است."
+    },
+    "account.selected": {
+      "other": "حساب انتخاب‌شده"
+    },
+    "account.login": {
+      "other": "ورود"
+    },
+    "account.status": {
+      "other": "وضعیت"
+    },
+    "account.revision": {
+      "other": "بازبینی"
+    },
+    "enabled.title": {
+      "other": "تغییر وضعیت و لغو نشست‌ها"
+    },
+    "enabled.label": {
+      "other": "فعال"
+    },
+    "enabled.confirm": {
+      "other": "تغییر وضعیت و خروج همهٔ نشست‌های این حساب را تأیید می‌کنم."
+    },
+    "enabled.action": {
+      "other": "اعمال وضعیت"
+    },
+    "password.title": {
+      "other": "جایگزینی رمز و لغو نشست‌ها"
+    },
+    "password.new": {
+      "other": "رمز جدید"
+    },
+    "password.confirm": {
+      "other": "جایگزینی رمز و خروج همهٔ نشست‌ها را تأیید می‌کنم."
+    },
+    "password.action": {
+      "other": "جایگزینی رمز"
+    },
+    "revoke.title": {
+      "other": "لغو همهٔ نشست‌ها"
+    },
+    "revoke.confirm": {
+      "other": "خروج همهٔ نشست‌های این حساب را تأیید می‌کنم."
+    },
+    "revoke.action": {
+      "other": "لغو نشست‌ها"
+    },
+    "account.no_actions": {
+      "other": "هیچ تغییر مدیریتی برای این حساب مجاز نیست."
+    },
+    "accounts.title": {
+      "other": "حساب‌ها"
+    },
+    "login.help": {
+      "other": "۱ تا ۶۴ حرف کوچک ASCII، رقم، نقطه، زیرخط یا خط تیره؛ با حرف یا رقم شروع شود."
+    },
+    "account.id_label": {
+      "other": "شناسه"
+    },
+    "state.enabled": {
+      "other": "فعال"
+    },
+    "state.disabled": {
+      "other": "غیرفعال"
+    }
+  }
+}

@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/AChWorks/achrix"
@@ -46,7 +47,10 @@ func tlsRequest(method, path string) *http.Request {
 	return r
 }
 func testSurface(handler func(http.ResponseWriter, *http.Request, Request)) Surface {
-	return Surface{ID: "accounts", Title: Text{English: "Accounts", Persian: "حساب\u200cها"}, Capability: "test.read", Handler: handler}
+	return Surface{ID: "accounts", Title: Text{Domain: "test", Key: "accounts"}, Catalogs: fstest.MapFS{
+		"en.json": &fstest.MapFile{Data: []byte(`{"schema":1,"locale":"en","name":"English","direction":"ltr","domain":"test","messages":{"accounts":{"other":"Accounts"}}}`)},
+		"fa.json": &fstest.MapFile{Data: []byte(`{"schema":1,"locale":"fa","name":"فارسی","direction":"rtl","domain":"test","messages":{"accounts":{"other":"حساب\u200cها"}}}`)},
+	}, Capability: "test.read", Handler: handler}
 }
 func fixture(t *testing.T, auth *authentication, policy *authorization, surface Surface) *Shell {
 	t.Helper()
@@ -191,7 +195,8 @@ func TestRendererEscapesDataAndEmitsLocalizedSemanticHeaders(t *testing.T) {
 	}
 	large := strings.Repeat("x", 128<<10)
 	w = &transportRecorder{ResponseRecorder: httptest.NewRecorder()}
-	if e := s.render(w, Page{Title: "large", Template: page, Data: large}, nil, "accounts"); e == nil || w.Body.Len() != 0 {
+	locale, _ := s.catalog.For("fa")
+	if e := s.render(w, Page{Title: "large", Template: page, Data: large}, nil, "accounts", locale); e == nil || w.Body.Len() != 0 {
 		t.Fatal("oversized template streamed partial response")
 	}
 }

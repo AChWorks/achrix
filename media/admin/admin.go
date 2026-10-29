@@ -19,6 +19,7 @@ import (
 
 	"github.com/AChWorks/achrix"
 	shell "github.com/AChWorks/achrix/admin"
+	"github.com/AChWorks/achrix/admin/localize"
 	"github.com/AChWorks/achrix/media"
 )
 
@@ -45,7 +46,7 @@ func New(service *media.Service) (shell.Surface, error) {
 }
 func surface(service library) shell.Surface {
 	h := &handler{service: service, uploads: make(chan struct{}, 2)}
-	return shell.Surface{ID: "media", Title: shell.Text{English: "File library", Persian: "کتابخانهٔ فایل\u200cها"}, Capability: media.List, Target: media.LibraryTarget, Handler: h.serve}
+	return shell.Surface{ID: "media", Title: shell.Text{Domain: "media", Key: "library.title"}, Catalogs: locales, Capability: media.List, Target: media.LibraryTarget, Handler: h.serve}
 }
 
 type asset struct {
@@ -67,14 +68,11 @@ type page struct {
 	NextCursor string `json:"next_cursor"`
 }
 type screen struct {
-	Language      string
-	CanCreate     bool
-	Page          page
-	Accept        string
-	Extensions    string
-	DecodedImages bool
-	MaxDimension  int
-	MaxPixels     int
+	Locale     *localize.Localizer
+	CanCreate  bool
+	Page       page
+	Accept     string
+	UploadHelp string
 }
 
 // The owning public effective inventory supplies browser hints only; Create
@@ -126,7 +124,26 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, view shell.Reque
 				return
 			}
 			accept, extensions, decodedImages := uploadHints(h.service.Formats())
-			if err = view.Render(shell.Page{Title: (shell.Text{English: "File library", Persian: "کتابخانهٔ فایل\u200cها"}).In(view.Language), Template: libraryTemplate, Data: screen{Language: view.Language, CanCreate: view.Allowed(media.Create, media.LibraryTarget), Page: presentPage(p, view), Accept: accept, Extensions: extensions, DecodedImages: decodedImages, MaxDimension: media.MaxDimension, MaxPixels: media.MaxPixels}}); err != nil {
+			title, err := view.Localizer.Text("media", "library.title", nil)
+			if err != nil {
+				fail(w, shell.ErrConfiguration, "")
+				return
+			}
+			// Extensions are intrinsically LTR; isolate the inserted value while
+			// keeping the whole message plain, autoescaped, reorderable text.
+			params := map[string]string{"Extensions": "\u2066" + extensions + "\u2069"}
+			helpKey := "upload.help"
+			if decodedImages {
+				helpKey = "upload.help.images"
+				params["MaxDimension"] = strconv.Itoa(media.MaxDimension)
+				params["MaxPixels"] = strconv.Itoa(media.MaxPixels)
+			}
+			help, err := view.Localizer.Text("media", helpKey, params)
+			if err != nil {
+				fail(w, shell.ErrConfiguration, "")
+				return
+			}
+			if err = view.Render(shell.Page{Title: title, Template: libraryTemplate, Data: screen{Locale: view.Localizer, CanCreate: view.Allowed(media.Create, media.LibraryTarget), Page: presentPage(p, view), Accept: accept, UploadHelp: help}}); err != nil {
 				fail(w, shell.ErrConfiguration, "")
 			}
 		case r.URL.Path == "/media.js":
@@ -388,12 +405,17 @@ func fail(w http.ResponseWriter, err error, id string) {
 
 //go:embed assets/*
 var assets embed.FS
+
+// Each presentation owns its catalogs; the shell composes these at startup.
+//
+//go:embed locales/*.json
+var locales embed.FS
 var libraryTemplate = template.Must(template.New("library").Parse(`{{define "content"}}
 <script src="/admin/media/media.js" defer></script>
-<p>{{if eq .Language "fa"}}فایل` + "\u200c" + `ها خصوصی هستند. مجوز دیدن فهرست به معنی مجوز دانلود یا حذف نیست.{{else}}Files are private. Collection metadata permission does not grant download or deletion.{{end}}</p>
-{{if .CanCreate}}<section aria-labelledby="upload-heading"><h2 id="upload-heading">{{if eq .Language "fa"}}افزودن فایل{{else}}Add file{{end}}</h2><form data-admin-form data-multipart data-operation="upload" action="/admin/media/upload" method="post" enctype="multipart/form-data"><label for="media-file">{{if eq .Language "fa"}}فایل با فرمت مجاز{{else}}Supported file{{end}}</label><input id="media-file" name="file" type="file" accept="{{.Accept}}" required aria-describedby="upload-help"><p id="upload-help">{{if eq .Language "fa"}}حداکثر ۱۰ MiB. فرمت` + "\u200c" + `های مجاز: <bdi dir="ltr">{{.Extensions}}</bdi>.{{if .DecodedImages}} برای PNG/JPEG: حداکثر {{.MaxDimension}} در هر ضلع و {{.MaxPixels}} پیکسل.{{end}} دانلود با بایت` + "\u200c" + `های اصلی؛ بدون پیش` + "\u200c" + `نمایش یا تبدیل. نام فایل یکتا نیست.{{else}}At most 10 MiB. Allowed extensions: <bdi dir="ltr">{{.Extensions}}</bdi>.{{if .DecodedImages}} PNG/JPEG: at most {{.MaxDimension}} per dimension and {{.MaxPixels}} pixels.{{end}} Original-byte downloads; no previews or conversion. Filenames are not unique.{{end}}</p><button type="submit" disabled>{{if eq .Language "fa"}}افزودن{{else}}Upload{{end}}</button></form><p id="upload-result" role="status"></p></section>{{end}}
-<section aria-labelledby="library-heading"><h2 id="library-heading">{{if eq .Language "fa"}}فایل` + "\u200c" + `های آماده{{else}}Ready files{{end}}</h2><form id="media-refresh" data-admin-form data-read-only data-operation="list" action="/admin/media/list" method="post"><input name="cursor" type="hidden" value=""><button type="submit" disabled>{{if eq .Language "fa"}}تازه` + "\u200c" + `سازی فهرست{{else}}Refresh library{{end}}</button></form>
-<form id="media-next-page" data-admin-form data-read-only data-operation="list" action="/admin/media/list" method="post" {{if not .Page.NextCursor}}hidden{{end}}><input id="media-next-cursor" name="cursor" type="hidden" value="{{.Page.NextCursor}}"><button type="submit" disabled>{{if eq .Language "fa"}}صفحهٔ بعد{{else}}Next page{{end}}</button></form>
-<p id="media-empty" {{if .Page.Assets}}hidden{{end}}>{{if eq .Language "fa"}}در این صفحه فایلی نیست.{{else}}No files on this page.{{end}}</p><table id="media-table" {{if not .Page.Assets}}hidden{{end}}><caption>{{if eq .Language "fa"}}حداکثر ۲۵ فایل در هر صفحه؛ فهرست snapshot چندصفحه` + "\u200c" + `ای نیست.{{else}}At most 25 files per page; pages are not a shared snapshot.{{end}}</caption><thead><tr><th scope="col">{{if eq .Language "fa"}}نام و شناسه{{else}}Name and ID{{end}}</th><th scope="col">{{if eq .Language "fa"}}مشخصات{{else}}Details{{end}}</th><th scope="col">{{if eq .Language "fa"}}عملیات مجاز{{else}}Permitted actions{{end}}</th></tr></thead><tbody id="assets">{{range .Page.Assets}}<tr data-asset-id="{{.Asset.ID}}"><td><bdi dir="auto">{{.Asset.Filename}}</bdi><br><bdi dir="ltr">{{.Asset.ID}}</bdi></td><td><bdi dir="ltr">{{.Asset.MIME}} · {{.Asset.Size}} B{{if and (gt .Asset.Width 0) (gt .Asset.Height 0)}} · {{.Asset.Width}}×{{.Asset.Height}}{{end}}</bdi></td><td>{{if .Permissions.read}}<a data-download href="/admin/media/read/{{.Asset.ID}}">{{if eq $.Language "fa"}}دانلود خصوصی{{else}}Private download{{end}}</a>{{end}}{{if .Permissions.delete}}<form data-admin-form data-operation="delete" action="/admin/media/delete" method="post"><input name="id" type="hidden" value="{{.Asset.ID}}"><input name="revision" type="hidden" value="{{.Asset.Revision}}"><label><input type="checkbox" data-confirm required>{{if eq $.Language "fa"}}حذف همین فایل را تأیید می` + "\u200c" + `کنم.{{else}}I confirm deletion of this file.{{end}}</label><button type="submit" disabled>{{if eq $.Language "fa"}}حذف فایل{{else}}Delete file{{end}}</button></form>{{end}}{{if and (not .Permissions.read) (not .Permissions.delete)}}<p>{{if eq $.Language "fa"}}دانلود یا حذف این فایل مجاز نیست.{{else}}Download or deletion of this file is not permitted.{{end}}</p>{{end}}</td></tr>{{end}}</tbody></table></section>
-<section aria-labelledby="asset-status-heading"><h2 id="asset-status-heading">{{if eq .Language "fa"}}بررسی وضعیت یک شناسهٔ معلوم{{else}}Inspect one known asset ID{{end}}</h2><form data-admin-form data-read-only data-operation="status" action="/admin/media/status" method="post"><label for="media-status-id">{{if eq .Language "fa"}}شناسهٔ فایل{{else}}Asset ID{{end}}</label><input id="media-status-id" name="id" dir="ltr" maxlength="26" minlength="26" pattern="[A-Z2-7]{26}" required autocomplete="off"><button type="submit" disabled>{{if eq .Language "fa"}}بررسی وضعیت{{else}}Inspect status{{end}}</button></form><p id="asset-status" role="status"></p><p>{{if eq .Language "fa"}}اگر نتیجهٔ افزودن نامعلوم است، خودکار تکرار نکنید. شناسهٔ معلوم را بررسی کنید. بدون شناسه، فهرست فقط شاهد است: نام` + "\u200c" + `ها یکتا نیستند؛ اپراتور محصول باید کار ناتمام را بررسی کند.{{else}}After an unknown upload outcome, do not replay automatically. Inspect a known ID. Without an ID, library inspection is only evidence: filenames can repeat; the product operator must inspect unfinished work.{{end}}</p></section>
+<p>{{.Locale.Text "media" "library.help" nil}}</p>
+{{if .CanCreate}}<section aria-labelledby="upload-heading"><h2 id="upload-heading">{{.Locale.Text "media" "upload.title" nil}}</h2><form data-admin-form data-multipart data-operation="upload" action="/admin/media/upload" method="post" enctype="multipart/form-data"><label for="media-file">{{.Locale.Text "media" "upload.file" nil}}</label><input id="media-file" name="file" type="file" accept="{{.Accept}}" required aria-describedby="upload-help"><p id="upload-help">{{.UploadHelp}}</p><button type="submit" disabled>{{.Locale.Text "media" "upload.action" nil}}</button></form><p id="upload-result" role="status"></p></section>{{end}}
+<section aria-labelledby="library-heading"><h2 id="library-heading">{{.Locale.Text "media" "library.ready" nil}}</h2><form id="media-refresh" data-admin-form data-read-only data-operation="list" action="/admin/media/list" method="post"><input name="cursor" type="hidden" value=""><button type="submit" disabled>{{.Locale.Text "media" "library.refresh" nil}}</button></form>
+<form id="media-next-page" data-admin-form data-read-only data-operation="list" action="/admin/media/list" method="post" {{if not .Page.NextCursor}}hidden{{end}}><input id="media-next-cursor" name="cursor" type="hidden" value="{{.Page.NextCursor}}"><button type="submit" disabled>{{.Locale.Text "media" "library.next" nil}}</button></form>
+<p id="media-empty" {{if .Page.Assets}}hidden{{end}}>{{.Locale.Text "media" "library.empty" nil}}</p><table id="media-table" {{if not .Page.Assets}}hidden{{end}}><caption>{{.Locale.Text "media" "library.page_help" nil}}</caption><thead><tr><th scope="col">{{.Locale.Text "media" "asset.name_id" nil}}</th><th scope="col">{{.Locale.Text "media" "asset.details" nil}}</th><th scope="col">{{.Locale.Text "media" "asset.actions" nil}}</th></tr></thead><tbody id="assets">{{range .Page.Assets}}<tr data-asset-id="{{.Asset.ID}}"><td><bdi dir="auto">{{.Asset.Filename}}</bdi><br><bdi dir="ltr">{{.Asset.ID}}</bdi></td><td><bdi dir="ltr">{{.Asset.MIME}} · {{.Asset.Size}} B{{if and (gt .Asset.Width 0) (gt .Asset.Height 0)}} · {{.Asset.Width}}×{{.Asset.Height}}{{end}}</bdi></td><td>{{if .Permissions.read}}<a data-download href="/admin/media/read/{{.Asset.ID}}">{{$.Locale.Text "media" "download.action" nil}}</a>{{end}}{{if .Permissions.delete}}<form data-admin-form data-operation="delete" action="/admin/media/delete" method="post"><input name="id" type="hidden" value="{{.Asset.ID}}"><input name="revision" type="hidden" value="{{.Asset.Revision}}"><label><input type="checkbox" data-confirm required>{{$.Locale.Text "media" "delete.confirm" nil}}</label><button type="submit" disabled>{{$.Locale.Text "media" "delete.action" nil}}</button></form>{{end}}{{if and (not .Permissions.read) (not .Permissions.delete)}}<p>{{$.Locale.Text "media" "asset.denied" nil}}</p>{{end}}</td></tr>{{end}}</tbody></table></section>
+<section aria-labelledby="asset-status-heading"><h2 id="asset-status-heading">{{.Locale.Text "media" "status.title" nil}}</h2><form data-admin-form data-read-only data-operation="status" action="/admin/media/status" method="post"><label for="media-status-id">{{.Locale.Text "media" "asset.id" nil}}</label><input id="media-status-id" name="id" dir="ltr" maxlength="26" minlength="26" pattern="[A-Z2-7]{26}" required autocomplete="off"><button type="submit" disabled>{{.Locale.Text "media" "status.action" nil}}</button></form><p id="asset-status" role="status"></p><p>{{.Locale.Text "media" "status.help" nil}}</p></section>
 {{end}}`))

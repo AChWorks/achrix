@@ -115,9 +115,21 @@ An authorized immutable plan proposes removing Notes from A without mutating its
 
 The fixture keeps selection configuration in caller-owned memory; it does not prove durable selection persistence, concurrent compare-and-swap, live ingress draining or a product restart/update. A real product must reauthorize the plan, persist the expected-revision change consistently, drain affected work, construct only selected typed instances, validate/start/check readiness and activate through its supported lifecycle. This test changes activation within one pinned product dependency set; it neither mixes module versions per site nor proves code-upgrade compatibility, real product tenancy or a CMS/Search implementation. Disabling a feature retains data; removal and destructive cleanup are separate authorized operations.
 
+## Runtime language-file proving consumer
+
+`cmd/localizationproof` is a bounded test-only consumer of the public Admin/localize APIs, with its own `notes` message domain and synthetic presentation-only principal. It is not a deployment authentication example. `TestLocalizationConsumerAddsFileAfterBuild` builds that executable once using normal pinned dependencies, runs the English default and selected Persian, then installs an external third test-only locale file and runs the unchanged executable again. It verifies public language discovery, generic RTL direction, reordered escaped user text, plural fallback to English and unchanged binary identity. It needs no database or browser; it does not replace actual Identity/Media session/screen verification below.
+
+From this consumer directory, after selecting the reviewed compatible component pins:
+
+```bash
+GOWORK=off go test -race -count=1 -run '^TestLocalizationConsumerAddsFileAfterBuild$' .
+```
+
+The full isolated consumer suite also includes this test. Product-owned locale resources and the external directory are composed through supported public APIs; there is no SDK source copying, replacement directive or permanent workspace override. [File-based localization](../../docs/web/localization.md) explains the product integration and data-only language-pack workflow.
+
 ## Admin browser proving composition
 
-The opt-in `admin_test.go` composes the real Admin shell with Identity-owned account forms and Media-owned library forms using only normally downloaded Core/component dependencies. It owns synthetic administrator/viewer/denied accounts, explicit product policy, two trusted local HTTPS origins and a private database/assets/control directory. The viewer's collection metadata grant does not permit file bytes/deletion or exact-login discovery. Durable state snapshots compare real denied/stale/malformed calls independently of displayed buttons.
+The opt-in `admin_test.go` composes the real Admin shell with Identity-owned account forms and Media-owned library forms using only normally downloaded Core/component dependencies. It owns synthetic administrator/viewer/denied accounts, explicit product policy, two trusted local HTTPS browser origins and a private database/assets/control directory. Before the browser flow it creates a third test-only RTL locale at runtime and verifies actual login/Identity/Media pages plus safe browser-message snapshots through a separate temporary HTTPS session. The viewer's collection metadata grant does not permit file bytes/deletion or exact-login discovery. Durable state snapshots compare real denied/stale/malformed calls independently of displayed buttons.
 
 Run from the repository root after installing the exact test-only Node/Playwright/Chromium profile required by `scripts/validate-admin-browser.sh` into an explicitly owned directory:
 

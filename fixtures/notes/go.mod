@@ -3,13 +3,13 @@ module example.com/achrix-notes
 go 1.27.3
 
 require (
-	github.com/AChWorks/achrix v0.3.1-0.20261029085807-1a055ff695e4
-	github.com/AChWorks/achrix/admin v0.0.0-20261029085829-309131f543f5
-	github.com/AChWorks/achrix/audit v0.0.0-20261029085829-309131f543f5
-	github.com/AChWorks/achrix/identity v0.0.0-20261029085909-d9e1cda11a8a
-	github.com/AChWorks/achrix/installation v0.0.0-20261029085807-1a055ff695e4
-	github.com/AChWorks/achrix/media v0.0.0-20261029085909-d9e1cda11a8a
-	github.com/AChWorks/achrix/multisite v0.0.0-20261029085829-309131f543f5
+	github.com/AChWorks/achrix v0.4.0
+	github.com/AChWorks/achrix/admin v0.1.1-0.20261029233311-27633becbb42
+	github.com/AChWorks/achrix/audit v0.1.0
+	github.com/AChWorks/achrix/identity v0.1.1-0.20261029233330-ca7f37c520ce
+	github.com/AChWorks/achrix/installation v0.1.0
+	github.com/AChWorks/achrix/media v0.1.1-0.20261029233330-ca7f37c520ce
+	github.com/AChWorks/achrix/multisite v0.1.0
 	github.com/jackc/pgx/v5 v5.11.0
 )
 

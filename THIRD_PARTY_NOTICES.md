@@ -1,6 +1,6 @@
 # Third-party notices for AChrix development Modules
 
-First-party Foundation files are MPL-2.0 under LICENSE. These optional Identity/Audit dependencies are used unmodified through normal Go modules; their original terms remain in force. Include relevant notices and corresponding covered-source access with an actual distributed artifact at its exact source/version identity. No Apache SDK is designated and no dependency implementation is copied or vendored here. The immutable v0.1.0 Core distribution has no third-party runtime dependencies.
+First-party Foundation files are MPL-2.0 under LICENSE. These optional component dependencies are used unmodified through normal Go modules; their original terms remain in force. Include relevant notices and corresponding covered-source access with an actual distributed artifact at its exact source/version identity. No Apache SDK is designated and no dependency implementation is copied or vendored here. The immutable v0.1.0 Core distribution has no third-party runtime dependencies.
 
 ## github.com/alexedwards/argon2id @ v1.0.0
 

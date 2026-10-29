@@ -1,0 +1,96 @@
+{
+  "schema": 1,
+  "locale": "en",
+  "name": "English",
+  "direction": "ltr",
+  "domain": "media",
+  "messages": {
+    "library.help": {
+      "other": "Files are private. Collection metadata permission does not grant download or deletion."
+    },
+    "upload.title": {
+      "other": "Add file"
+    },
+    "upload.file": {
+      "other": "Supported file"
+    },
+    "upload.action": {
+      "other": "Upload"
+    },
+    "library.ready": {
+      "other": "Ready files"
+    },
+    "library.refresh": {
+      "other": "Refresh library"
+    },
+    "library.next": {
+      "other": "Next page"
+    },
+    "library.empty": {
+      "other": "No files on this page."
+    },
+    "library.page_help": {
+      "other": "At most 25 files per page; pages are not a shared snapshot."
+    },
+    "asset.name_id": {
+      "other": "Name and ID"
+    },
+    "asset.details": {
+      "other": "Details"
+    },
+    "asset.actions": {
+      "other": "Permitted actions"
+    },
+    "download.action": {
+      "other": "Private download"
+    },
+    "delete.confirm": {
+      "other": "I confirm deletion of this file."
+    },
+    "delete.action": {
+      "other": "Delete file"
+    },
+    "asset.denied": {
+      "other": "Download or deletion of this file is not permitted."
+    },
+    "status.title": {
+      "other": "Inspect one known asset ID"
+    },
+    "asset.id": {
+      "other": "Asset ID"
+    },
+    "status.action": {
+      "other": "Inspect status"
+    },
+    "status.help": {
+      "other": "After an unknown upload outcome, do not replay automatically. Inspect a known ID. Without an ID, library inspection is only evidence: filenames can repeat; the product operator must inspect unfinished work."
+    },
+    "library.title": {
+      "other": "File library"
+    },
+    "upload.help": {
+      "other": "At most 10 MiB. Allowed extensions: {Extensions}. Original-byte downloads; no previews or conversion. Filenames are not unique."
+    },
+    "upload.help.images": {
+      "other": "At most 10 MiB. Allowed extensions: {Extensions}. PNG/JPEG: at most {MaxDimension} per dimension and {MaxPixels} pixels. Original-byte downloads; no previews or conversion. Filenames are not unique."
+    },
+    "state.pending": {
+      "other": "Pending"
+    },
+    "state.ready": {
+      "other": "Ready"
+    },
+    "state.deleting": {
+      "other": "Deleting"
+    },
+    "state.deleted": {
+      "other": "Deleted"
+    },
+    "status.result": {
+      "other": "Asset {ID}: {State}, revision {Revision}. Inspect the library for ready files."
+    },
+    "upload.unknown": {
+      "other": "Outcome unknown. Do not upload again automatically. Inspect a known ID; otherwise inspect the permitted library and contact the product operator. Filenames can repeat and cannot identify this operation."
+    }
+  }
+}

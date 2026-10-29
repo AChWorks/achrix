@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "locale": "en",
+  "name": "English",
+  "direction": "ltr",
+  "domain": "notes",
+  "messages": {
+    "title": {"other": "Notes localization proof"},
+    "greeting": {"other": "Hello {Name}"},
+    "count": {"one": "{Count} note", "other": "{Count} notes"}
+  }
+}

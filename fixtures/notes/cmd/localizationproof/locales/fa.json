@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "locale": "fa",
+  "name": "فارسی",
+  "direction": "rtl",
+  "domain": "notes",
+  "messages": {
+    "title": {"other": "اثبات ترجمهٔ یادداشت‌ها"},
+    "greeting": {"other": "سلام {Name}"},
+    "count": {"one": "{Count} یادداشت", "other": "{Count} یادداشت"}
+  }
+}

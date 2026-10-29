@@ -84,6 +84,19 @@ The packaging transition itself adds no data migration and changes no published 
 
 Before activation, identify the exact product/Core/component/artifact/configuration and ledger set, stage any required explicit migrations, preserve the appropriate recovery evidence and verify active readiness after replacement. Existing monolithic releases retain their original compatibility and source contents. They remain valid pinned dependencies until a consumer deliberately adopts the new line; source publication alone changes no deployed product.
 
+## Catalog-based Admin presentation migration
+
+The file-based localization public API deliberately replaces bilingual source literals. It changes the pre-v1 Admin presentation contract and must use a compatible reviewed component set with explicit migration, rather than masquerading as a compatible Admin patch. GitHub Releases and consumer manifests own the actual published versions and exact dependencies. Historical component releases remain immutable.
+
+A product adopting the catalog-based API must:
+
+- Replace `admin.Text{English, Persian}` surface labels with keyed `admin.Text{Domain, Key}` references. Move UI translations into owner-specific English/Persian JSON resources and supply the product Surface's `Catalogs` filesystem; there is no `Text.In` source-literal selection method.
+- Replace `en`/`fa` allowlists and `language == "fa"` direction branches at presentation boundaries with available locale metadata and a deliberate product-supported selection policy. Default/fallback remains English. Catalog resources do not change original content, calendar/currency, authorization or terminal-language policy.
+- Use `Request.Localizer` for complete server/template messages and the shared safe browser catalog interface for dynamic text. Preserve existing escaping, semantic direction isolation, CSP, machine IDs and request/mutation-recovery behavior.
+- Pin compatible Admin and any participating Identity/Media component versions, then rebuild and verify the coherent product. Subsequent installed data-only catalog additions can be loaded through the configured external source without rebuilding that executable.
+
+No SQL migration or content rewrite follows merely from this presentation migration. Products own configuration/preference adaptation, explicit catalog reload/instance replacement and actual deployment. Keep the old compatible binary/configuration available for rollback; a source/dependency update alone does not activate the new presentation. [Localization](../web/localization.md) owns the file schema, load/bounds, extension and adoption mechanics.
+
 ## Initial development release line
 
 The initial development line was `v0.1.x`, beginning with `v0.1.0`; GitHub Releases own its immutable publication evidence and any maintained-line or retirement declaration. It established the first source Foundation dependency for developing a real consumer/extension, not a stable-v1 API or a product deployment distribution. [Contracts](../architecture/contracts-and-interfaces.md#initial-go-public-surface) owns the supported public surface and [Operations](../operations/operability-performance.md#supported-environment) owns the tested environment. PostgreSQL/pgx persistence in Notes is consumer-owned; Core has only standard-library dependencies.

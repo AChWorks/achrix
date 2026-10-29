@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 "use strict";
 (() => {
- const fa = document.documentElement.lang === "fa";
- const text = (en,persian) => fa ? persian : en;
+ const text = (key, params) => window.AChrixI18n.text("media", key, params);
  const rows = document.getElementById("assets");
  if (!rows) return;
  const file = document.getElementById("media-file");
@@ -19,14 +18,14 @@
   const name=element("td");const filename=element("bdi",a.filename);filename.dir="auto";const id=element("bdi",a.id);id.dir="ltr";name.append(filename,element("br"),id);tr.append(name);
   const detail=element("td");const size=`${a.mime} · ${a.size} B`;const dimensions=element("bdi",a.width>0&&a.height>0?`${size} · ${a.width}×${a.height}`:size);dimensions.dir="ltr";detail.append(dimensions);tr.append(detail);
   const actions=element("td");
-  if (value.permissions.read===true) {const link=element("a",text("Private download","دانلود خصوصی"));link.href="/admin/media/read/"+a.id;link.dataset.download="";actions.append(link);}
+  if (value.permissions.read===true) {const link=element("a",text("download.action"));link.href="/admin/media/read/"+a.id;link.dataset.download="";actions.append(link);}
   if (value.permissions.delete===true) {
    const form=element("form");form.dataset.adminForm="";form.dataset.operation="delete";form.action="/admin/media/delete";form.method="post";
    hidden(form,"id",a.id);hidden(form,"revision",a.revision);
-   const label=element("label");const confirm=element("input");confirm.type="checkbox";confirm.dataset.confirm="";confirm.required=true;label.append(confirm,document.createTextNode(text("I confirm deletion of this file.","حذف همین فایل را تأیید می‌کنم.")));form.append(label);
-   const submit=element("button",text("Delete file","حذف فایل"));submit.type="submit";submit.disabled=true;form.append(submit);actions.append(form);
+   const label=element("label");const confirm=element("input");confirm.type="checkbox";confirm.dataset.confirm="";confirm.required=true;label.append(confirm,document.createTextNode(text("delete.confirm")));form.append(label);
+   const submit=element("button",text("delete.action"));submit.type="submit";submit.disabled=true;form.append(submit);actions.append(form);
   }
-  if (value.permissions.read!==true && value.permissions.delete!==true) actions.append(element("p",text("Download or deletion of this file is not permitted.","دانلود یا حذف این فایل مجاز نیست.")));
+  if (value.permissions.read!==true && value.permissions.delete!==true) actions.append(element("p",text("asset.denied")));
   tr.append(actions);return tr;
  }
  document.addEventListener("admin:success",event => {
@@ -38,11 +37,10 @@
    document.getElementById("media-next-page").hidden=!event.detail.next_cursor;
   } else if (operation==="upload" || operation==="status") {
    const a=event.detail.asset;statusID.value=a.id;
-   const states = {pending:text("Pending","در انتظار"),ready:text("Ready","آماده"),deleting:text("Deleting","در حال حذف"),deleted:text("Deleted","حذف شده")};
-   statusResult.replaceChildren(document.createTextNode(text("Asset ","فایل ")));
+   const states = {pending:text("state.pending"),ready:text("state.ready"),deleting:text("state.deleting"),deleted:text("state.deleted")};
    const id=element("bdi",a.id);id.dir="ltr";
    const revision=element("bdi",a.revision);revision.dir="ltr";
-   statusResult.append(id,document.createTextNode(": "+states[a.state]+text(", revision ","، بازبینی ")),revision,document.createTextNode(text(". Inspect the library for ready files.",". فایل‌های آماده را در فهرست بررسی کنید.")));
+   statusResult.replaceChildren(window.AChrixI18n.parts("media", "status.result", {ID:id, State:states[a.state], Revision:revision}));
    if (operation==="upload") {uploadResult.replaceChildren(...Array.from(statusResult.childNodes,node=>node.cloneNode(true)));file.value="";}
   } else if (operation==="delete") {
    const id=event.target.elements.id.value;
@@ -58,7 +56,7 @@
    const id=event.detail.server && event.detail.server.asset_id;
    if (typeof id==="string" && idPattern.test(id)) statusID.value=id;
    if (event.detail.unknown) {
-    uploadResult.textContent=text("Outcome unknown. Do not upload again automatically. Inspect a known ID; otherwise inspect the permitted library and contact the product operator. Filenames can repeat and cannot identify this operation.","نتیجه نامعلوم است. افزودن را خودکار تکرار نکنید. شناسهٔ معلوم را بررسی کنید؛ در غیر این صورت فهرست مجاز را ببینید و با اپراتور محصول هماهنگ کنید. نام فایل‌ها یکتا نیست و این عملیات را مشخص نمی‌کند.");
+    uploadResult.textContent=text("upload.unknown");
    } else uploadResult.textContent="";
   }
   if (event.target.dataset.operation==="status") statusResult.textContent="";
