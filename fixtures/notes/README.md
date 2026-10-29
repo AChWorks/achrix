@@ -1,8 +1,8 @@
 # Notes proving consumer
 
-This separately composed Go module proves consumption of AChrix's public boundary. It is a benign local fixture, not a production content product, CMS, shared Content Module or real product repository. It owns immutable notes, its schema/migration, authentication policy and HTTP adapter. Foundation owns only shared composition/authorization/lifecycle contracts.
+This separately composed Go module proves consumption of AChrix's public boundary. It is a benign local fixture, not a production content product, CMS, shared Content Module or real product repository. It owns immutable notes, its schema/migration, authentication policy and HTTP adapter. AChrix supplies shared composition/authorization/lifecycle contracts and explicitly selected reusable components.
 
-Its `go.mod` pins a source-backed Foundation version and pgx; `go.sum` retains normal checksums. There is no `replace`, workspace override, source copy or Foundation internal import. `internal/domain` owns text/ID invariants; `internal/application` authorizes typed create/read operations; `internal/infrastructure` owns SQL/resources; `internal/presentation` maps HTTP to the same Service.
+Its `go.mod` pins source-backed Core and independently versioned component dependencies plus pgx; `go.sum` retains normal checksums. [Consumption](../../docs/architecture/consumption-and-packaging.md) owns compatible selection and the coherent transition from monolithic releases; [modules.json](../../modules.json) owns the component inventory. There is no `replace`, workspace override, source copy or Foundation internal import. `internal/domain` owns text/ID invariants; `internal/application` authorizes typed create/read operations; `internal/infrastructure` owns SQL/resources; `internal/presentation` maps HTTP to the same Service.
 
 ## Setup and validation
 
@@ -12,7 +12,18 @@ Use the exact supported tools from [Operations](../../docs/operations/operabilit
 scripts/validate.sh
 ```
 
-The command provisions only a task-owned local Unix-socket PostgreSQL cluster, runs Foundation and isolated consumer tests with `-race`, proves normal pinned dependency download/build, and restores its trusted logical dump into a separate empty database. It checks data, immutable schema identity, composition/readiness and an authorized read; then removes only its owned test workspace/cluster. It requires a non-root user and never uses a host database service. Missing PostgreSQL is a failure, not a skipped persistence check. There are no mandatory containers or auxiliary services.
+The command provisions only a task-owned local Unix-socket PostgreSQL cluster, runs each inventoried component and the isolated consumer tests with `-race`, checks normal pinned dependency download/build/source identities, and restores its trusted logical dump into a separate empty database. It checks data, immutable schema identity, composition/readiness and an authorized read; then removes only its owned test workspace/cluster. It requires a non-root user and never uses a host database service. Missing PostgreSQL is a failure, not a skipped persistence check. There are no mandatory containers or auxiliary services.
+
+Root `go test ./...` covers Core only. Focused checks run inside their owning Go module with ordinary dependencies and `GOWORK=off`:
+
+| Scope | Working directory | Command |
+| --- | --- | --- |
+| Core | repository root | `GOWORK=off go test -race ./...` |
+| Installation planner | `installation` | `GOWORK=off go test -race ./...` |
+| Multi-Site module | `multisite` | `GOWORK=off go test -race ./...` |
+| Pure consumer domain/configuration | `fixtures/notes` | `GOWORK=off go test -race ./internal/domain ./internal/config` |
+
+Persisted consumer tests require their dedicated empty disposable databases and explicit test DSNs; use `scripts/validate.sh full` to supply those safely. Module-local planner/resolver tests do not replace the real PostgreSQL consumer or retained-state checks. These commands describe validation; exact passing candidate evidence belongs to Git/CI and the active work item.
 
 If PostgreSQL tools are absent and the listed build prerequisites are installed:
 
@@ -63,18 +74,22 @@ Retain the returned opaque ID to read it. Authentication tokens are not used as 
 ## Identity and deliberate updates
 
 ```bash
-go run ./cmd/notes -mode identity
-go get "github.com/AChWorks/achrix@$ACHRIX_VERSION"
+GOWORK=off go run ./cmd/notes -mode identity
+GOWORK=off go run ./cmd/componentidentity
+# Set the reviewed owning module path and compatible version before updating.
+go get "$ACHRIX_MODULE_PATH@$ACHRIX_MODULE_VERSION"
 go mod tidy
+go mod verify
+go list -m all
 ```
 
-Before the update command, set `ACHRIX_VERSION` to the exact reviewed commit/version you intend to consume. The identity command reports the actual Foundation dependency, fixture Module version, consumer build revision and migration checksum. Isolated validation injects the exact consumer Git revision when building outside its Git worktree and checks that the Foundation runtime identity matches its manifest pin. Unversioned local builds identify themselves as development. Full validation also builds `cmd/componentidentity` and compares the composed Identity/Audit/Media `Descriptor.Version` values with the normally resolved Foundation pin. This uses a real executable because Go test binaries may omit dependency build metadata; the deprecated source-line constants are not build identity. No v1 stability, automatic updater or binary release is claimed.
+Before the update command, set `ACHRIX_MODULE_PATH` to the owning Core/component module path and `ACHRIX_MODULE_VERSION` to its exact reviewed compatible commit/version. Inspect all resulting transitive changes; independently available latest versions are not a compatibility guarantee. The Notes identity command reports Core, fixture Module version, consumer build revision and migration checksum. Isolated validation injects the exact consumer Git revision when building outside its Git worktree. `cmd/componentidentity` reports each imported component's own `Version()` and composed runtime descriptors; full validation compares them with their separate normally resolved manifest pins. It uses a real executable because Go test binaries may omit dependency build metadata. Local/replaced builds have explicit development labels; deprecated source-line constants are not build identity. No v1 stability, automatic updater or binary release is claimed.
 
 Review the update/manifest diff, run `scripts/validate.sh` from the root, then rebuild your consumer. Deployment remains a separate owner action; changing Foundation source does not update an existing executable. Never edit a published migration in place or equate reverting source with reverting data. Generic product update/recovery remains separate real-product work rather than a capability implied by this fixture.
 
 ## Private Media proving composition
 
-The test-only `media_test.go` composes public Core, Identity, Audit and Media contracts from the normal Foundation dependency. The product fixture owns explicit create/list/exact-object-read/delete/reconcile grants, trusted same-origin HTTPS ingress and synthetic accounts. Uploading or authenticating grants no object rights; collection discovery and byte access remain distinct. The fixture explicitly selects PNG/JPEG, PDF, ZIP and private SVG, retaining all five originals. SVG is a separate explicit selection and does not expand `CommonMIMEs()`. Persian filenames including ZWNJ, bounded keyset listing, exact private reads/status, conditional delete and safe rejected input exercise the real private file library. This fixture does not define content relationships, public serving, roles or a production storage profile.
+The test-only `media_test.go` composes public Core, Identity, Audit and Media contracts from normally resolved Core/component dependencies. The product fixture owns explicit create/list/exact-object-read/delete/reconcile grants, trusted same-origin HTTPS ingress and synthetic accounts. Uploading or authenticating grants no object rights; collection discovery and byte access remain distinct. The fixture explicitly selects PNG/JPEG, PDF, ZIP and private SVG, retaining all five originals. SVG is a separate explicit selection and does not expand `CommonMIMEs()`. Persian filenames including ZWNJ, bounded keyset listing, exact private reads/status, conditional delete and safe rejected input exercise the real private file library. This fixture does not define content relationships, public serving, roles or a production storage profile.
 
 Full validation uses separate private Media test/consumer/restore databases and mode-0700 storage roots. It stops ingress and all participating Modules before native PostgreSQL capture and a manifested private asset archive, verifies paths/types/checksums before extraction, compares the whole participating metadata/ledger datasets and reads all five retained files through the restored public services. A missing or corrupt asset must fail before destination bytes are written. The tested coherent quiesced local capture has no live snapshot, off-host delivery or RPO/RTO guarantee. See [Media](../../media/README.md) for lifecycle, resource and recovery obligations; generic product lifecycle/recovery remains separately gated by real deployment evidence.
 
@@ -82,11 +97,27 @@ Full validation uses separate private Media test/consumer/restore databases and 
 
 The test-only [multisite_test.go](multisite_test.go) consumes the normally downloaded public `multisite` package. It composes two stable site IDs on the same hostname with absent versus explicit `:443` ports, authorizes each exact authority, rejects an ungranted principal and proves that unknown `:8443` never falls back. An actual product-local Core participant declares the resolver optional; when omitted, the fixture selects its explicit single-site identity without a resolver provider.
 
-The exact released Foundation dependency pinned by this fixture's `go.mod`/`go.sum` resolves private SVG, the optional resolver, operator resource configuration, clean public-image preparation and safe dependency-error boundaries through normal module resolution. Full validation compares Core and all composed Foundation Module runtime/embedded-asset source, including Multi-Site, with that normal dependency before running the consumer. The existing Notes PostgreSQL/restore proof remains separate. This small composition proof establishes neither real product account/store/TLS isolation nor preservation of site-owned state under a shared update; those remain consumer/product proof obligations.
+The compatible Core/component set pinned by this fixture's `go.mod`/`go.sum` supplies private SVG, the optional resolver, operator resource configuration, clean public-image preparation and safe dependency-error boundaries through normal module resolution. Full validation compares participating runtime/embedded-asset source with each normally downloaded owning dependency before running the consumer. Resolver selection grants no domain authority. The resolver-only composition remains distinct from the retained-state management test below; real product account/store/TLS isolation and shared-installation update evidence remain product obligations.
+
+## Installation re-entry composition
+
+[management_installation_test.go](management_installation_test.go), `TestPublicInstallationReentry`, exercises the public [Installation](../../installation/README.md), Identity and Audit contracts against a dedicated disposable PostgreSQL database. The fixture declares required schema/initial-account outcomes while missing root is optional context. Its own progress table retains `Attempted` before effects and `Verified` after reconciliation; the shared planner opens no database and executes nothing.
+
+The test repeats public migrations, then creates one synthetic initial account with atomic Audit history. It simulates a lost successful account-creation acknowledgement by reloading retained progress and providing unknown evidence. Recheck must return reconciliation-required with no replay action. Authorized exact-login lookup reconciles the committed account; the final checks require one account and one Audit event, a ready plan after verified outcomes, and rejection of a changed candidate binding.
+
+This is a controlled single-caller fixture with retained database progress, not a process-crash, concurrent installer, host provisioning or privileged administrator-role implementation. Real products/adapters must verify actual outcomes, authenticate the candidate, authorize exact targets, serialize/fence execution, durably record intent, and reconcile uncertainty before repeating effects. Schema migration and one-time account bootstrap retain their distinct domain semantics.
+
+## Per-site activation with retained PostgreSQL state
+
+In the same file, `TestPublicManagedSitesRetainPostgresState` uses public [Multi-Site](../../multisite/README.md) management and Core lifecycle contracts with two dedicated Notes databases. A trusted finite descriptor catalog and product-owned typed factory select Notes for site A while site B omits it. Constructor counts and absent-capability authorization checks ensure inactive features acquire no Notes instance; site A's persisted Unicode note stays out of site B's database.
+
+An authorized immutable plan proposes removing Notes from A without mutating its live Application. The fixture applies the pure replacement input, stops the old compositions and constructs new ones. While Notes is inactive, its stored row remains and its capability is absent. Re-enabling constructs the feature again and reads the same note through its public Service; another site's principal is denied. Advancing selection generations rejects reuse of the old plan after disable/re-enable.
+
+The fixture keeps selection configuration in caller-owned memory; it does not prove durable selection persistence, concurrent compare-and-swap, live ingress draining or a product restart/update. A real product must reauthorize the plan, persist the expected-revision change consistently, drain affected work, construct only selected typed instances, validate/start/check readiness and activate through its supported lifecycle. This test changes activation within one pinned product dependency set; it neither mixes module versions per site nor proves code-upgrade compatibility, real product tenancy or a CMS/Search implementation. Disabling a feature retains data; removal and destructive cleanup are separate authorized operations.
 
 ## Admin browser proving composition
 
-The opt-in `admin_test.go` composes the real Admin shell with Identity-owned account forms and Media-owned library forms using only the normally downloaded Foundation dependency. It owns synthetic administrator/viewer/denied accounts, explicit product policy, two trusted local HTTPS origins and a private database/assets/control directory. The viewer's collection metadata grant does not permit file bytes/deletion or exact-login discovery. Durable state snapshots compare real denied/stale/malformed calls independently of displayed buttons.
+The opt-in `admin_test.go` composes the real Admin shell with Identity-owned account forms and Media-owned library forms using only normally downloaded Core/component dependencies. It owns synthetic administrator/viewer/denied accounts, explicit product policy, two trusted local HTTPS origins and a private database/assets/control directory. The viewer's collection metadata grant does not permit file bytes/deletion or exact-login discovery. Durable state snapshots compare real denied/stale/malformed calls independently of displayed buttons.
 
 Run from the repository root after installing the exact test-only Node/Playwright/Chromium profile required by `scripts/validate-admin-browser.sh` into an explicitly owned directory:
 
@@ -98,11 +129,11 @@ ACHRIX_PG_BIN=/absolute/owned/pg-validation/install/bin \
 scripts/validate-admin-browser.sh
 ```
 
-The runner requires supported Go/PostgreSQL tools, normal checksums and cold SDK download with recursive runtime/embedded-asset source equality. It verifies certificates using only the fixture's public certificate/SPKI pins, constrains browser requests to its two local HTTPS origins and removes its owned temporary cluster/cache afterward. Product runtime has no Node/Playwright dependency. The browser suite exercises actual login/cookie/CSRF, create and exact-login recovery after a committed response is lost, finite waits without replay, conditional account management, PNG/JPEG plus PDF/ZIP/WebP/WebM original upload/library/private download/confirmed deletion, permissions, keyboard focus, responsive English/Persian RTL and preserved mixed text. PDF/ZIP bytes are complete consumer-owned test files; the pinned browser encodes complete WebP/WebM fixtures with its native test-only APIs. This introduces no product encoder or conversion dependency. It reports actual UI payload and request counts; these local observations establish no production network latency or capacity. `scripts/validate.sh full` separately runs the complete package trees and real exact-login PostgreSQL proof; the browser command is explicit and must pass for the Admin candidate's acceptance.
+The runner requires supported Go/PostgreSQL tools, normal checksums and cold component download with recursive runtime/embedded-asset source equality. It verifies certificates using only the fixture's public certificate/SPKI pins, constrains browser requests to its two local HTTPS origins and removes its owned temporary cluster/cache afterward. Product runtime has no Node/Playwright dependency. The browser suite exercises actual login/cookie/CSRF, create and exact-login recovery after a committed response is lost, finite waits without replay, conditional account management, PNG/JPEG plus PDF/ZIP/WebP/WebM original upload/library/private download/confirmed deletion, permissions, keyboard focus, responsive English/Persian RTL and preserved mixed text. PDF/ZIP bytes are complete consumer-owned test files; the pinned browser encodes complete WebP/WebM fixtures with its native test-only APIs. This introduces no product encoder or conversion dependency. It reports actual UI payload and request counts; these local observations establish no production network latency or capacity. `scripts/validate.sh full` separately runs the complete package trees and real exact-login PostgreSQL proof; the browser command is explicit and must pass for the Admin candidate's acceptance.
 
 ## Licensing
 
-First-party files, including this fixture and its public Foundation contracts, are MPL-2.0. No Apache SDK exists. Preserve [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md) with distributed executables and provide matching covered source for the identified build/Foundation pin. Dependencies retain their own compatible terms. Normal dependency use neither creates an official badge nor changes product data ownership.
+First-party files, including this fixture and its public Foundation contracts, are MPL-2.0. No Apache SDK exists. Preserve [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md) with distributed executables and provide matching covered source for the identified build and Core/component dependency set. Dependencies retain their own compatible terms. Normal dependency use neither creates an official badge nor changes product data ownership.
 
 ## Resource capacity observation
 

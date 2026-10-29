@@ -14,7 +14,7 @@ Koinon owns AChWorks cross-project governance/discovery/contracts. AChrix owns i
 
 1. **Minimal Core.** Core contains only broadly required composition, capability identity, application/authorization and lifecycle contracts. Useful product features do not automatically belong in Core.
 2. **Owned Modules and products.** A Module owns one coherent reusable behavior domain, any durable state/assets that belong to it, and may expose a bounded set of related Capabilities. Cross-module mutations use its authorized Application boundary. Reusable Modules may own generic mechanics used inside independently owned products; products still own their domain/business semantics, product account/profile meaning, permission grants, data, releases and deployment. Optional SSO does not create shared central account ownership.
-3. **Versioned reuse.** Products consume shared Foundation implementation through an explicit dependency/update boundary, rather than unmanaged source copies. Internal Modules can remain in the same repository, dependency module, process and database. Architecture separation alone does not justify distribution or service extraction.
+3. **Versioned reuse.** Products consume Core and selected reusable Modules through explicit independently versioned dependency/update boundaries, rather than unmanaged source copies. Compatible upgrades preserve independently owned product code, configuration and data under their migration contracts. Components can remain in the same repository, process and database; independent versions do not require separate services.
 4. **One Application surface.** Human UI, HTTP/API, MCP/AI, CLI and jobs use the same behavior and authorization. Machine access never grants extra authority. Public contracts and permissions are explicit and machine-readable where useful.
 5. **Deliberate extension.** Publish a small, versioned surface; keep implementation private. Stable capability/protocol identity is separate from branding. External libraries, modules and services may be used directly or through the smallest valuable adapter without becoming AChrix-owned.
 6. **Safe state and effects.** Data invariants, security, compatibility, migrations, external side effects and recovery are owned and testable. Unknown mutation outcomes are reconciled rather than blindly retried. A source upgrade is not proof of a safe deployed/data upgrade.
@@ -27,7 +27,7 @@ The default is a modular monolith. Reuse maintained standard/native/ecosystem ca
 
 - Go is the primary shared implementation language: [ADR-0002](decisions/ADR-0002-go-primary-implementation.md).
 - Ordinary PostgreSQL is the first relational and integration-test target. Drivers, tooling and optional infrastructure defaults are owned by [ADR-0003](decisions/ADR-0003-postgresql-and-optional-infrastructure.md).
-- Begin with one Foundation Go module and an independent pinned consumer: [ADR-0005](decisions/ADR-0005-initial-go-consumption.md).
+- Use independently versioned Core and official Module dependencies with an independent pinned consumer: [ADR-0006](decisions/ADR-0006-independent-components-and-lifecycle.md). [ADR-0005](decisions/ADR-0005-initial-go-consumption.md) records the original single-module starting point.
 - Exact supported versions, public APIs and installation/upgrade behavior require executable proof. A named technology or interface is not tested support.
 
 Products may use another justified runtime/provider/database through an explicit boundary. This does not force migration of other repositories or require a central AChrix service.
@@ -59,7 +59,7 @@ The first executable outcome proves minimal Core, a necessary extension, real Po
 
 Success means products start faster, shared fixes reach deliberately upgraded consumers, optional infrastructure stays optional, product semantics remain independently owned, and important compatibility/security/data/recovery boundaries can be verified. Reuse must reduce total delivery and maintenance cost. Humans and AI must recover the intended behavior and current work without chat history.
 
-For products with an administration UI, routine compatible Core/Module installation and upgrades should be simple product actions without user-run server commands. Products own prepared composition and safe activation/recovery; this does not make Core an updater or host administrator.
+For products with an administration UI, routine compatible Core/Module installation and upgrades should be simple product actions without user-run server commands. AChrix owns reusable installation/update mechanics and their contracts; products own their requirements, prepared composition and safe activation/recovery. Supported environment adapters must be verifiable and extensible beyond one product, control panel or processor architecture. Core remains the application foundation rather than a host administrator.
 
 ## Documentation authority
 

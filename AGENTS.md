@@ -8,7 +8,7 @@ Start with README and [Project Map](docs/PROJECT-MAP.md), then the current canon
 
 ## Implementation
 
-- Use accepted Go/PostgreSQL defaults and ADR-0005 consumption shape. Verify supported versions/API mechanics before coupling code; use real PostgreSQL rather than a SQLite test shortcut.
+- Use accepted Go/PostgreSQL defaults and the ADR-0006 independent-component consumption shape. Verify supported versions/API mechanics before coupling code; use real PostgreSQL rather than a SQLite test shortcut.
 - Follow [Module ownership](docs/architecture/module-model.md) and [Consumption](docs/architecture/consumption-and-packaging.md). Keep Core minimal. When current evidence makes a coherent capability more likely than not to recur across product classes, establish a reusable AChrix Module boundary before product implementation; keep product-specific semantics local. Accepted Module ownership does not justify empty packages or separate repositories/services, and cross-module writes go through authorized Application contracts.
 - [Contracts](docs/architecture/contracts-and-interfaces.md) and [Security](docs/security/security-and-authorization.md) govern all human/machine entry points. AI never bypasses permissions or invents consent.
 - [Engineering principles](docs/principles/engineering-principles.md) govern reuse, implementation craftsmanship, developer experience, dependencies and extraction. Review the code itself for clear ownership/control flow, bounded concurrency/resources and maintainability; tools do not substitute for reasoning. Do not create speculative wrappers, empty layers, packages, services or optional infrastructure.
@@ -16,6 +16,8 @@ Start with README and [Project Map](docs/PROJECT-MAP.md), then the current canon
 - Never commit credentials, keys, production/private data or restricted artifacts. Keep secrets and private CLA records outside public Git.
 
 ## Validation and integration
+
+The root module is Core only; `go test ./...` from the root does not test nested components. Use the owning component directory for focused checks and `scripts/validate.sh full` for the inventory-wide isolated-consumer/PostgreSQL proof. Maintain independent component versions and normal pinned dependencies under [Consumption](docs/architecture/consumption-and-packaging.md); permanent workspace/replacement overrides are not consumer acceptance evidence.
 
 Use focused branches/PRs targeting the current canonical integration branch under [Contributing](CONTRIBUTING.md), which owns the integration policy. Apply [validation selection](CONTRIBUTING.md#validation-selection): inspect the full relevant diff, reuse unaffected evidence and satisfy effective GitHub rules/checks on the exact candidate. Report only the checks actually performed.
 

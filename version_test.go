@@ -32,3 +32,27 @@ func TestSourceVersionBuildMetadata(t *testing.T) {
 		})
 	}
 }
+
+func TestIndependentDependencyVersions(t *testing.T) {
+	info := &debug.BuildInfo{Deps: []*debug.Module{
+		{Path: "github.com/AChWorks/achrix", Version: "v0.4.0"},
+		{Path: "github.com/AChWorks/achrix/audit", Version: "v0.1.2"},
+		{Path: "github.com/AChWorks/achrix/media", Version: "v0.2.3"},
+		{Path: "example.com/replaced", Version: "v1.0.0", Replace: &debug.Module{Path: "../local"}},
+	}}
+	for path, want := range map[string]string{
+		"github.com/AChWorks/achrix":       "v0.4.0",
+		"github.com/AChWorks/achrix/audit": "v0.1.2",
+		"github.com/AChWorks/achrix/media": "v0.2.3",
+		"example.com/replaced":             "development-replacement",
+		"example.com/absent":               "development",
+		"":                                 "development",
+	} {
+		if got := dependencyVersion(info, path); got != want {
+			t.Errorf("%s: got %q, want %q", path, got, want)
+		}
+	}
+	if got := dependencyVersion(nil, "example.com/absent"); got != "development" {
+		t.Fatal("nil build information did not report development")
+	}
+}

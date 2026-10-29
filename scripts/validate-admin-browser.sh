@@ -7,7 +7,7 @@ repository=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repository"
 export GOWORK=off
 if [[ $(id -u) == 0 ]]; then echo 'Run browser validation as a non-root user' >&2; exit 1; fi
-if [[ $(go env GOVERSION) != go1.27.1 || $(go env GOSUMDB) == off ]]; then echo 'Go 1.27.1 with checksum verification is required' >&2; exit 1; fi
+if [[ $(go env GOVERSION) != go1.27.3 || $(go env GOSUMDB) == off ]]; then echo 'Go 1.27.3 with checksum verification is required' >&2; exit 1; fi
 node=${ACHRIX_BROWSER_NODE:-node}
 if [[ $("$node" --version) != v24.21.0 ]]; then echo 'Node 24.21.0 is required for this test-only browser profile' >&2; exit 1; fi
 : "${ACHRIX_PLAYWRIGHT_MODULE:?set the installed Playwright module directory}"
@@ -44,26 +44,7 @@ export GOMODCACHE="$validation_root/module-cache"
 cd "$validation_root/consumer"
 go mod download
 go mod verify
-go list -m -json github.com/AChWorks/achrix > "$validation_root/foundation.json"
-python3 - "$validation_root/foundation.json" "$repository" <<'PY'
-import hashlib,json,os,pathlib,sys
-m=json.load(open(sys.argv[1]));root=pathlib.Path(sys.argv[2]);dependency=pathlib.Path(m['Dir'])
-assert m['Path']=='github.com/AChWorks/achrix' and 'Replace' not in m
-assert m.get('Version','').startswith('v0.') and m.get('Sum') and m.get('GoModSum')
-assert m['Dir'].startswith(os.environ['GOMODCACHE']+os.sep)
-paths=[pathlib.Path('achrix.go')]
-for package in ['identity','audit','media','admin']:
- assert (root/package).is_dir() and (dependency/package).is_dir(),'missing composed runtime package: '+package
- for p in sorted((root/package).rglob('*')):
-  if p.is_file() and (p.suffix in ['.go','.sql','.js','.css','.html']) and not p.name.endswith('_test.go'):
-   paths.append(p.relative_to(root))
-digest=hashlib.sha256()
-for relative in paths:
- source=(root/relative).read_bytes();assert source==(dependency/relative).read_bytes(),'normal-module source drift: '+str(relative)
- digest.update(str(relative).encode()+b'\0'+source)
-print('Verified browser SDK pin:',m['Version'],m['Sum'],m['GoModSum'])
-print('Verified Core/Identity/Audit/Media/Admin normal-module source SHA-256:',digest.hexdigest())
-PY
+python3 "$repository/scripts/verify_consumer.py" source "$repository" "$validation_root/modules.json"
 go vet .
 export NOTES_ADMIN_BROWSER=1 NOTES_ADMIN_BROWSER_ROOT="$validation_root"
 export NOTES_ADMIN_TEST_DSN="host=$validation_root/socket port=5432 user=$(id -un) dbname=achrix_admin_test sslmode=disable"

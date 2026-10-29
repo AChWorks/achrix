@@ -144,7 +144,9 @@ class ValidationScopeTests(unittest.TestCase):
     def test_routing_changes_validate_the_router(self):
         for path in (".github/workflows/baseline.yml", "scripts/validation_scope.py",
                      "scripts/test_validation_scope.py", "scripts/setup-quality-tools.sh",
-                     "scripts/check-gofmt.sh", "scripts/test_go_quality.py"):
+                     "scripts/check-gofmt.sh", "scripts/test_go_quality.py",
+                     "scripts/modules.py", "scripts/verify_consumer.py",
+                     "scripts/test_module_packaging.py", "modules.json"):
             with self.subTest(path=path):
                 base = self.git("rev-parse", "HEAD").strip()
                 self.write(path)

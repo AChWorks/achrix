@@ -51,9 +51,10 @@ type binding struct {
 // storage/network resources and starts no workers. Do not share a Module between
 // Applications; products explicitly wire its Service to its owning Application.
 type Module struct {
-	mu       sync.Mutex
-	bindings map[string]binding
-	state    string
+	mu         sync.Mutex
+	bindings   map[string]binding
+	state      string
+	management *management
 }
 
 // New validates the complete inventory before any runtime effect. Every site
@@ -84,9 +85,13 @@ func New(config Config) (*Module, error) {
 }
 
 func (m *Module) Descriptor() achrix.Descriptor {
+	provided := []achrix.Capability{{ID: Resolve, Version: 1}}
+	if m.management != nil {
+		provided = append(provided, achrix.Capability{ID: InventoryRead, Version: 1}, achrix.Capability{ID: PlanActivation, Version: 1})
+	}
 	return achrix.Descriptor{
-		ID: "achrix.multisite", Version: achrix.Version(),
-		Provides: []achrix.Capability{{ID: Resolve, Version: 1}},
+		ID: "achrix.multisite", Version: Version(),
+		Provides: provided,
 		Requires: []achrix.Capability{{ID: "achrix.authorization", Version: 2}},
 	}
 }

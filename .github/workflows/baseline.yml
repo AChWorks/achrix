@@ -38,11 +38,13 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         if: steps.scope.outputs.scope != 'docs'
         with:
-          go-version: '1.27.1'
+          go-version: '1.27.3'
           cache: false
       - name: Check quality-tool guards and formatter failures
         if: steps.scope.outputs.routing_tests == 'true'
-        run: python3 -m unittest discover -s scripts -p 'test_go_quality.py'
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_go_quality.py'
+          python3 -m unittest discover -s scripts -p 'test_module_packaging.py'
       # Cache only native tools. The setup digest includes the official source
       # checksum, exact version and build options; never restore a prefix match.
       - name: Restore exact PostgreSQL validation tools

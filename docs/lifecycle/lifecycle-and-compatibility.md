@@ -4,7 +4,19 @@
 
 Published Foundation dependencies, independently distributed Modules and product releases have immutable version/build identity tied to source and documented compatibility. Use semantic versions where accurate; a version number alone is not the contract. Component metadata follows the [source-backed implementation-version contract](../architecture/contracts-and-interfaces.md#capability-abi-and-composition); retain the exact product/artifact/source identity alongside any development or replacement label.
 
-Products own activation/deployment. Foundation/Modules provide their compatibility information, migrations and recovery constraints. A dependency update may affect runtime, enabled Modules, configuration/defaults, schema/data and Application/API/event contracts. Do not update products by manually recopying runtime source or build a universal updater before multiple real distributions share the mechanics.
+Products own activation/deployment. Independently versioned Core/components provide their compatibility information, migrations and recovery constraints. Record the complete selected component set rather than assuming one Foundation number identifies every implementation. A dependency update may affect runtime, enabled Modules, configuration/defaults, schema/data and Application/API/event contracts. Do not update products by manually recopying runtime source or build a universal updater before multiple real distributions share the mechanics.
+
+## Reusable installation boundary
+
+AChrix owns the optional [installation tooling contract](../../installation/README.md). Products supply bounded requirements, exact candidate/precondition identity, observations of real outcomes, explicit supported/authorized adapters and retained operation progress. `Assess` and `Recheck` produce immutable deterministic plans; they do not inspect hosts, execute changes, store secrets or grant authority.
+
+A satisfied prerequisite must be verified as the actual product outcome. Root, a package manager, `systemd`, `psql`, a panel name or a free port is context rather than proof of a usable persistent service, database, protected storage or trusted HTTPS ingress. Unknown evidence stays unknown. A plan proposing changes is distinct from all mandatory outcomes being verified.
+
+Products/adapters own durable intent before mutation, serialization/fencing, bounded execution and fresh verification. Retain attempted/verified progress across interruption. Missing or unknown observations after an attempted effect require reconciliation; repeat only when the adapter can authoritatively prove the prior effect was not applied. A stored verified outcome that later drifts is not permission to blindly recreate or overwrite it. Secret-safe structured results retain scope and stable reasons; raw adapter/provider failures or secrets do not become public evidence.
+
+A plan must be rechecked against current candidate, requirements, configuration/preconditions and adapter authority before its actions are used. That optimistic precondition complements actual product/platform authorization and execution serialization; it does not replace either. Migration, one-time administrator bootstrap and resource creation keep their different domain-specific re-entry semantics.
+
+Direct servers, control panels and processor architectures share this contract through supported product/adapter input. Each actual profile needs its own artifact, permissions, private storage, database, persistent-process, ingress/TLS and restart/postflight evidence before it is advertised as supported. No aaPanel or root dependency is imposed on other valid profiles. The first tooling slice does not establish production provisioning, a full updater, off-host recovery or support for every panel/architecture.
 
 ## Install and upgrade
 
@@ -60,7 +72,17 @@ The deployment profile supplies bounded activation that survives application rep
 
 Reject activation on delivery/trust failure. Verify publisher/artifact identity, component compatibility and metadata safety under the artifact rules below, including stale metadata/older vulnerable candidates. Automatic rollback requires compatibility with current data; otherwise retain evidence and use declared recovery. Source rollback is not data rollback.
 
-Prove this on the first real product before sharing updater tooling. Only this contract exists now. Evaluate maintained mechanisms against the [TUF threat model](https://theupdateframework.io/docs/security/) when implementing update trust; no TUF service, registry, helper or UI is built today.
+Prove this on the first real product before sharing updater tooling. The installation assessor does not implement update delivery or activation. Evaluate maintained mechanisms against the [TUF threat model](https://theupdateframework.io/docs/security/) when implementing update trust; no TUF service, registry, helper or UI is built today.
+
+## Monolithic to independent module packaging
+
+[ADR-0006](../decisions/ADR-0006-independent-components-and-lifecycle.md) introduces independent Core and official component module/version units without changing their import paths or rewriting historical tags. A component's implementation version, capability ABI, product build, schema/migration identities and active deployment identity remain distinct.
+
+A consumer on a monolithic root release must adopt a reviewed split root and explicit compatible requirements for every selected official child module as one dependency-set transition. Old roots already contain those packages; mixing them with separately distributed children can cause ambiguous imports. Review all resolved module changes after normal `go get`/`go mod tidy`, retain checksums and compile/test a coherent artifact. Do not use replacement directives, copied runtime source or edited caches to mask an incompatible graph.
+
+The packaging transition itself adds no data migration and changes no published SQL/checksum. Inspect every participating component's release-specific API/schema requirements nonetheless; independently available latest versions are not automatically compatible. A later targeted component update may retain other pins when its dependencies allow it. Each executable uses one selected version per module, and shared-installation sites use that compatible product build even when their activated capabilities differ.
+
+Before activation, identify the exact product/Core/component/artifact/configuration and ledger set, stage any required explicit migrations, preserve the appropriate recovery evidence and verify active readiness after replacement. Existing monolithic releases retain their original compatibility and source contents. They remain valid pinned dependencies until a consumer deliberately adopts the new line; source publication alone changes no deployed product.
 
 ## Initial development release line
 
@@ -121,36 +143,42 @@ Preparation grants no publication and stores no derivative. Its complete result 
 
 ## Source release preparation and verification
 
-`.github/workflows/release.yml` is a manually dispatched preparer on canonical trusted `main`. It requires successful existing `baseline` evidence for that exact source, exports its tracked tree, and produces a source archive, SPDX source inventory, source/run identity metadata, checksums and signed build/SBOM bundles. The archive includes repository documentation, fixtures and tooling; it ships no product executable or vendored dependency implementation. The SBOM catalogs that exported source/declared manifest scope, not a deployed runtime or tested compatibility for every listed dependency.
+`.github/workflows/release.yml` is a manually dispatched preparer on canonical trusted `main`. Select one component from [modules.json](../../modules.json) and an unpublished developer version. The preparer requires successful existing `baseline` evidence for the exact source, exports the selected Go-module scope with exact tracked bytes, and produces a source archive, SPDX source inventory, component/source/run metadata, checksums and signed build/SBOM bundles.
+
+Core exports its owning root files while excluding nested component modules and the separate consumer. A child exports its owning subtree, including its `go.mod` and applicable `LICENSE`; internal packages remain with their component. These component archives contain no product executable or vendored dependency implementation and are not a whole-repository development checkout. The SPDX inventory covers the selected source/manifest scope, not a deployed-runtime SBOM or every possible compatible combination. Historical whole-repository source archives retain their original bytes and scope.
+
+Core uses a root `vMAJOR.MINOR.PATCH` tag; child tags use `<module-directory>/vMAJOR.MINOR.PATCH`. The Go dependency version is the semantic version alone. `release.json` binds component, module path/directory, version, tag and artifact prefix to the exact repository source commit/tree plus preparation/baseline runs. Preparation retains the pre-v1 version policy enforced by its script; a future major/path transition needs its own compatible tooling and migration.
 
 Preparation has no tag/release publication permission, runs no PostgreSQL or repeated runtime suite and gives Core no signing dependency. A maintainer separately reviews and publishes the exact verified assets/source identity. PR/main checks remain required when preparation inputs change. Official verification expects this repository's hosted `release.yml` on `refs/heads/main`, the independently approved source SHA and GitHub's OIDC issuer `https://token.actions.githubusercontent.com`; a matching checksum alone is insufficient. A changed publisher/workflow trust boundary needs the normal owner decision. Retain downloaded bundles for verification; trust-root/issuer revocation and offline verification follow the maintained GitHub/Sigstore verifier rather than a custom key service.
 
 From a maintainer environment with a GitHub CLI supporting artifact-attestation verification:
 
 ```bash
+ACHRIX_RELEASE_COMPONENT="<reviewed-inventory-name>"
 ACHRIX_RELEASE_VERSION="<reviewed-unpublished-version>"
-gh workflow run release.yml --repo AChWorks/achrix --ref main -f version="$ACHRIX_RELEASE_VERSION"
+ACHRIX_ARTIFACT_PREFIX="achrix-$ACHRIX_RELEASE_COMPONENT-$ACHRIX_RELEASE_VERSION"
+gh workflow run release.yml --repo AChWorks/achrix --ref main -f component="$ACHRIX_RELEASE_COMPONENT" -f version="$ACHRIX_RELEASE_VERSION"
 gh run list --repo AChWorks/achrix --workflow release.yml --branch main --limit 5 --json databaseId,headSha,status,conclusion
 ```
 
-Identify the successful preparation run and independently reviewed source commit as `ACHRIX_RELEASE_RUN` and `ACHRIX_RELEASE_SHA`; do not trust downloaded metadata to choose its own authorized source. Download into an empty task-owned directory:
+Identify the successful preparation run and independently reviewed source commit as `ACHRIX_RELEASE_RUN` and `ACHRIX_RELEASE_SHA`; do not trust downloaded metadata to choose its own authorized source/component. Download into an empty task-owned directory:
 
 ```bash
-gh run download "$ACHRIX_RELEASE_RUN" --repo AChWorks/achrix --name "achrix-$ACHRIX_RELEASE_VERSION-release" --dir release-assets
+gh run download "$ACHRIX_RELEASE_RUN" --repo AChWorks/achrix --name "$ACHRIX_ARTIFACT_PREFIX-release" --dir release-assets
 cd release-assets
 sha256sum -c SHA256SUMS
-for asset in "achrix-$ACHRIX_RELEASE_VERSION-source.tar.gz" "achrix-$ACHRIX_RELEASE_VERSION-source.spdx.json" release.json; do
+for asset in "$ACHRIX_ARTIFACT_PREFIX-source.tar.gz" "$ACHRIX_ARTIFACT_PREFIX-source.spdx.json" release.json; do
   gh attestation verify "$asset" --repo AChWorks/achrix --bundle provenance.sigstore.json \
     --signer-workflow AChWorks/achrix/.github/workflows/release.yml \
     --source-ref refs/heads/main --source-digest "$ACHRIX_RELEASE_SHA" --deny-self-hosted-runners
 done
-gh attestation verify "achrix-$ACHRIX_RELEASE_VERSION-source.tar.gz" --repo AChWorks/achrix \
+gh attestation verify "$ACHRIX_ARTIFACT_PREFIX-source.tar.gz" --repo AChWorks/achrix \
   --bundle sbom.sigstore.json --predicate-type https://spdx.dev/Document/v2.3 \
   --signer-workflow AChWorks/achrix/.github/workflows/release.yml \
   --source-ref refs/heads/main --source-digest "$ACHRIX_RELEASE_SHA" --deny-self-hosted-runners
 ```
 
-Verify metadata/source-tree identity against the approved commit and source archive against its Git export. Refresh tag/release absence and source/review/CI identities before publishing; do not overwrite an existing version or blindly repeat an ambiguous write. Create the exact-source tag and stage a draft Release with these assets, matching covered source and compatibility/evidence notes. Prove normal isolated `github.com/AChWorks/achrix@<version>` resolution/checksums and reported `Version()` without replacement/workspace/source copying before publishing the draft. Missing/failed delivery proof keeps the release work open; source publication is separate from any product deployment. After publication, re-download and verify the released assets and tag/source identity. [GitHub attestation verification](https://cli.github.com/manual/gh_attestation_verify) owns the maintained CLI contract.
+Verify component/module/tag metadata against the selected inventory at the approved commit, repository source/tree identity against that commit, and archive bytes against the corresponding scoped Git export. Refresh tag/release absence and source/review/CI identities before publishing; do not overwrite an existing version or blindly repeat an ambiguous write. Create the exact-source component tag and stage a draft Release with these assets, matching covered source and compatibility/evidence notes. Prove normal isolated `<component-module-path>@<version>` resolution/checksums and its reported `Version()` without replacement/workspace/source copying before publishing the draft. Validate its compatible Core/component set as required by the affected contract, not arbitrary latest combinations. Missing/failed delivery proof keeps the release work open; source publication is separate from any product deployment. After publication, re-download and verify the released assets and tag/source identity. [GitHub attestation verification](https://cli.github.com/manual/gh_attestation_verify) owns the maintained CLI contract.
 
 ## Official artifacts and future tooling
 

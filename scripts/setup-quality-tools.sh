@@ -7,8 +7,8 @@ if [[ $# != 1 || -z $1 || -e $1 || -L $1 ]]; then
 fi
 case "$1" in /*) ;; *) echo 'An absolute directory is required' >&2; exit 2;; esac
 export GOWORK=off
-if [[ $(go env GOVERSION) != go1.27.1 ]]; then
-  echo 'Go 1.27.1 is required for quality tools' >&2; exit 1
+if [[ $(go env GOVERSION) != go1.27.3 ]]; then
+  echo 'Go 1.27.3 is required for quality tools' >&2; exit 1
 fi
 if [[ $(go env GOSUMDB) == off ]]; then
   echo 'Checksum verification must remain enabled' >&2; exit 1
@@ -35,11 +35,11 @@ PY
 }
 
 # Staticcheck verified source identity; official tag commit:
-# https://github.com/dominikh/go-tools/commit/1285a6a5ec1e0ebb658f49e82b6c566a878cc3cb
-staticcheck_version=v0.8.1
+# https://github.com/dominikh/go-tools/commit/54455593555daf6bfcf3c480faaada7de3145357
+staticcheck_version=v0.8.2
 verify_module honnef.co/go/tools "$staticcheck_version" \
-  'h1:+JKf3xJ1ni4CwrhVg4/pqsfPGP6vNAXcKbMXJodYx3w=' \
-  'h1:XA+OnlRA9EDh/ukGvXMNSZNKGwFQJ+5dER0ioUkOxks='
+  'h1:+jPbCzuYxYrcoOvCecYUFDj+XJQRmzIhJmlbpps21Zk=' \
+  'h1:xG1Q4n+mg3bKZrO6RWFA9jFlkqplflmDRHGeuexiLDs='
 go install "honnef.co/go/tools/cmd/staticcheck@$staticcheck_version"
 
 # govulncheck verified source identity; official tag commit:

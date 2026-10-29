@@ -54,7 +54,7 @@ Choose ownership before choosing packaging:
 
 An accepted reusable placement does not require immediate implementation. Implement the real behavior when a current/near-term consumer needs it; do not create empty packages/interfaces merely to reserve a future Module. A second materially different consumer validates and may refine or reverse a placement, but is not a mandatory prerequisite when strong current evidence already supports shared ownership.
 
-Packaging is a separate decision in [Consumption](consumption-and-packaging.md). Reusable Modules default to the existing AChrix repository/Go module/process unless independent versioning, ownership/security isolation, deployment/runtime needs or lower total lifetime cost justify extraction.
+Packaging is a separate decision in [Consumption](consumption-and-packaging.md). Official component units use independent Go-module versions in the existing repository under [ADR-0006](../decisions/ADR-0006-independent-components-and-lifecycle.md), while remaining composable in one process/database. This accepted version boundary does not split every internal subsystem or justify another repository/service.
 
 ## Accepted reusable Modules
 
@@ -131,6 +131,14 @@ Each accepted setting has typed/versioned semantics, defaults/value-presence rul
 
 Exact fields are introduced only from a real product need; examples never freeze a generic schema. Admin may render Settings through normal Application contracts. [Issue #50](https://github.com/AChWorks/achrix/issues/50) is the stable work/evidence reference for the first reusable Settings outcome; implementation begins only when concrete reusable application-level fields exist, and live task state remains GitHub-owned.
 
+### Installation and update tooling
+
+AChrix owns reusable installation/update mechanics as an optional operational tooling boundary. The [installation contract](../../installation/README.md) owns the first requirement/evidence, explicit adapter-support, immutable plan and re-entry semantics. It is usable before a product Application, database or administrator exists and does not need to implement the Core runtime `Module` interface.
+
+Products declare their actual requirements, candidate/configuration identity, protected inputs, migration/bootstrap steps and installation UX. Product/platform adapters inspect real outcomes, execute only supported authorized changes, persist operation intent/progress, serialize/fence execution and verify postflight. A prepared plan is neither a completed installation nor a permission grant. Unknown outcomes require reconciliation rather than blanket retry.
+
+The boundary supports direct-server and control-panel profiles without making aaPanel or root a prerequisite. OS/processor/panel variation earns an adapter and a tested support profile; detection alone is context. Broader updater/recovery implementations remain driven by concrete product evidence and do not follow automatically from the shared ownership decision.
+
 ### Backup & Recovery
 
 Backup & Recovery is an accepted reusable **operational Module/tooling boundary**, not a Core primitive and not a generic host/root agent.
@@ -139,7 +147,7 @@ It may own reusable backup/restore operation identity/progress, manifests bindin
 
 Use maintained native/provider mechanisms rather than inventing a backup format. Restore/preflight/reconciliation evidence is part of support; backup existence alone is not. [Issue #19](https://github.com/AChWorks/achrix/issues/19) records the first real product/deployment lifecycle proof and [Issue #49](https://github.com/AChWorks/achrix/issues/49) records the reusable Backup & Recovery outcome; their live state remains GitHub-owned. Real product evidence must shape the minimum reusable mechanics before any general implementation. Core gains no shell/root/filesystem/database-proxy authority from this placement.
 
-Identity, Admin, Media, Audit, Notifications, Search, Settings, Backup & Recovery and optional Multi-Site are accepted reusable placements. The [Multi-Site public contract](../../multisite/README.md) owns its bounded resolver semantics inside the existing AChrix repository/Go module/shared release; [Issue #4](https://github.com/AChWorks/achrix/issues/4) remains the stable outcome/evidence reference for the broader consumer proof without making its live status part of this document. Real product isolation/update behavior remains consumer-owned proof. Products retain content, theme, routing/publication and deployment semantics; single-site consumers and Core composition remain valid without tenancy. Acceptance is not an implemented package or an instruction to create an empty Module.
+Identity, Admin, Media, Audit, Notifications, Search, Settings, Installation/update tooling, Backup & Recovery and optional Multi-Site are accepted reusable placements. The [Multi-Site public contract](../../multisite/README.md) owns exact resolution plus its optional normal-authorized inventory and per-site Module-selection/activation planning. The product owns state persistence, typed construction, draining and activation of replacement Applications, site-to-store bindings and all content/theme/publication semantics. Site selection, an inventory entry or an activation plan supplies no domain grant. A disabled feature retains its data; a running Core graph remains immutable. Single-site consumers may omit Multi-Site entirely. [Issue #4](https://github.com/AChWorks/achrix/issues/4) remains the stable broader consumer-proof reference without making its live state a technical contract. Accepted placement alone never requires an empty package.
 
 Content/taxonomy, commerce, payments, AI/provider behavior and Gateway Bridge remain case-by-case until their own evidence/decision establishes placement; a familiar feature name alone is not reuse evidence.
 

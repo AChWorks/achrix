@@ -12,10 +12,11 @@ import re
 import subprocess
 import tarfile
 
+from modules import inventory, owns_path, release_identity
+
 REPOSITORY = "AChWorks/achrix"
 WORKFLOW = ".github/workflows/release.yml"
 BASELINE = ".github/workflows/baseline.yml"
-VERSION = re.compile(r"v0\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z")
 
 
 def command(*args):
@@ -26,9 +27,8 @@ def api(endpoint):
     return json.loads(command("gh", "api", endpoint))
 
 
-def release_gate(version):
-    if not VERSION.fullmatch(version):
-        raise ValueError("version must be an unpublished v0.MINOR.PATCH")
+def release_gate(version, component="core"):
+    module, tag, _ = release_identity(component, version)
     if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?", os.environ.get("SYFT_VERSION", "")):
         raise ValueError("release inventory tool version must be explicitly pinned")
     source = os.environ["GITHUB_SHA"]
@@ -45,11 +45,11 @@ def release_gate(version):
         raise ValueError("source must be the exact hosted canonical-main dispatch")
     if api(f"repos/{REPOSITORY}/git/ref/heads/main")["object"]["sha"] != source:
         raise ValueError("main moved; reconcile and prepare its reviewed source")
-    refs = api(f"repos/{REPOSITORY}/git/matching-refs/tags/{version}")
+    refs = api(f"repos/{REPOSITORY}/git/matching-refs/tags/{tag}")
     releases = command(
         "gh", "api", "--paginate", f"repos/{REPOSITORY}/releases", "--jq", ".[].tag_name"
     ).splitlines()
-    if any(ref["ref"] == f"refs/tags/{version}" for ref in refs) or version in releases:
+    if any(ref["ref"] == f"refs/tags/{tag}" for ref in refs) or tag in releases:
         raise ValueError("version already has a tag or release; never overwrite it")
     runs = api(
         f"repos/{REPOSITORY}/actions/workflows/baseline.yml/runs"
@@ -78,65 +78,92 @@ def release_gate(version):
     raise ValueError("no successful GitHub Actions baseline for this exact main source")
 
 
-def export_source(source, version, output):
-    # A new runner-temporary destination prevents workspace/generated files from
-    # entering either the archive or the scanned source tree.
-    output.mkdir(parents=True, exist_ok=False)
-    assets = output / "assets"
-    assets.mkdir()
-    source_dir = output / "source"
-    source_dir.mkdir()
-    prefix = f"achrix-{version}/"
-    archive = subprocess.check_output(
-        ["git", "archive", "--format=tar", f"--prefix={prefix}", source]
-    )
+def export_source(source, version, output, component="core"):
+    module, tag, artifact = release_identity(component, version)
+    modules = inventory()
+    # Inventory is source policy, not an archive supplied by a caller. Require
+    # the checked-out policy and selected go.mod to belong to this exact source.
     tracked = {}
     for entry in subprocess.check_output(["git", "ls-tree", "-r", "-z", source]).split(b"\0"):
-        if entry:
-            identity, name = entry.split(b"\t", 1)
-            mode, kind, digest = identity.decode().split()
+        if not entry:
+            continue
+        identity, name = entry.split(b"\t", 1)
+        mode, kind, digest = identity.decode().split()
+        name = name.decode()
+        if owns_path(module, name, modules):
             if kind != "blob" or mode not in ("100644", "100755"):
-                raise ValueError("source release supports ordinary tracked files only")
-            tracked[name.decode()] = digest
-    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as tree:
-        exported = {}
+                raise ValueError("source module supports ordinary tracked files only")
+            tracked[name] = (digest, mode)
+    if subprocess.check_output(["git", "show", source + ":modules.json"]) != Path("modules.json").read_bytes():
+        raise ValueError("module release policy differs from selected source")
+    manifest = "go.mod" if module["directory"] == "." else module["directory"] + "/go.mod"
+    if manifest not in tracked or subprocess.check_output(["git", "show", source + ":" + manifest]) != Path(manifest).read_bytes():
+        raise ValueError("selected module manifest differs from exact source")
+    manifest_text = subprocess.check_output(["git", "show", source + ":" + manifest], text=True)
+    if not re.search(r"(?m)^module " + re.escape(module["path"]) + r"\s*$", manifest_text):
+        raise ValueError("selected source has a different module path")
+
+    prefix = artifact + "/"
+    archive = subprocess.check_output(["git", "archive", "--format=tar", source])
+    exported = {}
+    normalized = io.BytesIO()
+    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as tree, tarfile.open(fileobj=normalized, mode="w", format=tarfile.PAX_FORMAT) as target:
         for member in tree.getmembers():
-            if member.isdir():
+            if member.isdir() or member.name not in tracked:
                 continue
-            if not member.isfile() or not member.name.startswith(prefix):
-                raise ValueError("unexpected source archive member")
-            name = member.name[len(prefix):]
-            if name not in tracked or name in exported or ".." in Path(name).parts:
-                raise ValueError("archive differs from the tracked source tree")
+            if not member.isfile() or ".." in Path(member.name).parts or Path(member.name).is_absolute():
+                raise ValueError("unexpected selected source archive member")
             data = tree.extractfile(member).read()
-            exported[name] = hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
-        if exported != tracked:
-            raise ValueError("archive bytes differ from tracked source (including export attributes)")
-        required = {"LICENSE", "fixtures/notes/LICENSE", "fixtures/notes/THIRD_PARTY_NOTICES.md"}
-        if not required <= exported.keys():
-            raise ValueError("source license or dependency notices are missing")
+            digest, mode = tracked[member.name]
+            if hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest() != digest:
+                raise ValueError("archive bytes differ from tracked module source")
+            relative = member.name if module["directory"] == "." else member.name[len(module["directory"]) + 1:]
+            if relative in exported:
+                raise ValueError("duplicate selected module archive path")
+            exported[relative] = digest
+            item = tarfile.TarInfo(prefix + relative)
+            item.size, item.mode, item.mtime = len(data), int(mode[-3:], 8), member.mtime
+            target.addfile(item, io.BytesIO(data))
+    expected = {name if module["directory"] == "." else name[len(module["directory"]) + 1:]: value[0] for name, value in tracked.items()}
+    if exported != expected or not {"LICENSE", "go.mod"} <= exported.keys():
+        raise ValueError("source module archive is incomplete or lacks license/manifest")
+    # Make source/manifest inventory inspectable without including workspace or
+    # unrelated Module files. No publication or tag creation occurs here.
+    output.mkdir(parents=True, exist_ok=False)
+    assets, source_dir = output / "assets", output / "source"
+    assets.mkdir()
+    source_dir.mkdir()
+    normalized.seek(0)
+    with tarfile.open(fileobj=normalized, mode="r:") as tree:
         tree.extractall(source_dir, filter="data")
-    archive_path = assets / f"achrix-{version}-source.tar.gz"
+    archive_path = assets / (artifact + "-source.tar.gz")
     with archive_path.open("xb") as destination:
-        subprocess.run(["gzip", "-n"], input=archive, stdout=destination, check=True)
+        subprocess.run(["gzip", "-n"], input=normalized.getvalue(), stdout=destination, check=True)
     return assets
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("version")
+    parser.add_argument("--component", default="core", help="Exact official component name from modules.json")
     parser.add_argument("output", nargs="?", type=Path)
     parser.add_argument("--check-only", action="store_true")
     args = parser.parse_args()
-    source, baseline = release_gate(args.version)
+    module, tag, artifact = release_identity(args.component, args.version)
+    source, baseline = release_gate(args.version, args.component)
     if args.check_only:
-        print(f"Release gates passed for {args.version} at {source}")
+        print(f"Release gates passed for {tag} at {source}")
         return
     if args.output is None or not args.output.resolve().is_relative_to(Path(os.environ["RUNNER_TEMP"]).resolve()):
         parser.error("output must be a new directory within RUNNER_TEMP")
-    assets = export_source(source, args.version, args.output)
+    assets = export_source(source, args.version, args.output, args.component)
     metadata = {
         "version": args.version,
+        "tag": tag,
+        "component": args.component,
+        "module_path": module["path"],
+        "module_directory": module["directory"],
+        "artifact_prefix": artifact,
         "repository": REPOSITORY,
         "source_sha": source,
         "source_tree": command("git", "rev-parse", f"{source}^{{tree}}"),
@@ -153,10 +180,10 @@ def main():
             "workflow": BASELINE,
             "source_sha": baseline["head_sha"],
         },
-        "inventory_scope": f"Syft {os.environ['SYFT_VERSION']} SPDX source/manifest inventory of the exact exported tracked tree; not a compiled-runtime SBOM",
+        "inventory_scope": f"Syft {os.environ['SYFT_VERSION']} SPDX source/manifest inventory of the exact exported tracked Module source; not a compiled-runtime SBOM",
     }
     (assets / "release.json").write_text(json.dumps(metadata, indent=2) + "\n")
-    print(f"Prepared {args.version} source at {source}; baseline {baseline['id']}")
+    print(f"Prepared {tag} source at {source}; baseline {baseline['id']}")
 
 
 if __name__ == "__main__":

@@ -26,14 +26,14 @@ case "$*" in
   'env GOSUMDB') echo "$FAKE_GOSUMDB";;
   'env GOROOT') echo "$FAKE_GO_ROOT";;
   'mod download -json '*)
-    echo '{"Path":"honnef.co/go/tools","Version":"v0.8.1","Sum":"wrong","GoModSum":"wrong"}';;
+    echo '{"Path":"honnef.co/go/tools","Version":"v0.8.2","Sum":"wrong","GoModSum":"wrong"}';;
   *) echo 'Unexpected tool acquisition' >&2; exit 99;;
 esac
 """)
         stub.chmod(0o755)
         self.environment = dict(os.environ, PATH=f"{self.bin}:{os.environ['PATH']}",
                                 FAKE_GO_LOG=str(self.log), FAKE_GO_ROOT=str(self.root),
-                                FAKE_GOVERSION="go1.27.1", FAKE_GOSUMDB="sum.golang.org")
+                                FAKE_GOVERSION="go1.27.3", FAKE_GOSUMDB="sum.golang.org")
 
     def setup_tools(self, destination, **environment):
         return subprocess.run(
@@ -42,7 +42,7 @@ esac
         )
 
     def test_wrong_go_and_disabled_checksums_cannot_acquire_tools(self):
-        for override, message in (({"FAKE_GOVERSION": "go1.26.0"}, "Go 1.27.1"),
+        for override, message in (({"FAKE_GOVERSION": "go1.26.0"}, "Go 1.27.3"),
                                   ({"FAKE_GOSUMDB": "off"}, "Checksum verification")):
             with self.subTest(override=override):
                 destination = self.root / "tools"

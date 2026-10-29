@@ -1,6 +1,6 @@
 # ADR-0005 — Initial Go Consumption Shape
 
-Status: accepted starting packaging decision; Operations and Contracts own implemented support/public APIs, and Issue #1 owns exact executable acceptance evidence.
+Status: accepted historical starting decision; the single-Go-module packaging choice is superseded for the independent-component line by [ADR-0006](ADR-0006-independent-components-and-lifecycle.md). Compiled composition, normal pinned consumption and the remaining constraints continue to apply. Operations and Contracts own implemented support/public APIs, and Issue #1 owns exact initial acceptance evidence.
 Date: 2026-10-01.
 
 ## Context

@@ -1,10 +1,14 @@
+github.com/AChWorks/achrix v0.3.1-0.20261029085807-1a055ff695e4 h1:B7zX9kZVcTdt206hFHK5flHEWe88TBod/7m3efXKjks=
+github.com/AChWorks/achrix v0.3.1-0.20261029085807-1a055ff695e4/go.mod h1:9Zj1xlOsqGJcF1FNrGVBl+4jUfQX2D5AkR96RpB6PB0=
+github.com/AChWorks/achrix/admin v0.0.0-20261029085829-309131f543f5 h1:SfTFFJiY7X5mvwGea9AjiFpny7HmEVSIl2o17vGv0mA=
+github.com/AChWorks/achrix/admin v0.0.0-20261029085829-309131f543f5/go.mod h1:Q4WkpMfaX+ZE7IWjmOXWPP95uxxjkuXgDwcbntMGc38=
+github.com/AChWorks/achrix/audit v0.0.0-20261029085829-309131f543f5 h1:0zAs/gBmxxwwQcnf/KcXfCOYEY6WDbqB4MBsLfME5dI=
+github.com/AChWorks/achrix/audit v0.0.0-20261029085829-309131f543f5/go.mod h1:PyMl/wkuXS6sK6o2Q3zUNVuvlEHoTy3Ugtwh+ldUWiY=
 github.com/alexedwards/argon2id v1.0.0 h1:wJzDx66hqWX7siL/SRUmgz3F8YMrd/nfX/xHHcQQP0w=
 github.com/alexedwards/argon2id v1.0.0/go.mod h1:tYKkqIjzXvZdzPvADMWOEZ+l6+BD6CtBXMj5fnJppiw=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/gabriel-vasile/mimetype v1.4.15 h1:05iP/CYtZ/w455R/KZM6rZ5ieAdh99UPtd+d3YzLmaI=
-github.com/gabriel-vasile/mimetype v1.4.15/go.mod h1:azpTcoLcDZRNgFou5j+APrqQx9HqVPWa6ijYQIIVswQ=
 github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=

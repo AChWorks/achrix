@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-package achrix_test
+package notes_test
 
 import (
 	"context"
@@ -38,8 +38,9 @@ func TestOfficialComponentSourceIdentity(t *testing.T) {
 		t.Fatal("official component snapshot incomplete")
 	}
 	for _, d := range components {
-		if d.Version != version {
-			t.Errorf("%s: implementation version %q, Foundation build %q", d.ID, d.Version, version)
+		want := map[string]string{"achrix.identity": identity.Version(), "achrix.audit": audit.Version()}[d.ID]
+		if d.Version != want {
+			t.Errorf("%s: implementation version %q, packaged dependency %q", d.ID, d.Version, want)
 		}
 		for _, c := range d.Provides {
 			if c.Version != 1 {
