@@ -10,16 +10,16 @@ The document index, not a status report. Start from README/AGENTS and the releva
 | Reuse, ownership judgment and dependencies | [Engineering principles](principles/engineering-principles.md) |
 | Core/application shape | [Architecture](architecture/overview.md) |
 | Module ownership, composition, provider variation and trust, including Search/Settings/Backup & Recovery placement | [Module model](architecture/module-model.md) |
-| Versioned product consumption and packaging | [Consumption](architecture/consumption-and-packaging.md) |
+| Independent component consumption, extension and packaging | [Consumption](architecture/consumption-and-packaging.md), [module inventory](../modules.json), [ADR-0006](decisions/ADR-0006-independent-components-and-lifecycle.md) |
 | Application/public extension contracts, AI schemas and safe mutations | [Contracts](architecture/contracts-and-interfaces.md) |
 | Data, consistency, time/money and privacy | [Data](data/data-and-persistence.md) |
 | Authorization, product accounts/SSO, AI access, secrets, abuse and vulnerability reporting | [Security](security/security-and-authorization.md); GitHub entry: [SECURITY](../SECURITY.md) |
-| Install/upgrade, backup/restore/recovery profile, compatibility and official artifact evidence | [Lifecycle](lifecycle/lifecycle-and-compatibility.md) |
+| Install/upgrade, backup/restore/recovery profile, compatibility and official artifact evidence | [Lifecycle](lifecycle/lifecycle-and-compatibility.md); [installation tooling](../installation/README.md) owns the first reusable assessment/re-entry API |
 | Deployment/runtime configuration versus durable Settings, diagnosis, bounded resources and cost | [Operations](operations/operability-performance.md) |
 | Semantic web, SEO, localization and machine content representations | [Web](web/seo-and-semantic-web.md) |
 | Go analysis tools, vulnerability triage and Foundation benchmarks | [Go quality](development/go-quality.md) |
 | Development Identity/Audit/Media contracts, web security, atomic events and retained-state/asset limits | [Identity](../identity/README.md), [Audit](../audit/README.md), [Media](../media/README.md) |
-| Optional exact-authority site resolution and its consumer/product isolation boundary | [Multi-Site](../multisite/README.md), [consumer composition proof](../fixtures/notes/README.md#optional-multi-site-resolver-composition), [Issue #4](https://github.com/AChWorks/achrix/issues/4) for outcome history/live execution; the public contract, not Issue state, owns resolver semantics |
+| Optional exact-authority resolution, authorized inventory and per-site activation planning | [Multi-Site](../multisite/README.md), [consumer composition proof](../fixtures/notes/README.md#optional-multi-site-resolver-composition); products own isolation, persistence and actual activation. [Issue #4](https://github.com/AChWorks/achrix/issues/4) owns broader proof history/live execution rather than API semantics |
 | Development administration shell, Module-owned forms and browser proof | [Admin](../admin/README.md), [Identity Admin](../identity/admin/), [Media Admin](../media/admin/README.md), [consumer proof](../fixtures/notes/README.md#admin-browser-proving-composition) |
 | Outcome sequence | [Roadmap](development/roadmap.md) |
 | Artifact licenses | [LICENSE](../LICENSE), [Licensing policy](legal/licensing.md) |

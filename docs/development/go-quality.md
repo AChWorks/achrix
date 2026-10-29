@@ -11,7 +11,7 @@
 
 `scripts/setup-quality-tools.sh` owns exact module/archive and manifest checksums plus source commit links. It requires the exact validation Go pin from the [supported environment](../operations/operability-performance.md#supported-environment) and enabled checksum verification, checks both pinned sums before building, and installs into a new absolute task-owned directory. Go verifies transitive downloads through its checksum database. Installation uses versioned `go install`, changes no repository manifest, and emits compiled build identities. No global installation or binary cache is required.
 
-`scripts/check-gofmt.sh` checks all tracked Go source, including the consumer, without rewriting it. Runtime validation invokes it on the supported toolchain. Core scope analyzes only the root module; full scope also analyzes the existing isolated pinned consumer after its cold dependency download. Unknown paths and runtime/dependency changes select full. Documentation-only changes acquire no Go tools and perform no security scan. Known regular-file Core benchmark additions/modifications select Core; symlinks, deletion/type change retain full. Routing/tool changes validate failure guards before acquiring tools. Checkout credentials are not persisted, workflow permissions remain read-only, and tools receive no production secrets or repository write credentials.
+`scripts/check-gofmt.sh` checks all tracked Go source, including the consumer, without rewriting it. Runtime validation invokes it on the supported toolchain. Core scope analyzes only the root module; full scope analyzes every component in the [module inventory](../../modules.json) and the isolated pinned consumer after its cold dependency download. Root `go test ./...` does not cross nested Go-module boundaries. Unknown paths and runtime/dependency changes select full. Documentation-only changes acquire no Go tools and perform no security scan. Known regular-file Core benchmark additions/modifications select Core; symlinks, deletion/type change retain full. Routing/tool changes validate failure guards before acquiring tools. Checkout credentials are not persisted, workflow permissions remain read-only, and tools receive no production secrets or repository write credentials.
 
 To acquire the same tools for a focused local investigation, use an absolute directory that does not exist:
 
@@ -21,7 +21,7 @@ scripts/setup-quality-tools.sh /tmp/achrix-quality-investigation
 /tmp/achrix-quality-investigation/bin/govulncheck -db https://vuln.go.dev -show version,verbose ./...
 ```
 
-Run these from the module being investigated with `GOWORK=off`; the routine Core/full commands already set it. Use default Staticcheck checks; there is no meta-linter or style-rule configuration. Review the source and compatibility of an updated pin, verify its sums, and run both modules before adoption.
+Run these from the module being investigated with `GOWORK=off`; the routine Core/full commands already set it. Use default Staticcheck checks; there is no meta-linter or style-rule configuration. Review the source and compatibility of an updated pin, verify its sums, and run the affected component modules plus the isolated consumer before adoption.
 
 ## Vulnerability findings
 

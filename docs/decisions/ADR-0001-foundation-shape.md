@@ -10,4 +10,4 @@ This shares maintained engineering capabilities without making all products one 
 
 ## Consequences and owners
 
-The first independent consumer must prove versioned reuse, Application authorization, real persistence and lifecycle rather than copied starter behavior. [Architecture overview](../architecture/overview.md), [Module model](../architecture/module-model.md) and [Consumption](../architecture/consumption-and-packaging.md) own detailed rules. Technology choices are owned by ADR-0002/0003/0005; this ADR owns only the Foundation shape.
+The first independent consumer must prove versioned reuse, Application authorization, real persistence and lifecycle rather than copied starter behavior. [Architecture overview](../architecture/overview.md), [Module model](../architecture/module-model.md) and [Consumption](../architecture/consumption-and-packaging.md) own detailed rules. Technology/distribution choices are owned by ADR-0002/0003/0005/0006; this ADR owns only the Foundation shape.
