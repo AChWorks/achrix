@@ -1,26 +1,25 @@
 // SPDX-License-Identifier: MPL-2.0
 "use strict";
 (() => {
-  const fa = document.documentElement.lang === "fa";
   const authPath = document.body.dataset.authPath;
   const status = document.getElementById("status");
   let busy = false;
-  const text = (en, faText) => fa ? faText : en;
+  const text = key => window.AChrixI18n.text("admin", key);
   function announce(message, failure = false) {
     status.textContent = message;
     status.setAttribute("role", failure ? "alert" : "status");
     status.focus();
   }
   const messages = {
-    400: text("Check the input and try again.", "ورودی را بررسی کنید و دوباره تلاش کنید."),
-    401: text("Your session expired or could not be verified. Sign in again.", "نشست منقضی شده یا قابل تأیید نیست. دوباره وارد شوید."),
-    404: text("No matching record was found. Check the identifier before another change.", "رکوردی پیدا نشد. پیش از تغییر بعدی شناسه را بررسی کنید."),
-    403: text("You do not have permission for this operation.", "مجوز این عملیات را ندارید."),
-    409: text("The record changed or conflicts with this request. Look it up before another change.", "رکورد تغییر کرده یا درخواست تعارض دارد. پیش از تغییر بعدی دوباره آن را بررسی کنید."),
-    413: text("This input is too large.", "اندازهٔ ورودی بیش از حد مجاز است."),
-    429: text("The service is busy. Wait before trying again.", "سرویس مشغول است. پیش از تلاش دوباره کمی صبر کنید.")
+    400: text("input_invalid"),
+    401: text("session_expired"),
+    404: text("record_missing"),
+    403: text("permission_denied"),
+    409: text("record_conflict"),
+    413: text("input_large"),
+    429: text("service_busy")
   };
-  const unknown = text("The outcome could not be confirmed. Do not repeat the change automatically. Inspect the account or image library before another change.", "نتیجه قابل تأیید نیست. تغییر را خودکار تکرار نکنید. پیش از تغییر بعدی حساب یا کتابخانهٔ تصاویر را بررسی کنید.");
+  const unknown = text("outcome_unknown");
   function lock(on) {
     busy = on;
     document.querySelectorAll("form[data-admin-form],form[data-login]").forEach(form => {
@@ -50,13 +49,13 @@
         const minimum = form.hasAttribute("data-login") ? 1 : 15;
         const count = Array.from(input.value).length;
         if (count < minimum || count > 256 || new TextEncoder().encode(input.value).length > 1024) {
-          input.setCustomValidity(text("Check the password length in characters (at most 1024 UTF-8 bytes).", "تعداد کاراکترهای رمز را بررسی کنید (حداکثر ۱۰۲۴ بایت UTF-8)."));
+          input.setCustomValidity(text("password_length"));
           input.reportValidity(); return;
         }
       }
       const confirmation = form.querySelector("[data-confirm]");
-      if (confirmation && !confirmation.checked) { announce(text("Confirm the described change first.", "ابتدا تغییر توضیح‌داده‌شده را تأیید کنید."),true); confirmation.focus(); return; }
-      lock(true); announce(text("Working… Please wait.", "در حال انجام… صبر کنید."));
+      if (confirmation && !confirmation.checked) { announce(text("confirm_change"),true); confirmation.focus(); return; }
+      lock(true); announce(text("working"));
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 15000);
       let sent = false;
@@ -90,14 +89,14 @@
         }
         const result = response.status === 204 ? {} : await response.json();
         if (login) { location.assign("/admin/"); return; }
-        announce(text("Completed. Check the displayed result before another change.", "انجام شد. پیش از تغییر بعدی نتیجهٔ نمایش‌داده‌شده را بررسی کنید."));
+        announce(text("completed"));
         form.dispatchEvent(new CustomEvent("admin:success",{detail:result,bubbles:true}));
         if (confirmation) confirmation.checked = false;
       } catch (error) {
         form.querySelectorAll("input[type=password]").forEach(input => { input.value = ""; });
         const uncertain = sent && !form.hasAttribute("data-read-only") && !messages[error.status];
-        const knownMessage = error.status === 404 && form.dataset.operation === "lookup-login" ? text("No account matched the exact login. Check the retained login before another creation attempt.", "حسابی با این شناسهٔ ورود دقیق پیدا نشد. پیش از ایجاد دوباره شناسهٔ نگه‌داشته‌شده را بررسی کنید.") : messages[error.status];
-        announce(knownMessage || (uncertain ? unknown : text("The service is unavailable. A read can be attempted again; no change was submitted.", "سرویس در دسترس نیست. می‌توانید بررسی را دوباره انجام دهید؛ تغییری ارسال نشد.")),true);
+        const knownMessage = error.status === 404 && form.dataset.operation === "lookup-login" ? text("login_missing") : messages[error.status];
+        announce(knownMessage || (uncertain ? unknown : text("service_unavailable")),true);
         form.dispatchEvent(new CustomEvent("admin:failure",{detail:{status:error.status||0,unknown:uncertain,server:error.detail},bubbles:true}));
       } finally { clearTimeout(timer); lock(false); }
   });

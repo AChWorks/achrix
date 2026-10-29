@@ -1,2 +1,4 @@
 github.com/AChWorks/achrix v0.3.1-0.20261029085807-1a055ff695e4 h1:B7zX9kZVcTdt206hFHK5flHEWe88TBod/7m3efXKjks=
 github.com/AChWorks/achrix v0.3.1-0.20261029085807-1a055ff695e4/go.mod h1:9Zj1xlOsqGJcF1FNrGVBl+4jUfQX2D5AkR96RpB6PB0=
+golang.org/x/text v0.42.0 h1:JbOZXgfeCPU9gacVtYliJqOhD+zhrEqK4LfdpmlUZqI=
+golang.org/x/text v0.42.0/go.mod h1:ojzP1Z+2QtioaF8DTtO8K5q7JWVVYwZKenzujK0Zd0E=

@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "locale": "en",
+  "name": "English",
+  "direction": "ltr",
+  "domain": "admin",
+  "messages": {
+    "administration": {
+      "other": "Administration"
+    },
+    "sign_in": {
+      "other": "Sign in"
+    },
+    "sign_out": {
+      "other": "Sign out"
+    },
+    "skip": {
+      "other": "Skip to content"
+    },
+    "navigation": {
+      "other": "Administration sections"
+    },
+    "enable_js": {
+      "other": "Enable JavaScript to submit these forms securely."
+    },
+    "choose_section": {
+      "other": "Choose a permitted section from navigation."
+    },
+    "no_sections": {
+      "other": "No administration sections are permitted for this account."
+    },
+    "login_label": {
+      "other": "Login"
+    },
+    "password_label": {
+      "other": "Password"
+    },
+    "input_invalid": {
+      "other": "Check the input and try again."
+    },
+    "session_expired": {
+      "other": "Your session expired or could not be verified. Sign in again."
+    },
+    "record_missing": {
+      "other": "No matching record was found. Check the identifier before another change."
+    },
+    "permission_denied": {
+      "other": "You do not have permission for this operation."
+    },
+    "record_conflict": {
+      "other": "The record changed or conflicts with this request. Look it up before another change."
+    },
+    "input_large": {
+      "other": "This input is too large."
+    },
+    "service_busy": {
+      "other": "The service is busy. Wait before trying again."
+    },
+    "outcome_unknown": {
+      "other": "The outcome could not be confirmed. Do not repeat the change automatically. Inspect the account or image library before another change."
+    },
+    "password_length": {
+      "other": "Check the password length in characters (at most 1024 UTF-8 bytes)."
+    },
+    "confirm_change": {
+      "other": "Confirm the described change first."
+    },
+    "working": {
+      "other": "Working… Please wait."
+    },
+    "completed": {
+      "other": "Completed. Check the displayed result before another change."
+    },
+    "login_missing": {
+      "other": "No account matched the exact login. Check the retained login before another creation attempt."
+    },
+    "service_unavailable": {
+      "other": "The service is unavailable. A read can be attempted again; no change was submitted."
+    }
+  }
+}

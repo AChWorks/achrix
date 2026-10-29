@@ -10,6 +10,7 @@ import (
 	"errors"
 	"html/template"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/AChWorks/achrix"
+	"github.com/AChWorks/achrix/admin/localize"
 )
 
 var (
@@ -34,23 +36,24 @@ type Authorizer interface {
 	Authorize(context.Context, achrix.Principal, string, string) error
 }
 
-// Text keeps protocol IDs independent from translated presentation text.
-type Text struct{ English, Persian string }
-
-func (t Text) In(language string) string {
-	if language == "fa" && t.Persian != "" {
-		return t.Persian
-	}
-	return t.English
-}
+// Text identifies a complete catalog message independently of protocol IDs.
+// Each owning Module or product supplies the Domain and stable Key.
+type Text struct{ Domain, Key string }
 
 type Config struct {
 	Origin string
 	// AuthPath is a same-origin absolute mount for the public Identity.Web handler.
 	// The product serves it separately; Admin never proxies credentials.
 	AuthPath string
-	// Language is en or fa. It changes display only, never domain content.
+	// Language selects an installed UI locale; empty means English. It never
+	// changes stored domain content, canonical values or authorization.
 	Language string
+	// Catalogs adds product-owned and installed translation data to the snapshot.
+	Catalogs []fs.FS
+	// SelectLanguage optionally applies product policy to each admitted request.
+	// Empty uses Language; an unsupported locale fails closed before dispatch. The
+	// product owns preferences, persistence and synchronization of this callback.
+	SelectLanguage func(*http.Request) string
 }
 
 // Surface is a finite, instance-owned registration of trusted compiled code.
@@ -58,6 +61,7 @@ type Config struct {
 type Surface struct {
 	ID                 string
 	Title              Text
+	Catalogs           fs.FS
 	Capability, Target string
 	Handler            func(http.ResponseWriter, *http.Request, Request)
 }
@@ -70,6 +74,7 @@ type Page struct {
 type Request struct {
 	Principal achrix.Principal
 	Language  string
+	Localizer *localize.Localizer
 	Render    func(Page) error
 	// Allowed is only a presentation hint; it never grants domain permission.
 	Allowed func(capability, target string) bool
@@ -82,6 +87,8 @@ type Shell struct {
 	policy   Authorizer
 	surfaces []Surface
 	slots    chan struct{}
+	catalog  *localize.Catalog
+	browser  map[string]map[string]string
 }
 
 var surfaceSyntax = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
@@ -106,9 +113,6 @@ func New(config Config, auth Authenticator, policy Authorizer, surfaces ...Surfa
 	if config.Language == "" {
 		config.Language = "en"
 	}
-	if config.Language != "en" && config.Language != "fa" {
-		return nil, ErrConfiguration
-	}
 	a, err := url.Parse(config.AuthPath)
 	if err != nil || !strings.HasPrefix(config.AuthPath, "/") || strings.HasPrefix(config.AuthPath, "//") || a.Path != config.AuthPath || a.RawPath != "" || a.RawQuery != "" || a.Fragment != "" || a.Host != "" || strings.ContainsAny(config.AuthPath, "\\\r\n") || strings.Contains(config.AuthPath, "..") || strings.HasSuffix(config.AuthPath, "/") || config.AuthPath == "/" || config.AuthPath == "/admin" || strings.HasPrefix(config.AuthPath, "/admin/") {
 		return nil, ErrConfiguration
@@ -118,12 +122,16 @@ func New(config Config, auth Authenticator, policy Authorizer, surfaces ...Surfa
 	}
 	seen := make(map[string]bool, len(surfaces))
 	for _, s := range surfaces {
-		if !surfaceSyntax.MatchString(s.ID) || s.ID == "login" || s.ID == "assets" || seen[s.ID] || s.Title.English == "" || len(s.Title.English) > 100 || len(s.Title.Persian) > 200 || s.Capability == "" || s.Handler == nil {
+		if !surfaceSyntax.MatchString(s.ID) || s.ID == "login" || s.ID == "assets" || seen[s.ID] || s.Title.Domain == "" || s.Title.Key == "" || s.Capability == "" || s.Handler == nil {
 			return nil, ErrConfiguration
 		}
 		seen[s.ID] = true
 	}
-	return &Shell{config: config, host: u.Host, auth: auth, policy: policy, surfaces: append([]Surface(nil), surfaces...), slots: make(chan struct{}, 16)}, nil
+	s := &Shell{config: config, host: u.Host, auth: auth, policy: policy, surfaces: append([]Surface(nil), surfaces...), slots: make(chan struct{}, 16)}
+	if err := s.configureCatalogs(); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 func (s *Shell) Handler() http.Handler { return http.HandlerFunc(s.serve) }
@@ -209,22 +217,28 @@ func (s *Shell) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 12<<20)
 	defer r.Body.Close()
-	if r.URL.Path == "/admin/assets/admin.css" || r.URL.Path == "/admin/assets/admin.js" {
+	if name, kind, ok := assetPath(r.URL.Path); ok {
 		if r.Method != http.MethodGet {
 			s.fail(w, 405, "invalid_request")
 			return
-		}
-		name, kind := "assets/admin.css", "text/css; charset=utf-8"
-		if strings.HasSuffix(r.URL.Path, ".js") {
-			name, kind = "assets/admin.js", "text/javascript; charset=utf-8"
 		}
 		data, _ := assets.ReadFile(name)
 		w.Header().Set("Content-Type", kind)
 		_, _ = w.Write(data)
 		return
 	}
+	locale, err := s.requestLocale(r)
+	if err != nil {
+		s.fail(w, 503, "locale_unavailable")
+		return
+	}
 	if r.URL.Path == "/admin/login" && r.Method == http.MethodGet {
-		if err := s.render(w, Page{Title: s.word("Sign in", "ورود"), Template: loginTemplate, Data: s.config}, nil, "login"); err != nil {
+		title, titleErr := locale.Text("admin", "sign_in", nil)
+		if titleErr != nil {
+			s.fail(w, 503, "locale_unavailable")
+			return
+		}
+		if err := s.render(w, Page{Title: title, Template: loginTemplate, Data: login{locale, s.config.AuthPath}}, nil, "login", locale); err != nil {
 			s.fail(w, 503, "unavailable")
 		}
 		return
@@ -247,7 +261,12 @@ func (s *Shell) serve(w http.ResponseWriter, r *http.Request) {
 	for _, surface := range s.surfaces {
 		err := s.policy.Authorize(ctx, p, surface.Capability, surface.Target)
 		if err == nil {
-			nav = append(nav, navItem{surface.ID, surface.Title.In(s.config.Language)})
+			title, titleErr := locale.Text(surface.Title.Domain, surface.Title.Key, nil)
+			if titleErr != nil {
+				s.fail(w, 503, "locale_unavailable")
+				return
+			}
+			nav = append(nav, navItem{surface.ID, title})
 		} else if !errors.Is(err, achrix.ErrDenied) {
 			s.fail(w, 503, "unavailable")
 			return
@@ -258,7 +277,12 @@ func (s *Shell) serve(w http.ResponseWriter, r *http.Request) {
 			s.fail(w, 405, "invalid_request")
 			return
 		}
-		if err = s.render(w, Page{Title: s.word("Administration", "مدیریت"), Template: homeTemplate, Data: home{len(nav), s.config.Language}}, nav, ""); err != nil {
+		title, titleErr := locale.Text("admin", "administration", nil)
+		if titleErr != nil {
+			s.fail(w, 503, "locale_unavailable")
+			return
+		}
+		if err = s.render(w, Page{Title: title, Template: homeTemplate, Data: home{len(nav), locale}}, nav, "", locale); err != nil {
 			s.fail(w, 503, "unavailable")
 		}
 		return
@@ -281,13 +305,12 @@ func (s *Shell) serve(w http.ResponseWriter, r *http.Request) {
 		if len(parts) == 2 {
 			copy.URL.Path = "/" + parts[1]
 		}
-		surface.Handler(w, copy, Request{Principal: p, Language: s.config.Language, Render: func(page Page) error { return s.render(w, page, nav, surface.ID) }, Allowed: func(cap, target string) bool { return s.policy.Authorize(ctx, p, cap, target) == nil }})
+		surface.Handler(w, copy, Request{Principal: p, Language: locale.Locale().Tag, Localizer: locale, Render: func(page Page) error { return s.render(w, page, nav, surface.ID, locale) }, Allowed: func(cap, target string) bool { return s.policy.Authorize(ctx, p, cap, target) == nil }})
 		return
 	}
 	s.fail(w, 404, "not_found")
 }
 
-func (s *Shell) word(en, fa string) string { return (Text{en, fa}).In(s.config.Language) }
 func (s *Shell) fail(w http.ResponseWriter, status int, code string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
@@ -311,9 +334,11 @@ type layout struct {
 	Navigation                         []navItem
 	Content                            template.HTML
 	SignedIn                           bool
+	Locale                             *localize.Localizer
+	Messages                           string
 }
 
-func (s *Shell) render(w http.ResponseWriter, page Page, nav []navItem, active string) error {
+func (s *Shell) render(w http.ResponseWriter, page Page, nav []navItem, active string, locale *localize.Localizer) error {
 	if page.Template == nil || page.Template.Lookup("content") == nil {
 		return ErrConfiguration
 	}
@@ -321,11 +346,8 @@ func (s *Shell) render(w http.ResponseWriter, page Page, nav []navItem, active s
 	if err := page.Template.ExecuteTemplate(&content, "content", page.Data); err != nil {
 		return err
 	}
-	dir := "ltr"
-	if s.config.Language == "fa" {
-		dir = "rtl"
-	}
-	view := layout{s.config.Language, dir, page.Title, s.config.AuthPath, active, nav, template.HTML(content.String()), active != "login"} // Only a successfully autoescaped compiled template enters this trusted slot.
+	metadata := locale.Locale()
+	view := layout{Lang: metadata.Tag, Dir: metadata.Direction, Title: page.Title, AuthPath: s.config.AuthPath, Active: active, Navigation: nav, Content: template.HTML(content.String()), SignedIn: active != "login", Locale: locale, Messages: s.browser[metadata.Tag][active]} // Only a successfully autoescaped compiled template enters this trusted slot.
 	if err := layoutTemplate.Execute(&result, view); err != nil {
 		return err
 	}
@@ -336,14 +358,18 @@ func (s *Shell) render(w http.ResponseWriter, page Page, nav []navItem, active s
 //go:embed assets/*
 var assets embed.FS
 var layoutTemplate = template.Must(template.New("layout").Parse(`<!doctype html>
-<html lang="{{.Lang}}" dir="{{.Dir}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}}</title><link rel="stylesheet" href="/admin/assets/admin.css"><script src="/admin/assets/admin.js" defer></script></head>
-<body data-auth-path="{{.AuthPath}}"><a class="skip" href="#main">{{if eq .Lang "fa"}}رفتن به محتوا{{else}}Skip to content{{end}}</a><header><a href="/admin/">{{if eq .Lang "fa"}}مدیریت{{else}}Administration{{end}}</a>{{if .SignedIn}}<button type="button" id="logout">{{if eq .Lang "fa"}}خروج{{else}}Sign out{{end}}</button>{{end}}</header>
-<div class="shell"><nav aria-label="{{if eq .Lang "fa"}}بخش` + "\u200c" + `های مدیریت{{else}}Administration sections{{end}}"><ul>{{range .Navigation}}<li><a href="/admin/{{.ID}}" {{if eq $.Active .ID}}aria-current="page"{{end}}>{{.Title}}</a></li>{{end}}</ul></nav><main id="main" tabindex="-1"><h1>{{.Title}}</h1><noscript><p>{{if eq .Lang "fa"}}برای ارسال امن فرم` + "\u200c" + `ها JavaScript را فعال کنید.{{else}}Enable JavaScript to submit these forms securely.{{end}}</p></noscript><p id="status" role="status" aria-live="polite" tabindex="-1"></p>{{.Content}}</main></div></body></html>`))
+<html lang="{{.Lang}}" dir="{{.Dir}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}}</title><link rel="stylesheet" href="/admin/assets/admin.css"><script src="/admin/assets/i18n.js" defer></script><script src="/admin/assets/admin.js" defer></script></head>
+<body data-auth-path="{{.AuthPath}}"><div id="admin-messages" hidden>{{.Messages}}</div><a class="skip" href="#main">{{.Locale.Text "admin" "skip" nil}}</a><header><a href="/admin/">{{.Locale.Text "admin" "administration" nil}}</a>{{if .SignedIn}}<button type="button" id="logout">{{.Locale.Text "admin" "sign_out" nil}}</button>{{end}}</header>
+<div class="shell"><nav aria-label="{{.Locale.Text "admin" "navigation" nil}}"><ul>{{range .Navigation}}<li><a href="/admin/{{.ID}}" {{if eq $.Active .ID}}aria-current="page"{{end}}>{{.Title}}</a></li>{{end}}</ul></nav><main id="main" tabindex="-1"><h1>{{.Title}}</h1><noscript><p>{{.Locale.Text "admin" "enable_js" nil}}</p></noscript><p id="status" role="status" aria-live="polite" tabindex="-1"></p>{{.Content}}</main></div></body></html>`))
 
 type home struct {
-	Count    int
-	Language string
+	Count  int
+	Locale *localize.Localizer
+}
+type login struct {
+	Locale   *localize.Localizer
+	AuthPath string
 }
 
-var homeTemplate = template.Must(template.New("home").Parse(`{{define "content"}}<p>{{if .Count}}{{if eq .Language "fa"}}یک بخش مجاز را از فهرست انتخاب کنید.{{else}}Choose a permitted section from navigation.{{end}}{{else}}{{if eq .Language "fa"}}هیچ بخش مدیریتی برای این حساب مجاز نیست.{{else}}No administration sections are permitted for this account.{{end}}{{end}}</p>{{end}}`))
-var loginTemplate = template.Must(template.New("login").Parse(`{{define "content"}}<form data-login action="{{.AuthPath}}/login" method="post"><label for="login">{{if eq .Language "fa"}}شناسهٔ ورود{{else}}Login{{end}}</label><input id="login" name="login" dir="ltr" autocomplete="username" required maxlength="64"><label for="password">{{if eq .Language "fa"}}رمز عبور{{else}}Password{{end}}</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="512"><button type="submit" disabled>{{if eq .Language "fa"}}ورود{{else}}Sign in{{end}}</button></form>{{end}}`))
+var homeTemplate = template.Must(template.New("home").Parse(`{{define "content"}}<p>{{if .Count}}{{.Locale.Text "admin" "choose_section" nil}}{{else}}{{.Locale.Text "admin" "no_sections" nil}}{{end}}</p>{{end}}`))
+var loginTemplate = template.Must(template.New("login").Parse(`{{define "content"}}<form data-login action="{{.AuthPath}}/login" method="post"><label for="login">{{.Locale.Text "admin" "login_label" nil}}</label><input id="login" name="login" dir="ltr" autocomplete="username" required maxlength="64"><label for="password">{{.Locale.Text "admin" "password_label" nil}}</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="512"><button type="submit" disabled>{{.Locale.Text "admin" "sign_in" nil}}</button></form>{{end}}`))
