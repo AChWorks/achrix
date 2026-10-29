@@ -2,4 +2,4 @@ module github.com/AChWorks/achrix/multisite
 
 go 1.27.3
 
-require github.com/AChWorks/achrix v0.3.1-0.20261029084914-8b84a636f467
+require github.com/AChWorks/achrix v0.3.1-0.20261029085807-1a055ff695e4
