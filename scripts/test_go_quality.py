@@ -26,7 +26,7 @@ case "$*" in
   'env GOSUMDB') echo "$FAKE_GOSUMDB";;
   'env GOROOT') echo "$FAKE_GO_ROOT";;
   'mod download -json '*)
-    echo '{"Path":"honnef.co/go/tools","Version":"v0.8.1","Sum":"wrong","GoModSum":"wrong"}';;
+    echo '{"Path":"honnef.co/go/tools","Version":"v0.8.2","Sum":"wrong","GoModSum":"wrong"}';;
   *) echo 'Unexpected tool acquisition' >&2; exit 99;;
 esac
 """)

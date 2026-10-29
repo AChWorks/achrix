@@ -35,11 +35,11 @@ PY
 }
 
 # Staticcheck verified source identity; official tag commit:
-# https://github.com/dominikh/go-tools/commit/1285a6a5ec1e0ebb658f49e82b6c566a878cc3cb
-staticcheck_version=v0.8.1
+# https://github.com/dominikh/go-tools/commit/54455593555daf6bfcf3c480faaada7de3145357
+staticcheck_version=v0.8.2
 verify_module honnef.co/go/tools "$staticcheck_version" \
-  'h1:+JKf3xJ1ni4CwrhVg4/pqsfPGP6vNAXcKbMXJodYx3w=' \
-  'h1:XA+OnlRA9EDh/ukGvXMNSZNKGwFQJ+5dER0ioUkOxks='
+  'h1:+jPbCzuYxYrcoOvCecYUFDj+XJQRmzIhJmlbpps21Zk=' \
+  'h1:xG1Q4n+mg3bKZrO6RWFA9jFlkqplflmDRHGeuexiLDs='
 go install "honnef.co/go/tools/cmd/staticcheck@$staticcheck_version"
 
 # govulncheck verified source identity; official tag commit:
