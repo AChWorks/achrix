@@ -16,7 +16,7 @@ The document index, not a status report. Start from README/AGENTS and the releva
 | Authorization, product accounts/SSO, AI access, secrets, abuse and vulnerability reporting | [Security](security/security-and-authorization.md); GitHub entry: [SECURITY](../SECURITY.md) |
 | Install/upgrade, backup/restore/recovery profile, compatibility and official artifact evidence | [Lifecycle](lifecycle/lifecycle-and-compatibility.md); [installation tooling](../installation/README.md) owns the first reusable assessment/re-entry API |
 | Deployment/runtime configuration versus durable Settings, diagnosis, bounded resources and cost | [Operations](operations/operability-performance.md) |
-| Semantic web, SEO, localization and machine content representations | [Web](web/seo-and-semantic-web.md) |
+| Semantic web, SEO, localization and machine content representations | [Web](web/seo-and-semantic-web.md), [file-based localization](web/localization.md) |
 | Go analysis tools, vulnerability triage and Foundation benchmarks | [Go quality](development/go-quality.md) |
 | Development Identity/Audit/Media contracts, web security, atomic events and retained-state/asset limits | [Identity](../identity/README.md), [Audit](../audit/README.md), [Media](../media/README.md) |
 | Optional exact-authority resolution, authorized inventory and per-site activation planning | [Multi-Site](../multisite/README.md), [consumer composition proof](../fixtures/notes/README.md#optional-multi-site-resolver-composition); products own isolation, persistence and actual activation. [Issue #4](https://github.com/AChWorks/achrix/issues/4) owns broader proof history/live execution rather than API semantics |

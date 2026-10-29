@@ -11,7 +11,7 @@ import subprocess
 
 from modules import inventory, owns_path
 
-EXTENSIONS = {".go", ".sql", ".js", ".css", ".html"}
+EXTENSIONS = {".go", ".sql", ".js", ".css", ".html", ".json"}
 
 
 def runtime_sources(root, module, modules):

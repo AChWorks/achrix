@@ -190,6 +190,23 @@ class ConsumerSourceTests(unittest.TestCase):
                 verify_consumer.verify_sources(repo, root / "resolved.json")
 
 
+    def test_catalog_bytes_and_file_sets_are_runtime_inputs(self):
+        with tempfile.TemporaryDirectory(prefix="achrix-catalog-source-") as temporary:
+            root = Path(temporary)
+            module = {"name": "admin", "directory": "admin",
+                      "path": modules.MODULE_PATH + "/admin"}
+            (root / "locales").mkdir()
+            catalog = root / "locales/en.json"
+            catalog.write_text('{"messages":{"title":{"other":"Administration"}}}')
+            actual = verify_consumer.runtime_sources(root, module, [module])
+            self.assertEqual(actual, {"locales/en.json": catalog.read_bytes()})
+            catalog.write_text('{"messages":{"title":{"other":"Changed"}}}')
+            changed = verify_consumer.runtime_sources(root, module, [module])
+            self.assertNotEqual(actual, changed)
+            catalog.unlink()
+            self.assertNotEqual(actual.keys(), verify_consumer.runtime_sources(root, module, [module]).keys())
+
+
 class CompiledIdentityTests(unittest.TestCase):
     def test_independent_versions_and_descriptor_binding(self):
         with tempfile.TemporaryDirectory(prefix="achrix-version-proof-") as temporary:
