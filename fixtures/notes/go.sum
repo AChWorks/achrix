@@ -8,8 +8,8 @@ github.com/AChWorks/achrix/identity v0.0.0-20261029085058-5628121b4361 h1:+zP1aD
 github.com/AChWorks/achrix/identity v0.0.0-20261029085058-5628121b4361/go.mod h1:+JF6L8pNbhzKNYD8yP+zbsfqwz23B3jGrxSmYt5MdVc=
 github.com/AChWorks/achrix/installation v0.0.0-20261029084914-8b84a636f467 h1:GguI2AqjME8++AuLgxu4r1McVGc10QXSW6UZeYECo8g=
 github.com/AChWorks/achrix/installation v0.0.0-20261029084914-8b84a636f467/go.mod h1:Zs4loFE0jhUmbSS1TvPrTLLMghgUxBColMu/EdBDerI=
-github.com/AChWorks/achrix/media v0.0.0-20261029085058-5628121b4361 h1:0BGZhTIEW3CDh4XKnKkZ2GLk4i9lQx9x/7n8DPwxCD4=
-github.com/AChWorks/achrix/media v0.0.0-20261029085058-5628121b4361/go.mod h1:G9dD0uOJAs6p+ErD37X/4I+OWBrVQE80fp1synyxWNA=
+github.com/AChWorks/achrix/media v0.0.0-20261029085330-11fa311b3e19 h1:LZM9aQOBUE3uOS/K8R3KLmzNBqAwM1RGVPGIGA6LWkU=
+github.com/AChWorks/achrix/media v0.0.0-20261029085330-11fa311b3e19/go.mod h1:FGBEB7oPB85rnLClFozX28Ijbc6kobgBFPG13WCAHTk=
 github.com/AChWorks/achrix/multisite v0.0.0-20261029085027-9527dfa5712a h1:2EZxL9bJv2X408t52JlHEBOYOKbiRIf9CoaezFalPi4=
 github.com/AChWorks/achrix/multisite v0.0.0-20261029085027-9527dfa5712a/go.mod h1:65NHBAwyqTaiSMjxmEuFSHOq2hSuxINzUQxlPOCVRoA=
 github.com/alexedwards/argon2id v1.0.0 h1:wJzDx66hqWX7siL/SRUmgz3F8YMrd/nfX/xHHcQQP0w=
@@ -17,8 +17,8 @@ github.com/alexedwards/argon2id v1.0.0/go.mod h1:tYKkqIjzXvZdzPvADMWOEZ+l6+BD6Ct
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/gabriel-vasile/mimetype v1.4.15 h1:05iP/CYtZ/w455R/KZM6rZ5ieAdh99UPtd+d3YzLmaI=
-github.com/gabriel-vasile/mimetype v1.4.15/go.mod h1:azpTcoLcDZRNgFou5j+APrqQx9HqVPWa6ijYQIIVswQ=
+github.com/gabriel-vasile/mimetype v1.4.16 h1:5izNFuvA37st1dDRAcA7TtmngBmRgiIPDmTtiEvjx1E=
+github.com/gabriel-vasile/mimetype v1.4.16/go.mod h1:3oFFwxX8kTklZwzIl2aQEDZT0lKY8xH92ST88bAwba4=
 github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=
