@@ -403,3 +403,102 @@ func TestAggregateMessageAndDirectoryBounds(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSchemaFieldNamesAreExactButMessageIDsAreCaseSensitive(t *testing.T) {
+	valid := catalogFile("en", "English", "ltr", "test", map[string]Forms{"greeting": {Other: "Hello"}})
+	// encoding/json's struct decoder accepts case-insensitive names by default;
+	// catalogs must reject aliases even when they occur without a collision.
+	for _, field := range []string{"schema", "locale", "name", "direction", "domain", "messages"} {
+		alias := strings.ToUpper(field[:1]) + field[1:]
+		for _, collision := range []bool{false, true} {
+			t.Run(field+fmt.Sprint(collision), func(t *testing.T) {
+				var data []byte
+				if collision {
+					data = append([]byte(`{"`+alias+`":null,`), valid[1:]...)
+				} else {
+					data = bytes.Replace(valid, []byte(`"`+field+`":`), []byte(`"`+alias+`":`), 1)
+				}
+				if _, err := Load(source(data)); !errors.Is(err, ErrCatalog) {
+					t.Fatal("case alias accepted", err)
+				}
+			})
+		}
+	}
+	for _, form := range []string{"zero", "one", "two", "few", "many", "other"} {
+		for _, collision := range []bool{false, true} {
+			t.Run(form+fmt.Sprint(collision), func(t *testing.T) {
+				alias := strings.ToUpper(form[:1]) + form[1:]
+				content := `"` + alias + `":"Hello"`
+				if form != "other" || collision {
+					content += `,"other":"Hello"`
+				}
+				if collision && form != "other" {
+					content += `,"` + form + `":"Hello"`
+				}
+				data := []byte(`{"schema":1,"locale":"en","name":"English","direction":"ltr","domain":"test","messages":{"greeting":{` + content + `}}}`)
+				if _, err := Load(source(data)); !errors.Is(err, ErrCatalog) {
+					t.Fatal("case alias accepted", err)
+				}
+			})
+		}
+	}
+	for _, data := range [][]byte{
+		[]byte(`{"schema":1,"s\u0063hema":1,"locale":"en","name":"English","direction":"ltr","domain":"test","messages":{"greeting":{"other":"Hello"}}}`),
+		[]byte(`{"schema":1,"locale":"en","name":"English","direction":"ltr","domain":"test","messages":{"greeting":{"other":"Hello","o\u0074her":"Again"}}}`),
+	} {
+		if _, err := Load(source(data)); !errors.Is(err, ErrCatalog) {
+			t.Fatal("escaped duplicate accepted", err)
+		}
+	}
+	// Escaped spellings denote the same logical valid field when not duplicated.
+	escaped := bytes.Replace(valid, []byte(`"schema":`), []byte(`"s\u0063hema":`), 1)
+	loadTest(t, source(escaped))
+	c := loadTest(t, english(map[string]Forms{"greeting": {Other: "Lowercase"}, "Greeting": {Other: "Uppercase"}}))
+	l := selectTest(t, c, "en")
+	for key, want := range map[string]string{"greeting": "Lowercase", "Greeting": "Uppercase"} {
+		got, err := l.Text("test", key, nil)
+		if err != nil || got != want {
+			t.Fatal(key, got, err)
+		}
+	}
+}
+
+func TestSuppliedSchemaValuesRejectNullAndWrongTypes(t *testing.T) {
+	valid := catalogFile("en", "English", "ltr", "test", map[string]Forms{"greeting": {Other: "Hello"}})
+	for _, field := range []string{"schema", "locale", "name", "direction", "domain", "messages"} {
+		t.Run("null "+field, func(t *testing.T) {
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(valid, &fields); err != nil {
+				t.Fatal(err)
+			}
+			fields[field] = json.RawMessage("null")
+			data, err := json.Marshal(fields)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = Load(source(data)); !errors.Is(err, ErrCatalog) {
+				t.Fatal("null field accepted", err)
+			}
+		})
+	}
+	for _, form := range []string{"zero", "one", "two", "few", "many", "other"} {
+		for _, value := range []string{"null", "1", "false", "[]", "{}"} {
+			t.Run(form+value, func(t *testing.T) {
+				content := `"` + form + `":` + value
+				if form != "other" {
+					content += `,"other":"Hello"`
+				}
+				data := []byte(`{"schema":1,"locale":"en","name":"English","direction":"ltr","domain":"test","messages":{"greeting":{` + content + `}}}`)
+				if _, err := Load(source(data)); !errors.Is(err, ErrCatalog) {
+					t.Fatal("nonstring form accepted", err)
+				}
+			})
+		}
+	}
+	for _, value := range []string{"null", "1", "false", "[]", "\"text\""} {
+		data := []byte(`{"schema":1,"locale":"en","name":"English","direction":"ltr","domain":"test","messages":{"greeting":` + value + `}}`)
+		if _, err := Load(source(data)); !errors.Is(err, ErrCatalog) {
+			t.Fatal("nonobject message accepted", value, err)
+		}
+	}
+}

@@ -280,9 +280,11 @@ func parseDocument(data []byte) (document, error) {
 		return doc, err
 	}
 	// encoding/json otherwise replaces invalid UTF-8 and silently accepts duplicate
-	// keys. The bounded token pass rejects duplicates at every object depth first.
+	// keys and matches struct fields case-insensitively. The bounded token pass
+	// rejects duplicates and requires exact schema field names before decoding.
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	if err := uniqueValue(decoder, 0); err != nil {
+	decoder.UseNumber()
+	if err := uniqueValue(decoder, 0, documentObject); err != nil {
 		return doc, err
 	}
 	if _, err := decoder.Token(); err != io.EOF {
@@ -295,13 +297,67 @@ func parseDocument(data []byte) (document, error) {
 	}
 	return doc, nil
 }
-func uniqueValue(decoder *json.Decoder, depth int) error {
+
+type objectKind uint8
+
+const (
+	valueObject objectKind = iota
+	documentObject
+	messagesObject
+	formsObject
+	stringValue
+	numberValue
+)
+
+// Message identifiers remain arbitrary case-sensitive map keys; only the known
+// document and Forms schema fields are restricted. Decoded keys make escaped
+// spellings obey the same exact-name and duplicate rules.
+func childObject(kind objectKind, name string) (objectKind, error) {
+	switch kind {
+	case documentObject:
+		switch name {
+		case "schema":
+			return numberValue, nil
+		case "locale", "name", "direction", "domain":
+			return stringValue, nil
+		case "messages":
+			return messagesObject, nil
+		default:
+			return valueObject, errors.New("unsupported catalog field")
+		}
+	case messagesObject:
+		return formsObject, nil
+	case formsObject:
+		switch name {
+		case "zero", "one", "two", "few", "many", "other":
+			return stringValue, nil
+		}
+		return valueObject, errors.New("unsupported plural form")
+	}
+	return valueObject, nil
+}
+
+func uniqueValue(decoder *json.Decoder, depth int, kind objectKind) error {
 	if depth > 8 {
 		return fmt.Errorf("%w: JSON depth", ErrLimit)
 	}
 	token, err := decoder.Token()
 	if err != nil {
 		return errors.New("malformed JSON")
+	}
+	switch kind {
+	case documentObject, messagesObject, formsObject:
+		if token != json.Delim('{') {
+			return errors.New("catalog structure requires an object")
+		}
+	case stringValue:
+		if _, ok := token.(string); !ok {
+			return errors.New("catalog field requires a string")
+		}
+	case numberValue:
+		if _, ok := token.(json.Number); !ok {
+			return errors.New("schema requires a number")
+		}
 	}
 	delimiter, ok := token.(json.Delim)
 	if !ok {
@@ -323,7 +379,11 @@ func uniqueValue(decoder *json.Decoder, depth int) error {
 				return errors.New("duplicate JSON object key")
 			}
 			seen[name] = true
-			if err = uniqueValue(decoder, depth+1); err != nil {
+			child, err := childObject(kind, name)
+			if err != nil {
+				return err
+			}
+			if err = uniqueValue(decoder, depth+1, child); err != nil {
 				return err
 			}
 		}
@@ -333,7 +393,7 @@ func uniqueValue(decoder *json.Decoder, depth int) error {
 		}
 	case '[':
 		for decoder.More() {
-			if err := uniqueValue(decoder, depth+1); err != nil {
+			if err := uniqueValue(decoder, depth+1, valueObject); err != nil {
 				return err
 			}
 		}
