@@ -3,6 +3,12 @@ name: AChrix release preparation
 on:
   workflow_dispatch:
     inputs:
+      component:
+        description: Independently versioned official component
+        required: true
+        default: core
+        type: choice
+        options: [core, admin, audit, identity, media, multisite, installation]
       version:
         description: Unpublished developer version (v0.MINOR.PATCH)
         required: true
@@ -32,6 +38,7 @@ jobs:
       attestations: write
     env:
       GH_TOKEN: ${{ github.token }}
+      RELEASE_COMPONENT: ${{ inputs.component }}
       RELEASE_VERSION: ${{ inputs.version }}
       SYFT_VERSION: v1.52.0
     steps:
@@ -48,13 +55,13 @@ jobs:
             grep -Fq -- "$flag" "$RUNNER_TEMP/attestation-verify-help"
           done
       - name: Gate source and export matching tracked bytes
-        run: python3 scripts/prepare_release.py "$RELEASE_VERSION" "$RUNNER_TEMP/achrix-release"
+        run: python3 scripts/prepare_release.py "$RELEASE_VERSION" "$RUNNER_TEMP/achrix-release" --component "$RELEASE_COMPONENT"
       - name: Inventory the exact exported source
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
-          path: ${{ runner.temp }}/achrix-release/source/achrix-${{ inputs.version }}
+          path: ${{ runner.temp }}/achrix-release/source/achrix-${{ inputs.component }}-${{ inputs.version }}
           format: spdx-json
-          output-file: ${{ runner.temp }}/achrix-release/assets/achrix-${{ inputs.version }}-source.spdx.json
+          output-file: ${{ runner.temp }}/achrix-release/assets/achrix-${{ inputs.component }}-${{ inputs.version }}-source.spdx.json
           syft-version: ${{ env.SYFT_VERSION }}
           upload-artifact: false
           upload-release-assets: false
@@ -64,7 +71,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/achrix-release/assets"
-          sha256sum "achrix-$RELEASE_VERSION-source.tar.gz" "achrix-$RELEASE_VERSION-source.spdx.json" release.json > SHA256SUMS
+          sha256sum "achrix-$RELEASE_COMPONENT-$RELEASE_VERSION-source.tar.gz" "achrix-$RELEASE_COMPONENT-$RELEASE_VERSION-source.spdx.json" release.json > SHA256SUMS
       - name: Attest all release subjects
         id: provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -75,8 +82,8 @@ jobs:
         id: sbom
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: ${{ runner.temp }}/achrix-release/assets/achrix-${{ inputs.version }}-source.tar.gz
-          sbom-path: ${{ runner.temp }}/achrix-release/assets/achrix-${{ inputs.version }}-source.spdx.json
+          subject-path: ${{ runner.temp }}/achrix-release/assets/achrix-${{ inputs.component }}-${{ inputs.version }}-source.tar.gz
+          sbom-path: ${{ runner.temp }}/achrix-release/assets/achrix-${{ inputs.component }}-${{ inputs.version }}-source.spdx.json
           create-storage-record: false
       - name: Verify signed subjects and final source freshness
         shell: bash
@@ -96,16 +103,16 @@ jobs:
             --source-digest "$GITHUB_SHA"
             --deny-self-hosted-runners
           )
-          for subject in "achrix-$RELEASE_VERSION-source.tar.gz" "achrix-$RELEASE_VERSION-source.spdx.json" release.json; do
+          for subject in "achrix-$RELEASE_COMPONENT-$RELEASE_VERSION-source.tar.gz" "achrix-$RELEASE_COMPONENT-$RELEASE_VERSION-source.spdx.json" release.json; do
             gh attestation verify "$subject" --bundle provenance.sigstore.json "${policy[@]}"
           done
-          gh attestation verify "achrix-$RELEASE_VERSION-source.tar.gz" --bundle sbom.sigstore.json "${policy[@]}" --predicate-type https://spdx.dev/Document/v2.3
+          gh attestation verify "achrix-$RELEASE_COMPONENT-$RELEASE_VERSION-source.tar.gz" --bundle sbom.sigstore.json "${policy[@]}" --predicate-type https://spdx.dev/Document/v2.3
           cd "$GITHUB_WORKSPACE"
-          python3 scripts/prepare_release.py "$RELEASE_VERSION" --check-only
+          python3 scripts/prepare_release.py "$RELEASE_VERSION" --component "$RELEASE_COMPONENT" --check-only
       - name: Upload verified preparation for Master publication
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: achrix-${{ inputs.version }}-release
+          name: achrix-${{ inputs.component }}-${{ inputs.version }}-release
           path: ${{ runner.temp }}/achrix-release/assets/*
           if-no-files-found: error
           compression-level: 0

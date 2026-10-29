@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "modules": [
+    {
+      "name": "core",
+      "directory": ".",
+      "path": "github.com/AChWorks/achrix"
+    },
+    {
+      "name": "admin",
+      "directory": "admin",
+      "path": "github.com/AChWorks/achrix/admin"
+    },
+    {
+      "name": "audit",
+      "directory": "audit",
+      "path": "github.com/AChWorks/achrix/audit"
+    },
+    {
+      "name": "media",
+      "directory": "media",
+      "path": "github.com/AChWorks/achrix/media"
+    },
+    {
+      "name": "multisite",
+      "directory": "multisite",
+      "path": "github.com/AChWorks/achrix/multisite"
+    },
+    {
+      "name": "identity",
+      "directory": "identity",
+      "path": "github.com/AChWorks/achrix/identity"
+    },
+    {
+      "name": "installation",
+      "directory": "installation",
+      "path": "github.com/AChWorks/achrix/installation"
+    }
+  ]
+}

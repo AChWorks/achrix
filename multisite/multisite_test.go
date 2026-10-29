@@ -226,7 +226,7 @@ func TestCopiedInventoryAndDescriptor(t *testing.T) {
 		t.Fatalf("mutated alias: %q, %v", id, err)
 	}
 	fresh := m.Descriptor()
-	if fresh.ID != "achrix.multisite" || fresh.Version != achrix.Version() || len(fresh.Provides) != 1 || fresh.Provides[0] != (achrix.Capability{ID: multisite.Resolve, Version: 1}) || len(fresh.Requires) != 1 || fresh.Requires[0] != (achrix.Capability{ID: "achrix.authorization", Version: 2}) || len(fresh.Optional) != 0 {
+	if fresh.ID != "achrix.multisite" || fresh.Version != multisite.Version() || len(fresh.Provides) != 1 || fresh.Provides[0] != (achrix.Capability{ID: multisite.Resolve, Version: 1}) || len(fresh.Requires) != 1 || fresh.Requires[0] != (achrix.Capability{ID: "achrix.authorization", Version: 2}) || len(fresh.Optional) != 0 {
 		t.Fatalf("descriptor: %+v", fresh)
 	}
 }

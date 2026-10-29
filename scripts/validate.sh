@@ -37,10 +37,17 @@ trap cleanup EXIT
 scripts/check-gofmt.sh
 scripts/setup-quality-tools.sh "$validation_root/quality-tools"
 quality_bin="$validation_root/quality-tools/bin"
-"$quality_bin/staticcheck" ./...
-"$quality_bin/govulncheck" -test -db https://vuln.go.dev -show version,verbose ./...
-go vet ./...
-go mod verify
+mapfile -t module_directories < <(python3 scripts/modules.py directories)
+if [[ $scope == full ]]; then python3 scripts/modules.py check; else module_directories=(.); fi
+for module_directory in "${module_directories[@]}"; do
+  (
+    cd "$repository/$module_directory"
+    "$quality_bin/staticcheck" ./...
+    "$quality_bin/govulncheck" -test -db https://vuln.go.dev -show version,verbose ./...
+    go vet ./...
+    go mod verify
+  )
+done
 if [[ $scope == core ]]; then
   go test -race -count=1 -timeout=30s ./...
   echo 'Core validation verified; consumer/PostgreSQL proof not selected'
@@ -75,6 +82,9 @@ createdb -T template0 achrix_media_test
 createdb -T template0 achrix_admin_test
 createdb -T template0 achrix_media_consumer
 createdb -T template0 achrix_media_restore
+createdb -T template0 achrix_test_management_a
+createdb -T template0 achrix_test_management_b
+createdb -T template0 achrix_install_consumer
 mkdir -m 0700 "$validation_root/media-module" "$validation_root/media-source" "$validation_root/media-restored"
 createdb -T template0 -E LATIN1 achrix_test_latin1
 createdb -T template0 -E SQL_ASCII achrix_test_sqlascii
@@ -86,7 +96,10 @@ export ACHRIX_AUDIT_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achr
 export ACHRIX_MEDIA_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_media_test sslmode=disable"
 export ACHRIX_ADMIN_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_admin_test sslmode=disable"
 export ACHRIX_MEDIA_TEST_ROOT="$validation_root/media-module"
-go test -race -count=1 -timeout=90s ./identity/... ./audit/... ./media/... ./admin/... ./multisite/...
+for module_directory in "${module_directories[@]}"; do
+  [[ $module_directory == . ]] && continue
+  (cd "$repository/$module_directory" && go test -race -count=1 -timeout=90s ./...)
+done
 unset ACHRIX_IDENTITY_TEST_DSN ACHRIX_AUDIT_TEST_DSN ACHRIX_MEDIA_TEST_DSN ACHRIX_MEDIA_TEST_ROOT ACHRIX_ADMIN_TEST_DSN
 
 # Copy consumer-owned source only. Foundation source is downloaded as a pinned
@@ -96,29 +109,12 @@ export GOMODCACHE="$validation_root/module-cache"
 cd "$validation_root/consumer"
 go mod download
 go mod verify
-go list -m -json github.com/AChWorks/achrix > "$validation_root/foundation.json"
-python3 - "$validation_root/foundation.json" "$repository" <<'PY'
-import json,sys,os,hashlib,pathlib
-m=json.load(open(sys.argv[1]))
-assert m['Path']=='github.com/AChWorks/achrix'
-assert m.get('Version','').startswith('v0.') and 'Replace' not in m
-assert m['Dir'].startswith(os.environ['GOMODCACHE']+os.sep)
-assert m.get('Sum') and m.get('GoModSum')
-print('Verified isolated pinned Foundation:',m['Version'])
-root=pathlib.Path(sys.argv[2]); dependency=pathlib.Path(m['Dir'])
-paths=[pathlib.Path('achrix.go')]
-for package in ['identity','audit','media','admin','multisite']:
-    assert (root/package).is_dir() and (dependency/package).is_dir()
-    paths += sorted(p.relative_to(root) for p in (root/package).rglob('*')
-                    if p.is_file() and p.suffix in ['.go','.sql','.js','.css','.html']
-                    and not p.name.endswith('_test.go'))
-digest=hashlib.sha256()
-for relative in paths:
-    source=(root/relative).read_bytes(); downloaded=(dependency/relative).read_bytes()
-    assert source==downloaded, 'normal consumer source drift: '+str(relative)
-    digest.update(str(relative).encode()+b'\0'+source)
-print('Verified normal-module Core/Identity/Audit/Media/Admin/Multi-Site source SHA-256:',digest.hexdigest())
-PY
+python3 "$repository/scripts/verify_consumer.py" source "$repository" "$validation_root/modules.json"
+python3 - "$validation_root/modules.json" "$validation_root/foundation.json" <<'PYCORE'
+import json,pathlib,sys
+modules=json.loads(pathlib.Path(sys.argv[1]).read_text())
+pathlib.Path(sys.argv[2]).write_text(json.dumps(modules['github.com/AChWorks/achrix']))
+PYCORE
 if go mod edit -json | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("Replace") else 1)'; then
   echo 'Local dependency replacements are prohibited in this proof' >&2; exit 1
 fi
@@ -131,6 +127,9 @@ export NOTES_TEST_SQL_ASCII_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER
 export NOTES_IDENTITY_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_identity_consumer sslmode=disable"
 export NOTES_MEDIA_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_media_consumer sslmode=disable"
 export NOTES_MEDIA_STORAGE_ROOT="$validation_root/media-source"
+export NOTES_MANAGEMENT_A_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_test_management_a sslmode=disable"
+export NOTES_MANAGEMENT_B_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_test_management_b sslmode=disable"
+export NOTES_INSTALL_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_install_consumer sslmode=disable"
 go test -race -count=1 -timeout=60s ./...
 
 # Native trusted logical backup, no compression required. It covers this fixture's
@@ -245,17 +244,6 @@ PY
 # the independently resolved, checksum-verified tag/pseudo-version above.
 go build -trimpath -o "$validation_root/componentidentity" ./cmd/componentidentity
 "$validation_root/componentidentity" > "$validation_root/components.json"
-python3 - "$validation_root/foundation.json" "$validation_root/components.json" <<'PYCOMPONENT'
-import json,sys
-m=json.load(open(sys.argv[1])); b=json.load(open(sys.argv[2]))
-assert b['foundation']==m['Version']
-components={d['ID']: d for d in b['components']}
-assert len(b['components'])==3 and set(components)=={'achrix.identity','achrix.audit','achrix.media'}
-for d in components.values():
-    assert d['Version']==m['Version'], 'packaged component version drift: '+d['ID']
-    assert all(c['Version']==1 for c in d['Provides'])
-    assert all(c['Version']==(2 if c['ID']=='achrix.authorization' else 1) for c in d['Requires'])
-print('Verified packaged component versions:',json.dumps(b,sort_keys=True))
-PYCOMPONENT
+python3 "$repository/scripts/verify_consumer.py" components "$validation_root/modules.json" "$validation_root/components.json"
 sha256sum "$validation_root/notes"
 echo 'Foundation, isolated consumer, Identity/Audit/Media/Admin, PostgreSQL, migrations, authorization and coherent retained database/assets restore verified'

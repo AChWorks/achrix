@@ -43,7 +43,8 @@ type Descriptor struct {
 	ID string
 
 	// Version identifies the Module implementation's packaged source dependency.
-	// Official packages in this Go module use Version(); capability ABI is separate.
+	// Independently versioned components report their own source module identity;
+	// capability ABI remains separate from that implementation release.
 	Version  string
 	Provides []Capability
 	Requires []Capability
@@ -464,27 +465,46 @@ func (a *Application) Components() []Descriptor {
 
 // Version identifies the actual source-backed Foundation dependency in a consumer.
 // Local unversioned builds explicitly report development; no release is invented.
-func Version() string {
+func Version() string { return DependencyVersion("github.com/AChWorks/achrix") }
+
+// DependencyVersion identifies an independently versioned component by its exact
+// Go module path in the executable's build information. It never resolves a
+// dependency or substitutes Core's version for another component. Development,
+// replacement and absent metadata are explicitly not immutable release identity.
+func DependencyVersion(modulePath string) string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		return "development"
 	}
-	return sourceVersion(info)
+	return dependencyVersion(info, modulePath)
 }
 
 func sourceVersion(info *debug.BuildInfo) string {
-	if info.Main.Path == "github.com/AChWorks/achrix" && info.Main.Version != "" && info.Main.Version != "(devel)" {
-		return info.Main.Version
+	return dependencyVersion(info, "github.com/AChWorks/achrix")
+}
+
+func dependencyVersion(info *debug.BuildInfo, modulePath string) string {
+	if modulePath == "" || info == nil {
+		return "development"
 	}
-	for _, d := range info.Deps {
-		if d.Path == "github.com/AChWorks/achrix" {
-			if d.Replace != nil {
+	if info.Main.Path == modulePath {
+		if info.Main.Replace != nil {
+			return "development-replacement"
+		}
+		if info.Main.Version != "" && info.Main.Version != "(devel)" {
+			return info.Main.Version
+		}
+		return "development"
+	}
+	for _, dependency := range info.Deps {
+		if dependency.Path == modulePath {
+			if dependency.Replace != nil {
 				return "development-replacement"
 			}
-			if d.Version == "" || d.Version == "(devel)" {
+			if dependency.Version == "" || dependency.Version == "(devel)" {
 				return "development"
 			}
-			return d.Version
+			return dependency.Version
 		}
 	}
 	return "development"

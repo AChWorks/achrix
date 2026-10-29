@@ -16,6 +16,8 @@ ROUTING = {
     "scripts/test_validation_scope.py", "scripts/validate.sh",
     "scripts/setup-validation-postgres.sh", "scripts/setup-quality-tools.sh",
     "scripts/check-gofmt.sh", "scripts/test_go_quality.py",
+    "scripts/modules.py", "scripts/verify_consumer.py", "scripts/test_module_packaging.py",
+    "modules.json",
 }
 
 

@@ -11,9 +11,12 @@ import (
 	"time"
 
 	"github.com/AChWorks/achrix"
+	"github.com/AChWorks/achrix/admin"
 	"github.com/AChWorks/achrix/audit"
 	"github.com/AChWorks/achrix/identity"
+	"github.com/AChWorks/achrix/installation"
 	"github.com/AChWorks/achrix/media"
+	"github.com/AChWorks/achrix/multisite"
 )
 
 func main() {
@@ -38,14 +41,27 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	multisiteModule, err := multisite.New(multisite.Config{Sites: []multisite.Site{{ID: "identity-proof", Authorities: []string{"identity.example"}}}})
+	if err != nil {
+		return err
+	}
 	app, err := achrix.New(achrix.Config{StartupTimeout: time.Second, ShutdownTimeout: time.Second}, achrix.PolicyFunc(func(context.Context, achrix.Principal, string, string) error {
 		return achrix.ErrDenied
-	}), identityModule, auditModule, mediaModule)
+	}), identityModule, auditModule, mediaModule, multisiteModule)
 	if err != nil {
 		return err
 	}
 	return json.NewEncoder(os.Stdout).Encode(struct {
 		Foundation string              `json:"foundation"`
 		Components []achrix.Descriptor `json:"components"`
-	}{achrix.Version(), app.Components()})
+		Versions   map[string]string   `json:"versions"`
+	}{achrix.Version(), app.Components(), map[string]string{
+		"github.com/AChWorks/achrix":              achrix.Version(),
+		"github.com/AChWorks/achrix/admin":        admin.Version(),
+		"github.com/AChWorks/achrix/audit":        audit.Version(),
+		"github.com/AChWorks/achrix/identity":     identity.Version(),
+		"github.com/AChWorks/achrix/media":        media.Version(),
+		"github.com/AChWorks/achrix/multisite":    multisite.Version(),
+		"github.com/AChWorks/achrix/installation": installation.Version(),
+	}})
 }

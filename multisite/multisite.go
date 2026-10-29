@@ -85,7 +85,7 @@ func New(config Config) (*Module, error) {
 
 func (m *Module) Descriptor() achrix.Descriptor {
 	return achrix.Descriptor{
-		ID: "achrix.multisite", Version: achrix.Version(),
+		ID: "achrix.multisite", Version: Version(),
 		Provides: []achrix.Capability{{ID: Resolve, Version: 1}},
 		Requires: []achrix.Capability{{ID: "achrix.authorization", Version: 2}},
 	}
