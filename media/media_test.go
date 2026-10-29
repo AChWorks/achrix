@@ -20,8 +20,6 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
-	"github.com/AChWorks/achrix"
 )
 
 func imageBytes(t testing.TB, format string, w, h int) []byte {
