@@ -4,11 +4,11 @@ go 1.27.3
 
 require (
 	github.com/AChWorks/achrix v0.4.0
-	github.com/AChWorks/achrix/admin v0.1.1-0.20261029232430-c50bdcbfa308
+	github.com/AChWorks/achrix/admin v0.1.1-0.20261029233311-27633becbb42
 	github.com/AChWorks/achrix/audit v0.1.0
-	github.com/AChWorks/achrix/identity v0.1.1-0.20261029232500-b40fee643b32
+	github.com/AChWorks/achrix/identity v0.1.1-0.20261029233330-ca7f37c520ce
 	github.com/AChWorks/achrix/installation v0.1.0
-	github.com/AChWorks/achrix/media v0.1.1-0.20261029232500-b40fee643b32
+	github.com/AChWorks/achrix/media v0.1.1-0.20261029233330-ca7f37c520ce
 	github.com/AChWorks/achrix/multisite v0.1.0
 	github.com/jackc/pgx/v5 v5.11.0
 )
