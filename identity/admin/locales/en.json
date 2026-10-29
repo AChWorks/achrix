@@ -1,0 +1,114 @@
+{
+  "schema": 1,
+  "locale": "en",
+  "name": "English",
+  "direction": "ltr",
+  "domain": "identity",
+  "messages": {
+    "accounts.help": {
+      "other": "Keep the account ID returned by creation. This baseline does not enumerate accounts."
+    },
+    "create.title": {
+      "other": "Create account"
+    },
+    "login.label": {
+      "other": "Login"
+    },
+    "password.initial": {
+      "other": "Initial password"
+    },
+    "password.help": {
+      "other": "15–256 characters, at most 1024 UTF-8 bytes. Passwords are never displayed or stored by this UI."
+    },
+    "create.action": {
+      "other": "Create"
+    },
+    "create.denied": {
+      "other": "Account creation is not permitted."
+    },
+    "lookup.title": {
+      "other": "Look up one account"
+    },
+    "account.id": {
+      "other": "Account ID"
+    },
+    "lookup.action": {
+      "other": "Look up"
+    },
+    "lookup.login.label": {
+      "other": "Exact login to reconcile creation"
+    },
+    "lookup.login.help": {
+      "other": "This lookup requires a separate permission. After an unknown create outcome, check the retained exact login before another creation attempt."
+    },
+    "lookup.login.action": {
+      "other": "Look up login"
+    },
+    "account.empty": {
+      "other": "No account selected."
+    },
+    "account.selected": {
+      "other": "Selected account"
+    },
+    "account.login": {
+      "other": "Login"
+    },
+    "account.status": {
+      "other": "Status"
+    },
+    "account.revision": {
+      "other": "Revision"
+    },
+    "enabled.title": {
+      "other": "Change status and revoke sessions"
+    },
+    "enabled.label": {
+      "other": "Enabled"
+    },
+    "enabled.confirm": {
+      "other": "I confirm the status change and invalidation of every session for this account."
+    },
+    "enabled.action": {
+      "other": "Apply status"
+    },
+    "password.title": {
+      "other": "Replace password and revoke sessions"
+    },
+    "password.new": {
+      "other": "New password"
+    },
+    "password.confirm": {
+      "other": "I confirm password replacement and invalidation of every session."
+    },
+    "password.action": {
+      "other": "Replace password"
+    },
+    "revoke.title": {
+      "other": "Revoke all sessions"
+    },
+    "revoke.confirm": {
+      "other": "I confirm invalidation of every session for this account."
+    },
+    "revoke.action": {
+      "other": "Revoke sessions"
+    },
+    "account.no_actions": {
+      "other": "No management changes are permitted for this account."
+    },
+    "accounts.title": {
+      "other": "Accounts"
+    },
+    "login.help": {
+      "other": "1–64 lowercase ASCII letters, digits, dot, underscore or hyphen; starts with a letter or digit."
+    },
+    "account.id_label": {
+      "other": "ID"
+    },
+    "state.enabled": {
+      "other": "Enabled"
+    },
+    "state.disabled": {
+      "other": "Disabled"
+    }
+  }
+}

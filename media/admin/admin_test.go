@@ -8,17 +8,21 @@ import (
 	"errors"
 	"html"
 	"io"
+	"io/fs"
 	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"strconv"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/AChWorks/achrix"
 	shell "github.com/AChWorks/achrix/admin"
+	"github.com/AChWorks/achrix/admin/localize"
 	"github.com/AChWorks/achrix/media"
 )
 
@@ -308,6 +312,7 @@ func TestEmptyLocalizedScreenKeepsFormsModuleOwned(t *testing.T) {
 		s := &libraryStub{}
 		v := requestView()
 		v.Language = language
+		v.Localizer = presentationLocalizer(t, language)
 		w := httptest.NewRecorder()
 		v.Render = func(p shell.Page) error {
 			if p.Template != libraryTemplate {
@@ -335,6 +340,7 @@ func TestScreenUsesEffectiveFormatsAndOmitsUnknownDimensions(t *testing.T) {
 			s := &libraryStub{formats: formats, page: media.Page{Assets: []media.Asset{a}}}
 			v := requestView()
 			v.Language = language
+			v.Localizer = presentationLocalizer(t, language)
 			v.Allowed = func(cap, _ string) bool { return cap == media.List || cap == media.Create }
 			w := httptest.NewRecorder()
 			v.Render = func(p shell.Page) error {
@@ -385,5 +391,48 @@ func TestRetainedSupportedAttachmentsIgnoreNarrowedUploadSelection(t *testing.T)
 		if w.Code != 503 || strings.Join(s.calls, ",") != "status" || w.Header().Get("Content-Disposition") != "" || w.Header().Get("Content-Type") != "application/json; charset=utf-8" {
 			t.Fatal("unknown MIME reached read or attachment headers", unsupported, w.Code, w.Header())
 		}
+	}
+}
+
+func presentationLocalizer(t *testing.T, language string, extra ...fs.FS) *localize.Localizer {
+	t.Helper()
+	sources := append([]fs.FS{locales}, extra...)
+	catalog, err := localize.Load(sources...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	locale, err := catalog.For(language)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return locale
+}
+
+func TestExternalLocaleReordersUploadHelpAndEscapesCatalogAndContent(t *testing.T) {
+	external := fstest.MapFS{"ar.json": &fstest.MapFile{Data: []byte(`{"schema":1,"locale":"ar","name":"Arabic","direction":"rtl","domain":"media","messages":{"library.title":{"other":"Files Arabic"},"library.help":{"other":"<script>alert(1)</script> العربية Latin"},"upload.help.images":{"other":"{MaxPixels} pixels; {MaxDimension} dimension; formats {Extensions}."}}}`)}}
+	a := sample()
+	a.Filename = "<img onerror=alert(2)>.png"
+	s := &libraryStub{page: media.Page{Assets: []media.Asset{a}}}
+	v := requestView()
+	v.Language = "ar"
+	v.Localizer = presentationLocalizer(t, "ar", external)
+	v.Allowed = func(string, string) bool { return true }
+	w := httptest.NewRecorder()
+	v.Render = func(p shell.Page) error {
+		if p.Title != "Files Arabic" {
+			t.Fatalf("external title not selected: %q", p.Title)
+		}
+		return p.Template.ExecuteTemplate(w, "content", p.Data)
+	}
+	handlerFor(s).serve(w, httptest.NewRequest("GET", "/", nil), v)
+	body := w.Body.String()
+	if w.Code != 200 || strings.Contains(body, "<script>alert") || strings.Contains(body, "<img") || !strings.Contains(body, "&lt;script&gt;") || !strings.Contains(body, "&lt;img") || !strings.Contains(body, "العربية Latin") {
+		t.Fatalf("catalog or original content escaped incorrectly: %s", body)
+	}
+	if !strings.Contains(body, strconv.Itoa(media.MaxPixels)+" pixels; "+strconv.Itoa(media.MaxDimension)+" dimension; formats ") || !strings.Contains(body, "\u2066PNG, JPG, JPEG, JPE\u2069") || !strings.Contains(body, "Private download") || !strings.Contains(body, testID) || !strings.Contains(body, `dir="ltr"`) {
+		t.Fatalf("parameters, direction isolation, fallback or identity changed: %s", body)
+	}
+	if got := surface(s); got.Catalogs == nil || got.Title.Domain != "media" || got.Title.Key != "library.title" {
+		t.Fatal("module catalog ownership or title reference lost")
 	}
 }
