@@ -3,8 +3,8 @@ module github.com/AChWorks/achrix/media
 go 1.27.3
 
 require (
-	github.com/AChWorks/achrix v0.3.1-0.20261029084914-8b84a636f467
-	github.com/AChWorks/achrix/admin v0.0.0-20261029085027-9527dfa5712a
+	github.com/AChWorks/achrix v0.3.1-0.20261029085807-1a055ff695e4
+	github.com/AChWorks/achrix/admin v0.0.0-20261029085829-309131f543f5
 	github.com/gabriel-vasile/mimetype v1.4.16
 	github.com/jackc/pgx/v5 v5.11.0
 )
