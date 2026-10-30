@@ -75,7 +75,55 @@
       "other": "No account matched the exact login. Check the retained login before another creation attempt."
     },
     "service_unavailable": {
-      "other": "The service is unavailable. A read can be attempted again; no change was submitted."
+      "other": "The request could not be completed. Check the connection or contact the operator. Review the record before submitting a change again."
+    },
+    "credentials_invalid": {
+      "other": "The login or password was not accepted. Check both and sign in again."
+    },
+    "request_timeout": {
+      "other": "The request body did not arrive in time. This operation was not started; check the connection before submitting again."
+    },
+    "request_canceled": {
+      "other": "The request was canceled before the operation started. Check the connection before another submission."
+    },
+    "locale_unavailable": {
+      "other": "The selected interface language could not be loaded. Contact the operator or choose an installed language."
+    },
+    "authorization_unavailable": {
+      "other": "Permission could not be checked. This is not an explicit denial. Contact the operator with the reference."
+    },
+    "authentication_unavailable": {
+      "other": "The sign-in service could not verify the request. Contact the operator; do not repeatedly submit credentials."
+    },
+    "permissions_unavailable": {
+      "other": "Completed. Action permissions could not be checked, so actions are disabled. Keep the displayed identifier and refresh the record before another change."
+    },
+    "result_unavailable": {
+      "other": "The server acknowledged completion, but the response details could not be displayed. Do not repeat the change; inspect the record first."
+    },
+    "failure_reference": {
+      "other": "Reference: {Reference}"
+    },
+    "input_id": {
+      "other": "Check the record identifier and submit the corrected value."
+    },
+    "input_login": {
+      "other": "Check the login format and submit the corrected value."
+    },
+    "input_password": {
+      "other": "Check the password length and submit a valid password."
+    },
+    "input_revision": {
+      "other": "Refresh the record and use its current revision before another change."
+    },
+    "input_enabled": {
+      "other": "Choose the requested account status before submitting."
+    },
+    "read_result_unavailable": {
+      "other": "The read response could not be displayed. Check the connection and read the record again; no change was requested."
+    },
+    "operation_not_started": {
+      "other": "The operation could not start. Check service availability with the operator before submitting again."
     }
   }
 }

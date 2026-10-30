@@ -10,7 +10,9 @@ import (
 	"errors"
 	"html/template"
 	"io"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/AChWorks/achrix"
@@ -73,12 +75,39 @@ type accountResult struct {
 type result struct {
 	Account     accountResult   `json:"account"`
 	Permissions map[string]bool `json:"permissions"`
+	Warning     string          `json:"warning,omitempty"`
+}
+
+func checkAllowed(view shell.Request, capability, target string) (bool, error) {
+	if view.CheckAllowed != nil {
+		return view.CheckAllowed(capability, target)
+	}
+	if view.Allowed != nil {
+		return view.Allowed(capability, target), nil
+	}
+	return false, shell.ErrConfiguration
 }
 
 func accountResponse(w http.ResponseWriter, a identity.Account, view shell.Request) {
-	permissions := map[string]bool{"enabled": view.Allowed(identity.AccountSetEnabled, a.ID), "password": view.Allowed(identity.CredentialSet, a.ID), "revoke": view.Allowed(identity.SessionRevokeAll, a.ID)}
+	permissions := make(map[string]bool, 3)
+	warning := ""
+	for _, item := range []struct{ key, capability string }{{"enabled", identity.AccountSetEnabled}, {"password", identity.CredentialSet}, {"revoke", identity.SessionRevokeAll}} {
+		allowed, err := checkAllowed(view, item.capability, a.ID)
+		if err != nil {
+			warning = "permissions_unavailable"
+			break
+		}
+		permissions[item.key] = allowed
+	}
+	if warning != "" {
+		permissions = map[string]bool{"enabled": false, "password": false, "revoke": false}
+	}
+	// Account creation already succeeded. A permission hint cannot invalidate
+	// its acknowledgement or remove the exact reconciliation identity.
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_ = json.NewEncoder(w).Encode(result{accountResult{a.ID, a.Login, a.Enabled, a.Revision}, permissions})
+	if err := json.NewEncoder(w).Encode(result{accountResult{a.ID, a.Login, a.Enabled, a.Revision}, permissions, warning}); err != nil {
+		view.Diagnose("identity.account", "response_write", err)
+	}
 }
 
 func serve(service accounts, w http.ResponseWriter, r *http.Request, view shell.Request) {
@@ -87,17 +116,25 @@ func serve(service accounts, w http.ResponseWriter, r *http.Request, view shell.
 		case "/":
 			title, err := view.Localizer.Text("identity", "accounts.title", nil)
 			if err != nil {
+				view.Diagnose("identity.page", "localize_title", err)
 				fail(w, shell.ErrConfiguration)
 				return
 			}
-			err = view.Render(shell.Page{Title: title, Template: accountTemplate, Data: screen{view.Localizer, view.Allowed(identity.AccountCreate, "")}})
-			if err != nil {
+			canCreate, permissionErr := checkAllowed(view, identity.AccountCreate, "")
+			if permissionErr != nil {
+				fail(w, achrix.ErrAuthorizationUnavailable)
+				return
+			}
+			err = view.Render(shell.Page{Title: title, Template: accountTemplate, Data: screen{view.Localizer, canCreate}})
+			if err != nil && !errors.Is(err, shell.ErrResponseDelivery) {
 				fail(w, shell.ErrConfiguration)
 			}
 		case "/identity.js":
 			data, _ := assets.ReadFile("assets/identity.js")
 			w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-			_, _ = w.Write(data)
+			if _, err := w.Write(data); err != nil {
+				view.Diagnose("identity.asset", "response_write", err)
+			}
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -114,7 +151,7 @@ func serve(service accounts, w http.ResponseWriter, r *http.Request, view shell.
 			Login    string `json:"login"`
 			Password string `json:"password"`
 		}
-		if err = decode(w, r, &body); err == nil {
+		if err = decode(w, r, &body, view); err == nil {
 			var a identity.Account
 			a, err = service.CreateAccount(r.Context(), view.Principal, body.Login, body.Password)
 			body.Password = ""
@@ -127,7 +164,7 @@ func serve(service accounts, w http.ResponseWriter, r *http.Request, view shell.
 		var body struct {
 			ID string `json:"id"`
 		}
-		if err = decode(w, r, &body); err == nil {
+		if err = decode(w, r, &body, view); err == nil {
 			var a identity.Account
 			a, err = service.Account(r.Context(), view.Principal, body.ID)
 			if err == nil {
@@ -139,7 +176,7 @@ func serve(service accounts, w http.ResponseWriter, r *http.Request, view shell.
 		var body struct {
 			Login string `json:"login"`
 		}
-		if err = decode(w, r, &body); err == nil {
+		if err = decode(w, r, &body, view); err == nil {
 			var a identity.Account
 			a, err = service.LookupAccount(r.Context(), view.Principal, body.Login)
 			if err == nil {
@@ -153,9 +190,9 @@ func serve(service accounts, w http.ResponseWriter, r *http.Request, view shell.
 			Revision int64  `json:"revision,string"`
 			Enabled  *bool  `json:"enabled"`
 		}
-		if err = decode(w, r, &body); err == nil {
+		if err = decode(w, r, &body, view); err == nil {
 			if body.Enabled == nil {
-				err = identity.ErrInvalid
+				err = &inputFailure{code: "invalid_input", field: "enabled", reason: "required", sentinel: identity.ErrInvalid}
 			} else {
 				err = service.SetEnabled(r.Context(), view.Principal, body.ID, body.Revision, *body.Enabled)
 			}
@@ -166,7 +203,7 @@ func serve(service accounts, w http.ResponseWriter, r *http.Request, view shell.
 			Revision int64  `json:"revision,string"`
 			Password string `json:"password"`
 		}
-		if err = decode(w, r, &body); err == nil {
+		if err = decode(w, r, &body, view); err == nil {
 			err = service.SetPassword(r.Context(), view.Principal, body.ID, body.Revision, body.Password)
 			body.Password = ""
 		}
@@ -174,7 +211,7 @@ func serve(service accounts, w http.ResponseWriter, r *http.Request, view shell.
 		var body struct {
 			ID string `json:"id"`
 		}
-		if err = decode(w, r, &body); err == nil {
+		if err = decode(w, r, &body, view); err == nil {
 			err = service.RevokeAll(r.Context(), view.Principal, body.ID)
 		}
 	default:
@@ -188,37 +225,104 @@ func serve(service accounts, w http.ResponseWriter, r *http.Request, view shell.
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func decode(w http.ResponseWriter, r *http.Request, target any) error {
+// inputFailure retains only source-owned metadata. The protected callback has
+// already seen the original transport cause; no private error unwrap is exposed.
+type inputFailure struct {
+	code, field, reason string
+	sentinel            error
+}
+
+func (e *inputFailure) Error() string {
+	return "identity admin " + e.code + ": " + e.field + " " + e.reason
+}
+func (e *inputFailure) Is(target error) bool { return target == e.sentinel }
+
+func decode(w http.ResponseWriter, r *http.Request, target any, view shell.Request) error {
 	if len(r.Header.Values("Content-Type")) != 1 || r.Header.Get("Content-Type") != "application/json" {
-		return identity.ErrInvalid
+		return &inputFailure{"invalid_input", "content_type", "application_json_required", identity.ErrInvalid}
 	}
 	deadline := time.Now().Add(2 * time.Second)
 	if d, ok := r.Context().Deadline(); ok && d.Before(deadline) {
 		deadline = d
 	}
-	if http.NewResponseController(w).SetReadDeadline(deadline) != nil {
-		return identity.ErrUnavailable
+	if err := http.NewResponseController(w).SetReadDeadline(deadline); err != nil {
+		view.Diagnose("identity.input", "set_read_deadline", err)
+		return &inputFailure{"unavailable", "request", "read_deadline_unsupported", identity.ErrUnavailable}
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 2048)
 	defer r.Body.Close()
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
-		return identity.ErrInvalid
+		return decodeFailure(r, view, "decode_body", err)
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
-		return identity.ErrInvalid
+		if err != nil {
+			return decodeFailure(r, view, "decode_trailing", err)
+		}
+		return &inputFailure{"invalid_input", "request", "single_json_object_required", identity.ErrInvalid}
 	}
 	return nil
 }
+
+func decodeFailure(r *http.Request, view shell.Request, phase string, err error) error {
+	var network net.Error
+	var syntax *json.SyntaxError
+	var field *json.UnmarshalTypeError
+	var limit *http.MaxBytesError
+	switch {
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &network) && network.Timeout():
+		view.Diagnose("identity.input", phase, err)
+		return &inputFailure{"request_timeout", "request", "body_timeout", identity.ErrUnavailable}
+	case errors.Is(err, context.Canceled):
+		view.Diagnose("identity.input", phase, err)
+		return &inputFailure{"request_canceled", "request", "body_canceled", identity.ErrUnavailable}
+	case errors.As(err, &limit):
+		return &inputFailure{"input_too_large", "request", "body_exceeds_2048_bytes", identity.ErrInvalid}
+	case errors.As(err, &field):
+		name := field.Field
+		switch name {
+		case "id", "login", "password", "revision", "enabled":
+		default:
+			name = "request"
+		}
+		return &inputFailure{"invalid_input", name, "invalid_type_or_range", identity.ErrInvalid}
+	case errors.As(err, &syntax), errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
+		return &inputFailure{"invalid_input", "request", "malformed_json", identity.ErrInvalid}
+	case strings.HasPrefix(err.Error(), "json: unknown field "):
+		return &inputFailure{"invalid_input", "request", "unknown_field", identity.ErrInvalid}
+	case strings.HasPrefix(err.Error(), "json: invalid use of ,string struct tag"):
+		return &inputFailure{"invalid_input", "revision", "decimal_string_required", identity.ErrInvalid}
+	default:
+		view.Diagnose("identity.input", phase, err)
+		return &inputFailure{"unavailable", "request", "body_read_failed", identity.ErrUnavailable}
+	}
+}
+
 func fail(w http.ResponseWriter, err error) {
 	status, code := http.StatusServiceUnavailable, "unavailable"
+	var input *inputFailure
+	var invalid *identity.InputError
+	field, reason, outcome := "", "", ""
 	switch {
+	case errors.As(err, &input):
+		code, field, reason, outcome = input.code, input.field, input.reason, "not_executed"
+		if input.code == "invalid_input" {
+			status = http.StatusBadRequest
+		}
+		if input.code == "input_too_large" {
+			status = http.StatusRequestEntityTooLarge
+		}
+		if input.code == "request_timeout" || input.code == "request_canceled" {
+			status = http.StatusRequestTimeout
+		}
 	case errors.Is(err, achrix.ErrDenied):
 		status, code = 403, "permission_denied"
 	case errors.Is(err, identity.ErrAuthentication):
 		status, code = 401, "authentication_required"
+	case errors.As(err, &invalid):
+		status, code, field, reason = 400, "invalid_input", invalid.Field, invalid.Reason
 	case errors.Is(err, identity.ErrInvalid):
 		status, code = 400, "invalid_input"
 	case errors.Is(err, identity.ErrNotFound):
@@ -227,13 +331,18 @@ func fail(w http.ResponseWriter, err error) {
 		status, code = 409, "conflict"
 	case errors.Is(err, identity.ErrLimited):
 		status, code = 429, "busy"
-	case errors.Is(err, audit.ErrUnavailable), errors.Is(err, identity.ErrUnavailable), errors.Is(err, achrix.ErrAuthorizationUnavailable), errors.Is(err, achrix.ErrNotReady), errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+	case errors.Is(err, achrix.ErrAuthorizationUnavailable):
+		code = "authorization_unavailable"
+	case errors.Is(err, audit.ErrUnavailable), errors.Is(err, identity.ErrUnavailable), errors.Is(err, achrix.ErrNotReady), errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(struct {
-		Code string `json:"code"`
-	}{code})
+		Code    string `json:"code"`
+		Field   string `json:"field,omitempty"`
+		Reason  string `json:"reason,omitempty"`
+		Outcome string `json:"outcome,omitempty"`
+	}{code, field, reason, outcome})
 }
 
 //go:embed assets/*

@@ -146,6 +146,19 @@ async function main() {
       assert.equal(await page.locator("#main").evaluate(e=>e===document.activeElement),true);
       assert.equal(await page.locator("#login").getAttribute("autocomplete"),"username");
       assert.equal(await page.locator("#password").getAttribute("autocomplete"),"current-password");
+      // A real rejected login must explain credentials, never session expiry.
+      await page.locator("#login").fill(metadata.login);
+      await page.locator("#password").fill("Synthetic wrong password for diagnostics!");
+      const rejectedLogin=page.waitForResponse(r=>new URL(r.url()).pathname==="/auth/login"&&r.request().method()==="POST");
+      const loginCalls=calls.length;
+      await page.locator("form[data-login] button").press("Enter");
+      assert.equal((await rejectedLogin).status(),401);
+      await page.waitForFunction(()=>document.querySelector('form[aria-busy="true"]')===null);
+      const rejectedMessage=await page.locator("#status").innerText();
+      assert(rejectedMessage.includes(fa?"شناسهٔ ورود یا رمز عبور":"login or password"),"wrong credentials have their own localized instruction");
+      assert(!rejectedMessage.includes(fa?"نشست منقضی":"session expired"),"wrong password is not an expired session");
+      assert.equal(await page.locator("#password").inputValue(),"");
+      assert.equal(calls.slice(loginCalls).filter(c=>c.path==="/auth/login").length,1,"failed login does not replay");
       await signIn(metadata.login);
       const cookie=(await context.cookies()).find(c=>c.name==="__Host-AChrix-Session");
       assert(cookie&&cookie.secure&&cookie.httpOnly&&cookie.sameSite==="Strict"&&cookie.path==="/","Identity hardened cookie");
@@ -182,8 +195,43 @@ async function main() {
       assert.equal(calls.length,beforeInvalidLogin,"invalid login submits no request");
       await page.locator("#lookup-login").fill(login);
       await page.locator("#new-login").fill(login);
+      // Inject a source-owned pre-execution response to prove browser mapping.
+      // Actual first/trailing body-read timeout behavior is covered by Go faults.
+      const beforeBodyTimeout=await probe();
+      let bodyTimeoutCalls=0;
+      await page.route("**/admin/identity/create",route=>{
+        bodyTimeoutCalls++;
+        return route.fulfill({status:408,contentType:"application/json",headers:{"X-Request-ID":"browser-body-timeout"},body:JSON.stringify({code:"request_timeout",outcome:"not_executed"})});
+      });
+      await responseSubmit(create,"/admin/identity/create",408);
+      await page.unroute("**/admin/identity/create");
+      const timeoutMessage=await page.locator("#status").innerText();
+      assert(timeoutMessage.includes(fa?"عملیات شروع نشد":"operation was not started"));
+      assert(timeoutMessage.includes("browser-body-timeout"),"safe correlation shown with actionable failure");
+      assert(!timeoutMessage.includes(unknown),"proven non-execution is not unknown mutation");
+      assert.equal(bodyTimeoutCalls,1);
+      sameState(beforeBodyTimeout,await probe(),"pre-execution timeout has no durable effects");
+      await page.locator("#new-password").fill("🔐".repeat(15));
+
+      // Exercise a confirmed real create with unavailable presentation hints.
+      // The route changes presentation metadata only after the server returns 200;
+      // Go fault tests separately prove the owning policy-failure branch.
+      let warningCreates=0;
+      await page.route("**/admin/identity/create",async route=>{
+        warningCreates++;
+        const response=await route.fetch({timeout:10000,maxRedirects:0,maxRetries:0});
+        assert.equal(response.status(),200);
+        const value=await response.json();
+        value.permissions={enabled:false,password:false,revoke:false};
+        value.warning="permissions_unavailable";
+        await route.fulfill({response,json:value});
+      });
       const startCalls=calls.length;
       const created=await responseSubmit(create,"/admin/identity/create");
+      await page.unroute("**/admin/identity/create");
+      assert.equal(warningCreates,1,"permission hint failure never replays successful create");
+      assert((await page.locator("#status").innerText()).includes(fa?"بررسی مجوز":"permissions could not be checked"));
+      assert.equal(await page.locator('#account form:not([hidden])').count(),0,"unverified actions disabled after confirmed create");
       const createdBody=await created.json();
       const id=createdBody.account.id;
       assert.match(id,/^[A-Z2-7]{26}$/);
@@ -292,8 +340,15 @@ async function main() {
       const beforeCSRF=await probe();
       assert.equal((await request("/admin/identity/create",{login:"csrf-denied-"+endpoint.language,password:metadata.password},null)).status,401);
       sameState(beforeCSRF,await probe(),"missing CSRF has no effects");
-      await page.locator("#logout").click();
-      await page.waitForURL(endpoint.origin+"/admin/login");
+      // Lose only this browser session, then submit an ordinary read through
+      // the real CSRF endpoint. It must show session recovery, not credentials.
+      await context.clearCookies();
+      await page.locator("#lookup-login").fill(lostLogin);
+      const expired=page.waitForResponse(r=>new URL(r.url()).pathname==="/auth/csrf");
+      await page.locator('form[data-operation="lookup-login"] button').click();
+      assert.equal((await expired).status(),401);
+      await page.waitForFunction(()=>document.querySelector('form[aria-busy="true"]')===null);
+      assert((await page.locator("#status").innerText()).includes(fa?"نشست منقضی":"session expired"));
       await signIn(metadata.viewerLogin);
       await navigate("/admin/identity");
       assert.equal(await page.locator('form[data-operation="create"]').count(),0,"presentation reflects viewer permission");
@@ -339,7 +394,7 @@ async function main() {
       const total=[...unique.values()].reduce((a,b)=>a+b,0);
       assert(total<128*1024,"bounded unique UI payload");
       reports.push({language:endpoint.language,browser:browser.version(),uniqueUIPayloadBytes:total,
-        requests:calls.length,createRoundTrips:2,actualTLS:true,keyboard:true,unknownCreateRecovered:true,
+        requests:calls.length,createRoundTrips:2,actualTLS:true,keyboard:true,unknownCreateRecovered:true,credentialErrorExplained:true,bodyTimeoutMapping:true,confirmedCreateWarning:true,sessionFailureExplained:true,
         deniedDurableStateUnchanged:true,commonAttachmentFormats:["PDF","ZIP","WebP","WebM"]});
       await context.close();
     }

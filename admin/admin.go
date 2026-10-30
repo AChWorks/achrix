@@ -8,9 +8,11 @@ import (
 	"context"
 	"embed"
 	"errors"
+	"fmt"
 	"html/template"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -24,6 +26,9 @@ import (
 
 var (
 	ErrConfiguration = errors.New("invalid admin configuration")
+	// ErrResponseDelivery means response writing began and failed. Do not append
+	// a fallback response; the request may no longer have a usable transport.
+	ErrResponseDelivery = errors.New("admin response delivery failed")
 	// Product adapters translate only genuine missing/invalid sessions to this
 	// error. Other authentication failures are unavailable, never a login prompt.
 	ErrUnauthenticated = errors.New("admin authentication required")
@@ -41,7 +46,14 @@ type Authorizer interface {
 type Text struct{ Domain, Key string }
 
 type Config struct {
-	Origin string
+	// Logger receives bounded safe operational evidence. Nil uses slog.Default.
+	Logger *slog.Logger
+	// Diagnostic receives the original cause before outward mapping. This is a
+	// synchronous protected boundary, not a public response or ordinary log.
+	// Products must bound the sink, redact provider-specific sensitive fields
+	// before retention/export, and control its access and retention.
+	Diagnostic func(context.Context, string, string, error)
+	Origin     string
 	// AuthPath is a same-origin absolute mount for the public Identity.Web handler.
 	// The product serves it separately; Admin never proxies credentials.
 	AuthPath string
@@ -78,17 +90,22 @@ type Request struct {
 	Render    func(Page) error
 	// Allowed is only a presentation hint; it never grants domain permission.
 	Allowed func(capability, target string) bool
+	// CheckAllowed distinguishes an explicit denial (false, nil) from a failed
+	// policy evaluation. It is still only presentation, never domain authority.
+	CheckAllowed func(capability, target string) (bool, error)
+	diagnose     func(operation, phase string, cause error)
 }
 
 type Shell struct {
-	config   Config
-	host     string
-	auth     Authenticator
-	policy   Authorizer
-	surfaces []Surface
-	slots    chan struct{}
-	catalog  *localize.Catalog
-	browser  map[string]map[string]string
+	config      Config
+	host        string
+	auth        Authenticator
+	policy      Authorizer
+	surfaces    []Surface
+	slots       chan struct{}
+	catalog     *localize.Catalog
+	browser     map[string]map[string]string
+	diagnostics diagnosticWindowState
 }
 
 var surfaceSyntax = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
@@ -106,29 +123,39 @@ func nilInterface(value any) bool {
 }
 
 func New(config Config, auth Authenticator, policy Authorizer, surfaces ...Surface) (*Shell, error) {
+	if config.Logger == nil {
+		config.Logger = slog.Default()
+	}
 	u, err := url.Parse(config.Origin)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" || u.String() != config.Origin || nilInterface(auth) || nilInterface(policy) {
-		return nil, ErrConfiguration
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" || u.String() != config.Origin {
+		return nil, fmt.Errorf("%w: origin must be an exact HTTPS authority without credentials, path, query or fragment", ErrConfiguration)
+	}
+	if nilInterface(auth) {
+		return nil, fmt.Errorf("%w: authenticator is required", ErrConfiguration)
+	}
+	if nilInterface(policy) {
+		return nil, fmt.Errorf("%w: authorizer is required", ErrConfiguration)
 	}
 	if config.Language == "" {
 		config.Language = "en"
 	}
 	a, err := url.Parse(config.AuthPath)
 	if err != nil || !strings.HasPrefix(config.AuthPath, "/") || strings.HasPrefix(config.AuthPath, "//") || a.Path != config.AuthPath || a.RawPath != "" || a.RawQuery != "" || a.Fragment != "" || a.Host != "" || strings.ContainsAny(config.AuthPath, "\\\r\n") || strings.Contains(config.AuthPath, "..") || strings.HasSuffix(config.AuthPath, "/") || config.AuthPath == "/" || config.AuthPath == "/admin" || strings.HasPrefix(config.AuthPath, "/admin/") {
-		return nil, ErrConfiguration
+		return nil, fmt.Errorf("%w: auth path must be a separate absolute same-origin mount", ErrConfiguration)
 	}
 	if len(surfaces) == 0 || len(surfaces) > 16 {
-		return nil, ErrConfiguration
+		return nil, fmt.Errorf("%w: surface count must be between 1 and 16", ErrConfiguration)
 	}
 	seen := make(map[string]bool, len(surfaces))
-	for _, s := range surfaces {
+	for index, s := range surfaces {
 		if !surfaceSyntax.MatchString(s.ID) || s.ID == "login" || s.ID == "assets" || seen[s.ID] || s.Title.Domain == "" || s.Title.Key == "" || s.Capability == "" || s.Handler == nil {
-			return nil, ErrConfiguration
+			return nil, fmt.Errorf("%w: surface %d requires a unique valid ID, title, capability and handler", ErrConfiguration, index)
 		}
 		seen[s.ID] = true
 	}
 	s := &Shell{config: config, host: u.Host, auth: auth, policy: policy, surfaces: append([]Surface(nil), surfaces...), slots: make(chan struct{}, 16)}
 	if err := s.configureCatalogs(); err != nil {
+		s.diagnose(context.Background(), "configure", "catalogs", err)
 		return nil, err
 	}
 	return s, nil
@@ -184,62 +211,81 @@ func (s *Shell) sameOrigin(r *http.Request) bool {
 func (s *Shell) serve(w http.ResponseWriter, r *http.Request) {
 	headers(w)
 	if r.TLS == nil || r.Host != s.host || r.URL.RawQuery != "" || r.URL.RawPath != "" || r.URL.Path != "/admin" && !strings.HasPrefix(r.URL.Path, "/admin/") {
-		s.fail(w, http.StatusBadRequest, "invalid_request")
+		s.fail(r.Context(), w, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		w.Header().Set("Allow", "GET, POST")
-		s.fail(w, http.StatusMethodNotAllowed, "invalid_request")
+		s.fail(r.Context(), w, http.StatusMethodNotAllowed, "invalid_request")
 		return
 	}
 	if r.Method == http.MethodPost && !s.sameOrigin(r) {
-		s.fail(w, http.StatusUnauthorized, "authentication_required")
+		s.fail(r.Context(), w, http.StatusUnauthorized, "authentication_required")
 		return
 	}
 	select {
 	case s.slots <- struct{}{}:
 		defer func() { <-s.slots }()
 	default:
-		s.fail(w, http.StatusTooManyRequests, "busy")
+		s.fail(r.Context(), w, http.StatusTooManyRequests, "busy")
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 	r = r.WithContext(ctx)
 	controller := http.NewResponseController(w)
-	if controller.SetReadDeadline(requestDeadline(ctx, 8*time.Second)) != nil || controller.SetWriteDeadline(requestDeadline(ctx, 12*time.Second)) != nil {
-		s.fail(w, http.StatusServiceUnavailable, "unavailable")
+	if err := controller.SetReadDeadline(requestDeadline(ctx, 8*time.Second)); err != nil {
+		s.diagnose(ctx, "request", "set_read_deadline", err)
+		s.failBefore(r.Context(), w, http.StatusServiceUnavailable, "unavailable")
+		return
+	}
+	if err := controller.SetWriteDeadline(requestDeadline(ctx, 12*time.Second)); err != nil {
+		s.diagnose(ctx, "request", "set_write_deadline", err)
+		s.failBefore(r.Context(), w, http.StatusServiceUnavailable, "unavailable")
 		return
 	}
 	if r.ContentLength > 12<<20 {
-		s.fail(w, http.StatusRequestEntityTooLarge, "invalid_request")
+		s.failBefore(r.Context(), w, http.StatusRequestEntityTooLarge, "input_too_large")
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 12<<20)
-	defer r.Body.Close()
+	defer func() {
+		if err := r.Body.Close(); err != nil && !errors.Is(err, io.ErrClosedPipe) {
+			s.diagnose(ctx, "request", "body_close", err)
+		}
+	}()
 	if name, kind, ok := assetPath(r.URL.Path); ok {
 		if r.Method != http.MethodGet {
-			s.fail(w, 405, "invalid_request")
+			s.fail(r.Context(), w, 405, "invalid_request")
 			return
 		}
-		data, _ := assets.ReadFile(name)
+		data, err := assets.ReadFile(name)
+		if err != nil {
+			s.diagnose(ctx, "asset", "read_embedded", err)
+			s.failBefore(r.Context(), w, 503, "unavailable")
+			return
+		}
 		w.Header().Set("Content-Type", kind)
-		_, _ = w.Write(data)
+		if _, err := w.Write(data); err != nil {
+			s.diagnose(ctx, "asset", "response_write", err)
+		}
 		return
 	}
 	locale, err := s.requestLocale(r)
 	if err != nil {
-		s.fail(w, 503, "locale_unavailable")
+		s.diagnose(ctx, "localize", "select_locale", err)
+		s.failBefore(r.Context(), w, 503, "locale_unavailable")
 		return
 	}
 	if r.URL.Path == "/admin/login" && r.Method == http.MethodGet {
 		title, titleErr := locale.Text("admin", "sign_in", nil)
 		if titleErr != nil {
-			s.fail(w, 503, "locale_unavailable")
+			s.diagnose(ctx, "localize", "page_title", titleErr)
+			s.failBefore(r.Context(), w, 503, "locale_unavailable")
 			return
 		}
-		if err := s.render(w, Page{Title: title, Template: loginTemplate, Data: login{locale, s.config.AuthPath}}, nil, "login", locale); err != nil {
-			s.fail(w, 503, "unavailable")
+		if err := s.renderPage(ctx, w, Page{Title: title, Template: loginTemplate, Data: login{locale, s.config.AuthPath}}, nil, "login", locale); err != nil && !errors.Is(err, ErrResponseDelivery) {
+			s.fail(r.Context(), w, 503, "unavailable")
 		}
 		return
 	}
@@ -250,10 +296,11 @@ func (s *Shell) serve(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Location", "/admin/login")
 				w.WriteHeader(http.StatusSeeOther)
 			} else {
-				s.fail(w, 401, "authentication_required")
+				s.fail(r.Context(), w, 401, "authentication_required")
 			}
 		} else {
-			s.fail(w, 503, "unavailable")
+			s.diagnose(ctx, "authenticate", "provider", err)
+			s.failBefore(r.Context(), w, 503, "authentication_unavailable")
 		}
 		return
 	}
@@ -263,27 +310,30 @@ func (s *Shell) serve(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			title, titleErr := locale.Text(surface.Title.Domain, surface.Title.Key, nil)
 			if titleErr != nil {
-				s.fail(w, 503, "locale_unavailable")
+				s.diagnose(ctx, "localize", "surface_title", titleErr)
+				s.failBefore(r.Context(), w, 503, "locale_unavailable")
 				return
 			}
 			nav = append(nav, navItem{surface.ID, title})
 		} else if !errors.Is(err, achrix.ErrDenied) {
-			s.fail(w, 503, "unavailable")
+			s.diagnose(ctx, "authorize", "navigation_permission", err)
+			s.failBefore(r.Context(), w, 503, "authorization_unavailable")
 			return
 		}
 	}
 	if r.URL.Path == "/admin" || r.URL.Path == "/admin/" {
 		if r.Method != http.MethodGet {
-			s.fail(w, 405, "invalid_request")
+			s.fail(r.Context(), w, 405, "invalid_request")
 			return
 		}
 		title, titleErr := locale.Text("admin", "administration", nil)
 		if titleErr != nil {
-			s.fail(w, 503, "locale_unavailable")
+			s.diagnose(ctx, "localize", "page_title", titleErr)
+			s.failBefore(r.Context(), w, 503, "locale_unavailable")
 			return
 		}
-		if err = s.render(w, Page{Title: title, Template: homeTemplate, Data: home{len(nav), locale}}, nav, "", locale); err != nil {
-			s.fail(w, 503, "unavailable")
+		if err = s.renderPage(ctx, w, Page{Title: title, Template: homeTemplate, Data: home{len(nav), locale}}, nav, "", locale); err != nil && !errors.Is(err, ErrResponseDelivery) {
+			s.fail(r.Context(), w, 503, "unavailable")
 		}
 		return
 	}
@@ -294,9 +344,10 @@ func (s *Shell) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		if err = s.policy.Authorize(ctx, p, surface.Capability, surface.Target); err != nil {
 			if errors.Is(err, achrix.ErrDenied) {
-				s.fail(w, 403, "permission_denied")
+				s.fail(r.Context(), w, 403, "permission_denied")
 			} else {
-				s.fail(w, 503, "unavailable")
+				s.diagnose(ctx, "authorize", "surface_permission", err)
+				s.failBefore(r.Context(), w, 503, "authorization_unavailable")
 			}
 			return
 		}
@@ -305,25 +356,75 @@ func (s *Shell) serve(w http.ResponseWriter, r *http.Request) {
 		if len(parts) == 2 {
 			copy.URL.Path = "/" + parts[1]
 		}
-		surface.Handler(w, copy, Request{Principal: p, Language: locale.Locale().Tag, Localizer: locale, Render: func(page Page) error { return s.render(w, page, nav, surface.ID, locale) }, Allowed: func(cap, target string) bool { return s.policy.Authorize(ctx, p, cap, target) == nil }})
+		check := func(capability, target string) (bool, error) {
+			err := s.policy.Authorize(ctx, p, capability, target)
+			if err == nil {
+				return true, nil
+			}
+			if errors.Is(err, achrix.ErrDenied) {
+				return false, nil
+			}
+			s.diagnose(ctx, "authorize", "presentation_permission", err)
+			return false, achrix.ErrAuthorizationUnavailable
+		}
+		surface.Handler(w, copy, Request{Principal: p, Language: locale.Locale().Tag, Localizer: locale,
+			Render:       func(page Page) error { return s.renderPage(ctx, w, page, nav, surface.ID, locale) },
+			Allowed:      func(capability, target string) bool { allowed, _ := check(capability, target); return allowed },
+			CheckAllowed: check,
+			diagnose:     func(operation, phase string, cause error) { s.diagnose(ctx, operation, phase, cause) },
+		})
 		return
 	}
-	s.fail(w, 404, "not_found")
+	s.fail(r.Context(), w, 404, "not_found")
 }
 
-func (s *Shell) fail(w http.ResponseWriter, status int, code string) {
+func (s *Shell) failBefore(ctx context.Context, w http.ResponseWriter, status int, code string) {
+	s.failureResponse(ctx, w, status, code, "not_executed")
+}
+
+func (s *Shell) fail(ctx context.Context, w http.ResponseWriter, status int, code string) {
+	s.failureResponse(ctx, w, status, code, "")
+}
+
+func (s *Shell) failureResponse(ctx context.Context, w http.ResponseWriter, status int, code, outcome string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	_, _ = io.WriteString(w, `{"code":"`+code+`"}`)
+	body := `{"code":"` + code + `"`
+	if outcome != "" {
+		body += `,"outcome":"` + outcome + `"`
+	}
+	if _, err := io.WriteString(w, body+`}`); err != nil {
+		s.diagnose(ctx, "error_response", "response_write", err)
+	}
 }
 
 // Render first completes all trusted templates into bounded buffers. There is
 // no partially successful page after template failure and data is autoescaped.
+var errPageLimit = errors.New("admin page exceeds 128 KiB")
+
+type renderFailure struct {
+	phase string
+	cause error
+}
+
+func (e *renderFailure) Error() string { return "admin render failed during " + e.phase }
+func (e *renderFailure) Is(target error) bool {
+	return target == ErrResponseDelivery && e.phase == "response_write" || target == ErrConfiguration && e.phase == "template_contract"
+}
+
+func (s *Shell) renderPage(ctx context.Context, w http.ResponseWriter, page Page, nav []navItem, active string, locale *localize.Localizer) error {
+	err := s.render(w, page, nav, active, locale)
+	if failure, ok := err.(*renderFailure); ok {
+		s.diagnose(ctx, "render", failure.phase, failure.cause)
+	}
+	return err
+}
+
 type boundedBuffer struct{ bytes.Buffer }
 
 func (b *boundedBuffer) Write(p []byte) (int, error) {
 	if b.Len()+len(p) > 128<<10 {
-		return 0, errors.New("admin page too large")
+		return 0, errPageLimit
 	}
 	return b.Buffer.Write(p)
 }
@@ -340,19 +441,25 @@ type layout struct {
 
 func (s *Shell) render(w http.ResponseWriter, page Page, nav []navItem, active string, locale *localize.Localizer) error {
 	if page.Template == nil || page.Template.Lookup("content") == nil {
-		return ErrConfiguration
+		return &renderFailure{"template_contract", ErrConfiguration}
 	}
 	var content, result boundedBuffer
 	if err := page.Template.ExecuteTemplate(&content, "content", page.Data); err != nil {
-		return err
+		return &renderFailure{"content_template", err}
 	}
 	metadata := locale.Locale()
 	view := layout{Lang: metadata.Tag, Dir: metadata.Direction, Title: page.Title, AuthPath: s.config.AuthPath, Active: active, Navigation: nav, Content: template.HTML(content.String()), SignedIn: active != "login", Locale: locale, Messages: s.browser[metadata.Tag][active]} // Only a successfully autoescaped compiled template enters this trusted slot.
 	if err := layoutTemplate.Execute(&result, view); err != nil {
-		return err
+		return &renderFailure{"layout_template", err}
 	}
-	_, err := w.Write(result.Bytes())
-	return err
+	n, err := w.Write(result.Bytes())
+	if err == nil && n != result.Len() {
+		err = io.ErrShortWrite
+	}
+	if err != nil {
+		return &renderFailure{"response_write", err}
+	}
+	return nil
 }
 
 //go:embed assets/*

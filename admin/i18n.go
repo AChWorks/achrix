@@ -59,8 +59,11 @@ func (s *Shell) configureCatalogs() error {
 		}
 		for _, surface := range s.surfaces {
 			title, titleErr := locale.Text(surface.Title.Domain, surface.Title.Key, nil)
-			if titleErr != nil || title == "" || len(title) > 512 {
-				return fmt.Errorf("%w: surface %s title %s/%s", ErrConfiguration, surface.ID, surface.Title.Domain, surface.Title.Key)
+			if titleErr != nil {
+				return fmt.Errorf("%w: surface %s title %s/%s: %w", ErrConfiguration, surface.ID, surface.Title.Domain, surface.Title.Key, titleErr)
+			}
+			if title == "" || len(title) > 512 {
+				return fmt.Errorf("%w: surface %s title must contain 1 to 512 bytes", ErrConfiguration, surface.ID)
 			}
 		}
 		messages, messageErr := locale.Messages("admin")
@@ -90,8 +93,11 @@ func (s *Shell) configureCatalogs() error {
 				Locale  string                                 `json:"locale"`
 				Domains map[string]map[string]localize.Message `json:"domains"`
 			}{metadata.Tag, domains})
-			if encodeErr != nil || len(data) > 64<<10 {
-				return fmt.Errorf("%w: browser catalog exceeds bound for %s/%s", ErrConfiguration, metadata.Tag, active)
+			if encodeErr != nil {
+				return fmt.Errorf("%w: browser catalog encoding for %s/%s: %w", ErrConfiguration, metadata.Tag, active, encodeErr)
+			}
+			if len(data) > 64<<10 {
+				return fmt.Errorf("%w: browser catalog exceeds 64 KiB for %s/%s", ErrConfiguration, metadata.Tag, active)
 			}
 			byDomain[domain] = string(data)
 			s.browser[metadata.Tag][active] = byDomain[domain]

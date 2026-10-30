@@ -29,13 +29,13 @@
       if (form.elements.revision) form.elements.revision.value = String(value.revision);
       if (form.elements.enabled) form.elements.enabled.checked = value.enabled;
     });
-    document.getElementById("account-no-actions").hidden = any;
+    document.getElementById("account-no-actions").hidden = any || event.detail.warning === "permissions_unavailable";
     account.hidden = false; empty.hidden = true;
   });
   document.addEventListener("admin:failure", event => {
     if (event.detail.unknown && event.target.dataset.operation === "create") {
       document.getElementById("lookup-login").value = document.getElementById("new-login").value;
     }
-    if (event.target.hasAttribute("data-read-only") || event.detail.unknown || event.detail.status === 401 || event.detail.status === 409 || event.detail.status === 404) clear();
+    if (event.target.hasAttribute("data-read-only") || event.detail.unknown || event.detail.acknowledged || event.detail.status === 401 || event.detail.status === 409 || event.detail.status === 404) clear();
   });
 })();
