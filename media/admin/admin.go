@@ -296,6 +296,21 @@ type requestFailure struct {
 func (e *requestFailure) Error() string { return "media request transport failed" }
 func (e *requestFailure) Unwrap() error { return e.cause }
 
+// Parsers may wrap a reader failure or replace it with an untyped framing
+// error. Retain the actual body-read cause separately until transport mapping.
+type trackedBody struct {
+	io.ReadCloser
+	cause error
+}
+
+func (b *trackedBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err != nil && err != io.EOF && b.cause == nil {
+		b.cause = err
+	}
+	return n, err
+}
+
 // Fully validate framing before durable Media intent. Two fixed 10MiB+1 buffers
 // bound file preflight; no temporary files or multipart disk spill are created.
 func upload(w http.ResponseWriter, r *http.Request) (string, []byte, error) {
@@ -312,7 +327,8 @@ func upload(w http.ResponseWriter, r *http.Request) (string, []byte, error) {
 	if err := http.NewResponseController(w).SetReadDeadline(deadline(r.Context(), 8*time.Second)); err != nil {
 		return "", nil, &requestFailure{phase: "upload_read_deadline", cause: err}
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 12<<20)
+	body := &trackedBody{ReadCloser: http.MaxBytesReader(w, r.Body, 12<<20)}
+	r.Body = body
 	defer r.Body.Close()
 	reader, err := r.MultipartReader()
 	if err != nil {
@@ -320,7 +336,10 @@ func upload(w http.ResponseWriter, r *http.Request) (string, []byte, error) {
 	}
 	part, err := reader.NextRawPart()
 	if err != nil {
-		return "", nil, inputError(err)
+		return "", nil, inputError(err, body.cause, "upload_part")
+	}
+	if body.cause != nil {
+		return "", nil, inputError(nil, body.cause, "upload_part")
 	}
 	disposition, fields, err := mime.ParseMediaType(part.Header.Get("Content-Disposition"))
 	if err != nil || disposition != "form-data" || len(fields) != 2 || fields["name"] != "file" || fields["filename"] == "" || fields["filename"] != part.FileName() || strings.ContainsAny(fields["filename"], "/\\") {
@@ -338,33 +357,43 @@ func upload(w http.ResponseWriter, r *http.Request) (string, []byte, error) {
 		return "", nil, errTooLarge
 	}
 	if err != io.ErrUnexpectedEOF && err != io.EOF {
-		return "", nil, inputError(err)
+		return "", nil, inputError(err, body.cause, "upload_body")
+	}
+	if body.cause != nil {
+		return "", nil, inputError(err, body.cause, "upload_body")
 	}
 	if n == 0 {
 		return "", nil, media.ErrInput
 	}
 	// NextRawPart must see the terminal boundary, never another file or field.
-	if _, err = reader.NextRawPart(); err != io.EOF {
+	_, err = reader.NextRawPart()
+	if body.cause != nil {
+		return "", nil, inputError(err, body.cause, "upload_trailing")
+	}
+	if err != io.EOF {
 		if err != nil {
-			return "", nil, inputError(err)
+			return "", nil, inputError(err, body.cause, "upload_trailing")
 		}
 		return "", nil, media.ErrInput
 	}
 	return fields["filename"], data[:n], nil
 }
-func inputError(err error) error {
+func inputError(err, readCause error, phase string) error {
 	var tooLarge *http.MaxBytesError
-	if errors.As(err, &tooLarge) {
+	if errors.As(err, &tooLarge) || errors.As(readCause, &tooLarge) {
 		return errTooLarge
 	}
+	if readCause == nil {
+		return media.ErrInput
+	}
 	var timedOut interface{ Timeout() bool }
-	if errors.As(err, &timedOut) && timedOut.Timeout() {
-		return &requestFailure{phase: "request_body", cause: err, timeout: true}
+	if errors.As(readCause, &timedOut) && timedOut.Timeout() {
+		return &requestFailure{phase: phase, cause: readCause, timeout: true}
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return &requestFailure{phase: "request_body", cause: err, timeout: true}
+	if errors.Is(readCause, context.Canceled) || errors.Is(readCause, context.DeadlineExceeded) {
+		return &requestFailure{phase: phase, cause: readCause, timeout: true}
 	}
-	return media.ErrInput
+	return &requestFailure{phase: phase, cause: readCause}
 }
 func decode(w http.ResponseWriter, r *http.Request, target any) error {
 	if len(r.Header.Values("Content-Type")) != 1 || r.Header.Get("Content-Type") != "application/json" {
@@ -373,16 +402,23 @@ func decode(w http.ResponseWriter, r *http.Request, target any) error {
 	if err := http.NewResponseController(w).SetReadDeadline(deadline(r.Context(), 2*time.Second)); err != nil {
 		return &requestFailure{phase: "json_read_deadline", cause: err}
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 2048)
+	body := &trackedBody{ReadCloser: http.MaxBytesReader(w, r.Body, 2048)}
+	r.Body = body
 	defer r.Body.Close()
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
-		return inputError(err)
+		return inputError(err, body.cause, "json_body")
+	}
+	if body.cause != nil {
+		return inputError(nil, body.cause, "json_body")
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
-		return inputError(err)
+		return inputError(err, body.cause, "json_trailing")
+	}
+	if body.cause != nil {
+		return inputError(nil, body.cause, "json_trailing")
 	}
 	return nil
 }
@@ -454,6 +490,8 @@ func fail(w http.ResponseWriter, view shell.Request, err error, id string) {
 	switch {
 	case transport != nil && transport.timeout:
 		status, code = http.StatusRequestTimeout, "request_timeout"
+	case transport != nil:
+		status, code = http.StatusServiceUnavailable, "unavailable"
 	case errors.Is(err, media.ErrUnknownOutcome):
 		code, outcome = "outcome_unknown", "unknown"
 	case errors.Is(err, achrix.ErrDenied):

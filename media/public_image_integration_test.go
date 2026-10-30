@@ -313,6 +313,61 @@ func TestPostgresPublicImageDestinationErrorsAreSafe(t *testing.T) {
 	}
 }
 
+func TestPostgresPublicImageJoinedDestinationFailuresRetainEvidence(t *testing.T) {
+	f := newFixture(t)
+	ctx, cancel := operationContext(t)
+	defer cancel()
+	ctx = context.WithValue(ctx, diagnosticContextKey{}, "trusted-destination-operation")
+	asset, err := f.service.Create(ctx, testActor, "joined-writer.png", bytes.NewReader(imageBytes(t, "png", 2, 2)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logs := &diagnosticBuffer{}
+	f.module.logger = slog.New(slog.NewJSONHandler(logs, nil))
+	const private = "private-destination-provider-token"
+	for _, scenario := range []struct {
+		name, reason string
+		cause, want  error
+		operational  bool
+	}{
+		{"short_write", "short_write", errors.Join(ErrInput, fmt.Errorf("%s: %w", private, io.ErrShortWrite)), ErrInput, true},
+		{"network", "network_failure", errors.Join(ErrLimited, &net.OpError{Op: "write", Net: "tcp", Err: errors.New(private)}), ErrLimited, true},
+		{"nested_provider", "dependency_failure", fmt.Errorf("%s: %w", private, errors.Join(ErrLimited, errors.New(private))), ErrLimited, true},
+		{"expected_wrapper", "", fmt.Errorf("%s: %w", private, ErrLimited), ErrLimited, false},
+		{"expected_join", "", errors.Join(ErrLimited, fmt.Errorf("%s: %w", private, ErrLimited)), ErrLimited, false},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			calls := 0
+			f.module.config.Diagnostic = func(ctx context.Context, operation, phase string, cause error) {
+				calls++
+				if cause != scenario.cause || operation != "prepare_output" || phase != "prepare_output" || ctx.Value(diagnosticContextKey{}) != "trusted-destination-operation" {
+					t.Error("destination cause/phase/correlation changed", operation, phase, cause)
+				}
+			}
+			beforeCount, beforeLog := f.module.FailureCount(), len(logs.String())
+			result, got := f.service.PreparePublicImage(ctx, publicImageActor, PreparePublicImageRequest{asset.ID, asset.Revision}, wrappedPublicWriter{scenario.cause})
+			if result != (PublicImage{}) || got != scenario.want || errors.Is(got, ErrUnknownOutcome) || errors.Is(got, io.ErrShortWrite) || strings.Contains(got.Error(), private) {
+				t.Fatal("destination changed public identity or exposed private chain", result, got)
+			}
+			var network *net.OpError
+			if errors.As(got, &network) {
+				t.Fatal("private network object escaped", got)
+			}
+			ordinary := logs.String()[beforeLog:]
+			if scenario.operational {
+				if calls != 1 || f.module.FailureCount() != beforeCount+1 || !strings.Contains(ordinary, `"reason":"`+scenario.reason+`"`) || !strings.Contains(ordinary, `"phase":"prepare_output"`) {
+					t.Fatal("routine sibling suppressed operational destination evidence", calls, f.module.FailureCount(), ordinary)
+				}
+			} else if calls != 0 || f.module.FailureCount() != beforeCount || ordinary != "" {
+				t.Fatal("pure expected destination became an operational failure", calls, ordinary)
+			}
+			if strings.Contains(ordinary, private) {
+				t.Fatal("private provider text entered ordinary diagnostics")
+			}
+		})
+	}
+}
+
 // The actual driver constructs a ConnectError around a private dial failure while
 // the caller context remains live. Both legacy Read and preparation must expose
 // only canonical safe identities and discard the driver/configuration unwrap chain.

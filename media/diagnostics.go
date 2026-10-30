@@ -40,13 +40,30 @@ func fault(phase, reason string, cause error, fields ...slog.Attr) error {
 	return &diagnosticFault{phase: phase, reason: reason, cause: cause, fields: fields}
 }
 
-// A joined expected identity does not erase a typed system failure or a
-// dependency cancellation while the caller is still live. The public mapper
-// continues to expose only the supported safe identities.
+// Inspect every joined member before deciding that a failure is routine.
+// Wrapping an expected identity remains quiet; adding an operational sibling
+// does not. Public mapping still exposes only the supported safe identities.
 func hasOperationalMember(ctx context.Context, cause error) bool {
-	var errno syscall.Errno
-	return errors.As(cause, &errno) || ctx.Err() == nil &&
-		(errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded))
+	if cause == nil {
+		return false
+	}
+	if joined, ok := cause.(interface{ Unwrap() []error }); ok {
+		for _, member := range joined.Unwrap() {
+			if hasOperationalMember(ctx, member) {
+				return true
+			}
+		}
+		return false
+	}
+	if wrapped, ok := cause.(interface{ Unwrap() error }); ok && wrapped.Unwrap() != nil {
+		return hasOperationalMember(ctx, wrapped.Unwrap())
+	}
+	for _, expected := range []error{ErrInput, ErrConflict, ErrLimited, ErrNotFound} {
+		if errors.Is(cause, expected) {
+			return false
+		}
+	}
+	return ctx.Err() == nil || !errors.Is(cause, context.Canceled) && !errors.Is(cause, context.DeadlineExceeded)
 }
 
 type diagnosticEntry struct {
