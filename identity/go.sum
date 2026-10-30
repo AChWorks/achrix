@@ -2,8 +2,8 @@ github.com/AChWorks/achrix v0.4.1-0.20261030054013-9d755aa7281b h1:RHGAC+wsgKG1z
 github.com/AChWorks/achrix v0.4.1-0.20261030054013-9d755aa7281b/go.mod h1:9Zj1xlOsqGJcF1FNrGVBl+4jUfQX2D5AkR96RpB6PB0=
 github.com/AChWorks/achrix/admin v0.2.1-0.20261030060024-21c529040722 h1:iemk1/JoFUTlP7+wNhgK1Z5fs+/T77xkugO/G7f5H/I=
 github.com/AChWorks/achrix/admin v0.2.1-0.20261030060024-21c529040722/go.mod h1:xVpT4ee9VT6B7GKazD9Hi57BXKQe2pEjwKERHrlqrEs=
-github.com/AChWorks/achrix/audit v0.1.1-0.20261030060024-21c529040722 h1:hXU0ccehb2osN7BrjaF9TQt3gApxb7JZEoB/xQXvDa0=
-github.com/AChWorks/achrix/audit v0.1.1-0.20261030060024-21c529040722/go.mod h1:/MdiQOnDm/KhuXO1znWIZBoTka+lFzUrwmJ6N5LQYWE=
+github.com/AChWorks/achrix/audit v0.1.1-0.20261030061705-d9abf8ad3dd9 h1:o9oezDrBU173JRBXUF+ijPXnpfW4vFHmGJePMgPucfM=
+github.com/AChWorks/achrix/audit v0.1.1-0.20261030061705-d9abf8ad3dd9/go.mod h1:/MdiQOnDm/KhuXO1znWIZBoTka+lFzUrwmJ6N5LQYWE=
 github.com/alexedwards/argon2id v1.0.0 h1:wJzDx66hqWX7siL/SRUmgz3F8YMrd/nfX/xHHcQQP0w=
 github.com/alexedwards/argon2id v1.0.0/go.mod h1:tYKkqIjzXvZdzPvADMWOEZ+l6+BD6CtBXMj5fnJppiw=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
