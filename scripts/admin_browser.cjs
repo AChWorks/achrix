@@ -197,20 +197,29 @@ async function main() {
       await page.locator("#new-login").fill(login);
       // Inject a source-owned pre-execution response to prove browser mapping.
       // Actual first/trailing body-read timeout behavior is covered by Go faults.
-      const beforeBodyTimeout=await probe();
-      let bodyTimeoutCalls=0;
-      await page.route("**/admin/identity/create",route=>{
+      const bodyTimeoutStart=calls.length;
+      let bodyTimeoutCalls=0,beforeBodyTimeout;
+      await page.route("**/admin/identity/create",async route=>{
+        assert.equal(new URL(route.request().url()).origin,endpoint.origin);
+        assert.equal(route.request().method(),"POST");
         bodyTimeoutCalls++;
+        // The UI has completed its real CSRF refresh before sending this POST.
+        // That refresh persists a session hash included in the full digest;
+        // snapshot here, before fulfilling the intercepted mutation response.
+        if(bodyTimeoutCalls===1) beforeBodyTimeout=await probe();
         return route.fulfill({status:408,contentType:"application/json",headers:{"X-Request-ID":"browser-body-timeout"},body:JSON.stringify({code:"request_timeout",outcome:"not_executed"})});
       });
       await responseSubmit(create,"/admin/identity/create",408);
-      await page.unroute("**/admin/identity/create");
       const timeoutMessage=await page.locator("#status").innerText();
       assert(timeoutMessage.includes(fa?"عملیات شروع نشد":"operation was not started"));
       assert(timeoutMessage.includes("browser-body-timeout"),"safe correlation shown with actionable failure");
       assert(!timeoutMessage.includes(unknown),"proven non-execution is not unknown mutation");
-      assert.equal(bodyTimeoutCalls,1);
+      assert(beforeBodyTimeout,"full state captured after CSRF refresh and before injected response");
       sameState(beforeBodyTimeout,await probe(),"pre-execution timeout has no durable effects");
+      assert.equal(bodyTimeoutCalls,1,"pre-execution timeout never replays create");
+      assert.equal(calls.slice(bodyTimeoutStart).filter(c=>c.path==="/auth/csrf"&&c.method==="GET").length,1,"one real CSRF refresh for rejected submission");
+      assert.equal(calls.slice(bodyTimeoutStart).filter(c=>c.path==="/admin/identity/create"&&c.method==="POST").length,1,"one intercepted create, no replay");
+      await page.unroute("**/admin/identity/create");
       await page.locator("#new-password").fill("🔐".repeat(15));
 
       // Exercise a confirmed real create with unavailable presentation hints.
