@@ -144,8 +144,20 @@ func (s *Service) Prepare(ctx context.Context, actor achrix.Principal, event Eve
 // passwords, TLS trust and fallback settings are compared without being exposed.
 func (s *Service) CheckDatabase(dsn string) error {
 	c, err := databaseConfig(dsn)
-	if err != nil || !sameDatabase(s.module.dbConfig.ConnConfig, c.ConnConfig) {
-		return ErrConfiguration
+	if err != nil {
+		var owned *diagnosticError
+		if errors.As(err, &owned) {
+			s.module.report(context.Background(), "check_database", "database_config", "not_executed", err)
+			return configuration("dsn", owned.detail)
+		}
+		// The remaining preflight errors contain only source-owned field rules.
+		s.module.report(context.Background(), "check_database", "database_config", "not_executed", diagnosticFault("configuration_precondition_failed", err.Error(), err))
+		return err
+	}
+	if !sameDatabase(s.module.dbConfig.ConnConfig, c.ConnConfig) {
+		const requirement = "must match Audit's database and security profile"
+		s.module.report(context.Background(), "check_database", "compare_profile", "not_executed", diagnosticFault("configuration_profile_mismatch", requirement, ErrConfiguration))
+		return configuration("dsn", requirement)
 	}
 	return nil
 }

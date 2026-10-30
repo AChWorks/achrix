@@ -14,7 +14,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -559,7 +558,7 @@ func TestWebBodyReadDeadlinePreflight(t *testing.T) {
 	w := webProofBoundary(t)
 	writer := httptest.NewRecorder()
 	w.Handler().ServeHTTP(writer, webProofRequest(http.MethodPost, "/login", "{\"login\":\"fixture\",\"password\":\"a long test password\"}"))
-	if writer.Code != http.StatusServiceUnavailable || writer.Body.String() != "{\"code\":\"authentication_unavailable\"}\n" || len(w.slots) != 0 {
+	if writer.Code != http.StatusServiceUnavailable || writer.Body.String() != "{\"code\":\"authentication_unavailable\",\"outcome\":\"not_executed\"}\n" || len(w.slots) != 0 {
 		t.Fatal("unsupported login transport reached service work or leaked admission")
 	}
 }
@@ -586,18 +585,6 @@ func TestWebBodyReadDeadlineRespectsOperationBudget(t *testing.T) {
 		}
 		if shorter && !writer.readDeadline.Equal(earlier) {
 			t.Fatal("body read deadline extended earlier operation deadline")
-		}
-	}
-}
-
-func TestWebDecodeFailureCategories(t *testing.T) {
-	timeout := fmt.Errorf("fixture restricted details: %w", &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded})
-	if err := decodeError(timeout); !errors.Is(err, ErrUnavailable) {
-		t.Fatal("wrapped transport timeout is not unavailable", err)
-	}
-	for _, input := range []error{io.EOF, &json.SyntaxError{}, &http.MaxBytesError{Limit: 2048}, errors.New("fixture malformed body")} {
-		if err := decodeError(input); !errors.Is(err, ErrInvalid) {
-			t.Fatal("invalid body misclassified", err)
 		}
 	}
 }

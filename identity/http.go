@@ -227,15 +227,60 @@ func (w *Web) serve(writer http.ResponseWriter, r *http.Request) {
 // ErrBodyTimeout means body admission timed out before any Service mutation.
 var ErrBodyTimeout = errors.New("identity request body timeout")
 
+// bodyAdmissionError contains only canonical public identities. It proves that
+// decoding stopped before dispatch; the original transport cause stays private.
+type bodyAdmissionError struct{ public error }
+
+func (e *bodyAdmissionError) Error() string { return e.public.Error() }
+func (e *bodyAdmissionError) Unwrap() error { return e.public }
+
+// Track the reader separately from the JSON parser: parser errors can be
+// untyped, and a successful Decode can consume bytes returned with an I/O error.
+type bodyReadTracker struct {
+	reader  io.Reader
+	failure error
+}
+
+func (b *bodyReadTracker) Read(p []byte) (int, error) {
+	n, err := b.reader.Read(p)
+	if err != nil && err != io.EOF && b.failure == nil {
+		// MaxBytesReader owns this exact input-limit error. A joined/wrapped EOF
+		// is not ordinary end-of-body and may contain a meaningful I/O failure.
+		if _, limited := err.(*http.MaxBytesError); !limited {
+			b.failure = err
+		}
+	}
+	return n, err
+}
+
 func (w *Web) decodeWeb(writer http.ResponseWriter, r *http.Request, target any) error {
 	return decodeWebDiagnostic(writer, r, target, func(phase string, cause error) {
-		w.service.module.report(r.Context(), "http_body", phase, "not_executed", cause)
+		m := w.service.module
+		if caller := r.Context().Err(); caller != nil && errors.Is(cause, caller) {
+			// Expected caller aborts retain their protected cause and context, but
+			// do not become ordinary dependency ERROR records. An unrelated I/O
+			// failure still takes the operational path even if the caller stopped.
+			if m.config.Diagnostic != nil {
+				m.config.Diagnostic(r.Context(), "http_body", phase, cause)
+			}
+			return
+		}
+		m.report(r.Context(), "http_body", phase, "not_executed", cause)
 	})
 }
 func decodeWeb(writer http.ResponseWriter, r *http.Request, target any) error {
 	return decodeWebDiagnostic(writer, r, target, nil)
 }
 func decodeWebDiagnostic(writer http.ResponseWriter, r *http.Request, target any, report func(string, error)) error {
+	failure := func(phase string, cause error) error {
+		if report != nil {
+			report(phase, cause)
+		}
+		return bodyAdmissionFailure(r.Context(), cause)
+	}
+	if err := r.Context().Err(); err != nil {
+		return failure("admission", err)
+	}
 	if len(r.Header.Values("Content-Type")) != 1 || r.Header.Get("Content-Type") != "application/json" {
 		return ErrInvalid
 	}
@@ -248,39 +293,52 @@ func decodeWebDiagnostic(writer http.ResponseWriter, r *http.Request, target any
 		readDeadline = deadline
 	}
 	if err := http.NewResponseController(writer).SetReadDeadline(readDeadline); err != nil {
-		if report != nil {
-			report("set_read_deadline", err)
-		}
-		return ErrUnavailable
+		return failure("set_read_deadline", err)
 	}
 	r.Body = http.MaxBytesReader(writer, r.Body, 2048)
 	defer r.Body.Close()
-	decoder := json.NewDecoder(r.Body)
+	body := &bodyReadTracker{reader: r.Body}
+	decoder := json.NewDecoder(body)
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		result := decodeError(err)
-		if report != nil && errors.Is(result, ErrBodyTimeout) {
-			report("read", err)
-		}
-		return result
+	err := decoder.Decode(target)
+	if body.failure != nil {
+		return failure("read", body.failure)
+	}
+	if err := r.Context().Err(); err != nil {
+		return failure("read", err)
+	}
+	if err != nil {
+		return ErrInvalid
 	}
 	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		result := decodeError(err)
-		if report != nil && errors.Is(result, ErrBodyTimeout) {
-			report("read", err)
-		}
-		return result
+	err = decoder.Decode(&extra)
+	if body.failure != nil {
+		return failure("read_trailing", body.failure)
+	}
+	if err := r.Context().Err(); err != nil {
+		return failure("read_trailing", err)
+	}
+	if err != io.EOF {
+		return ErrInvalid
 	}
 	return nil
 }
 
-func decodeError(err error) error {
+func bodyReadTimeout(err error) bool {
 	var network net.Error
-	if errors.Is(err, context.DeadlineExceeded) || errors.As(err, &network) && network.Timeout() {
-		return errors.Join(ErrBodyTimeout, ErrUnavailable)
+	return errors.Is(err, context.DeadlineExceeded) || errors.As(err, &network) && network.Timeout()
+}
+func bodyAdmissionFailure(ctx context.Context, cause error) error {
+	public := ErrUnavailable
+	if caller := ctx.Err(); caller != nil {
+		public = errors.Join(public, caller)
 	}
-	return ErrInvalid
+	// net/http can cancel the request context when its Body.Read deadline fires.
+	// The observed timeout remains a timeout even when that also canceled ctx.
+	if bodyReadTimeout(cause) || ctx.Err() == context.DeadlineExceeded {
+		public = errors.Join(ErrBodyTimeout, public)
+	}
+	return &bodyAdmissionError{public: public}
 }
 func webSession(writer http.ResponseWriter, s Session) error {
 	return json.NewEncoder(writer).Encode(struct {
@@ -307,7 +365,8 @@ func webError(writer http.ResponseWriter, err error) {
 	}
 	writer.WriteHeader(status)
 	outcome := ""
-	if errors.Is(err, ErrBodyTimeout) {
+	var admission *bodyAdmissionError
+	if errors.As(err, &admission) || errors.Is(err, ErrBodyTimeout) {
 		outcome = "not_executed"
 	}
 	field, reason := "", ""
