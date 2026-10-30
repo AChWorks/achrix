@@ -359,31 +359,72 @@ func migrationIdentity() (string, string) {
 	sum := sha256.Sum256(b)
 	return string(b), hex.EncodeToString(sum[:])
 }
-func checkSchema(ctx context.Context, p *pgxpool.Pool) error {
-	_, checksum := migrationIdentity()
-	var got string
-	var count, version int
-	if err := p.QueryRow(ctx, "SELECT count(*),COALESCE(min(checksum),''),COALESCE(min(version),0) FROM audit.schema_migrations").Scan(&count, &got, &version); err != nil {
+
+type schemaReader interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+type migration struct{ sql, checksum string }
+
+func migrationPlan() []migration {
+	plan := make([]migration, 0, 2)
+	for _, name := range []string{"001_audit.sql", "002_attribution.sql"} {
+		data, err := migrations.ReadFile("migrations/" + name)
+		if err != nil {
+			panic("missing embedded Audit migration")
+		}
+		sum := sha256.Sum256(data)
+		plan = append(plan, migration{string(data), hex.EncodeToString(sum[:])})
+	}
+	return plan
+}
+
+// Only a nonempty exact ordered prefix is upgradeable. Bound the query to one
+// extra row so a future/foreign ledger cannot make verification unbounded.
+func ledgerVersion(ctx context.Context, q schemaReader, plan []migration) (int, error) {
+	rows, err := q.Query(ctx, "SELECT version,checksum FROM audit.schema_migrations ORDER BY version LIMIT $1", len(plan)+1)
+	if err != nil {
 		reason := "ledger_unreadable"
 		var state interface{ SQLState() string }
 		if errors.As(err, &state) && (state.SQLState() == "42P01" || state.SQLState() == "3F000") {
 			reason = "schema_missing"
 		}
-		return diagnosticFault(reason, "cannot verify the audit migration ledger", err)
+		return 0, diagnosticFault(reason, "cannot verify the audit migration ledger", err)
+	}
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		var version int
+		var checksum string
+		if err := rows.Scan(&version, &checksum); err != nil {
+			return 0, diagnosticFault("ledger_invalid_row", "cannot decode the audit migration ledger", err)
+		}
+		if count >= len(plan) || version > len(plan) {
+			return 0, diagnosticFault("migration_version_incompatible", "the installed audit migration version is unsupported", ErrConfiguration, slog.Int("installed_version", version), slog.Int("required_version", len(plan)))
+		}
+		if version != count+1 {
+			return 0, diagnosticFault("ledger_noncontiguous", "the audit migration ledger must be an exact ordered prefix", ErrConfiguration, slog.Int("installed_version", version), slog.Int("expected_version", count+1))
+		}
+		if checksum != plan[count].checksum {
+			return 0, diagnosticFault("migration_checksum_changed", "the installed audit migration checksum differs from the immutable source", ErrConfiguration, slog.Int("version", version))
+		}
+		count++
+	}
+	if err := rows.Err(); err != nil {
+		return 0, diagnosticFault("ledger_read_failed", "cannot finish reading the audit migration ledger", err)
 	}
 	if count == 0 {
-		return diagnosticFault("ledger_incomplete", "the required audit migration ledger entry is missing", ErrConfiguration)
+		return 0, diagnosticFault("ledger_incomplete", "the required audit migration ledger entry is missing", ErrConfiguration)
 	}
-	if count != 1 {
-		return diagnosticFault("ledger_incompatible", "the audit migration ledger must contain exactly one entry", ErrConfiguration, slog.Int("ledger_entries", count))
+	return count, nil
+}
+
+func checkRecordSchema(ctx context.Context, q schemaReader, version int) error {
+	columns := "seq,id,actor,action,target,authority,outcome,occurred_at"
+	if version >= 2 {
+		columns += ",client_id,connection_id,channel,request_id,operation"
 	}
-	if version != 1 {
-		return diagnosticFault("migration_version_incompatible", "the installed audit migration version is unsupported", ErrConfiguration, slog.Int("installed_version", version), slog.Int("required_version", 1))
-	}
-	if got != checksum {
-		return diagnosticFault("migration_checksum_changed", "the installed audit migration checksum differs from the immutable source", ErrConfiguration)
-	}
-	rows, err := p.Query(ctx, "SELECT seq,id,actor,action,target,authority,outcome,occurred_at FROM audit.records WHERE false")
+	rows, err := q.Query(ctx, "SELECT "+columns+" FROM audit.records WHERE false")
 	if err != nil {
 		return diagnosticFault("schema_incomplete", "required audit tables or columns cannot be read", err)
 	}
@@ -393,17 +434,40 @@ func checkSchema(ctx context.Context, p *pgxpool.Pool) error {
 	}
 
 	var guardCount int
-	err = p.QueryRow(ctx, "SELECT count(*) FROM pg_trigger WHERE tgrelid='audit.records'::regclass AND NOT tgisinternal AND tgenabled='O' AND tgname IN ('records_reject_mutation','records_reject_truncate')").Scan(&guardCount)
+	err = q.QueryRow(ctx, "SELECT count(*) FROM pg_trigger WHERE tgrelid='audit.records'::regclass AND NOT tgisinternal AND tgenabled='O' AND tgname IN ('records_reject_mutation','records_reject_truncate')").Scan(&guardCount)
 	if err != nil {
 		return diagnosticFault("guard_check_failed", "cannot verify Audit mutation guards", err)
 	}
 	if guardCount != 2 {
 		return diagnosticFault("guard_missing", "required Audit mutation guards are missing or disabled", ErrConfiguration, slog.Int("enabled_guards", guardCount), slog.Int("required_guards", 2))
 	}
+	if version >= 2 {
+		var constraintCount int
+		if err := q.QueryRow(ctx, "SELECT count(*) FROM pg_constraint WHERE conrelid='audit.records'::regclass AND conname='records_attribution_complete' AND contype='c' AND convalidated").Scan(&constraintCount); err != nil {
+			return diagnosticFault("constraint_check_failed", "cannot verify the Audit attribution constraint", err)
+		}
+		if constraintCount != 1 {
+			return diagnosticFault("constraint_missing", "the validated Audit attribution constraint is required", ErrConfiguration)
+		}
+	}
 	return nil
 }
 
-// Migrate is an explicit installation action; startup never changes schema.
+func checkSchema(ctx context.Context, p schemaReader) error {
+	plan := migrationPlan()
+	version, err := ledgerVersion(ctx, p, plan)
+	if err != nil {
+		return err
+	}
+	if version != len(plan) {
+		return diagnosticFault("migration_required", "explicit Audit migration is required before startup", ErrConfiguration, slog.Int("installed_version", version), slog.Int("required_version", len(plan)))
+	}
+	return checkRecordSchema(ctx, p, version)
+}
+
+// Migrate explicitly installs or advances an exact immutable ledger prefix under
+// one transactional advisory lock. Startup never changes schema. Source rollback
+// does not downgrade retained records or the migration ledger.
 // Existing callers use the default logger. Products needing protected original
 // causes should call MigrateWithDiagnostics with their configured sink.
 func Migrate(ctx context.Context, dsn string) error {
@@ -460,20 +524,34 @@ func MigrateWithDiagnostics(ctx context.Context, dsn string, logger *slog.Logger
 	if err = tx.QueryRow(ctx, "SELECT to_regnamespace('audit') IS NOT NULL").Scan(&exists); err != nil {
 		return fail("inspect_namespace", outcome, err)
 	}
+	plan := migrationPlan()
+	version := 0
 	if exists {
-		m.rollback(ctx, "migrate", outcome, tx)
-		cleanupDone = true
-		if err = checkSchema(ctx, p); err != nil {
+		version, err = ledgerVersion(ctx, tx, plan)
+		if err != nil {
 			return fail("check_schema", "not_executed", err)
 		}
+		// Validate the installed version before adding anything. An upgrade
+		// must not silently repair a damaged ledger, table or immutability guard.
+		if err = checkRecordSchema(ctx, tx, version); err != nil {
+			return fail("check_schema", "not_executed", err)
+		}
+	}
+	if version == len(plan) {
+		m.rollback(ctx, "migrate", outcome, tx)
+		cleanupDone = true
 		return nil
 	}
-	sql, checksum := migrationIdentity()
-	if _, err = tx.Exec(ctx, sql); err != nil {
-		return fail("ddl", outcome, err)
+	for i := version; i < len(plan); i++ {
+		if _, err = tx.Exec(ctx, plan[i].sql); err != nil {
+			return fail("ddl", outcome, diagnosticFault("migration_ddl_failed", "Audit migration DDL failed", err, slog.Int("version", i+1)))
+		}
+		if _, err = tx.Exec(ctx, "INSERT INTO audit.schema_migrations(version,checksum) VALUES($1,$2)", i+1, plan[i].checksum); err != nil {
+			return fail("record_ledger", outcome, diagnosticFault("migration_ledger_write_failed", "Audit migration ledger insert failed", err, slog.Int("version", i+1)))
+		}
 	}
-	if _, err = tx.Exec(ctx, "INSERT INTO audit.schema_migrations(version,checksum) VALUES(1,$1)", checksum); err != nil {
-		return fail("record_ledger", outcome, err)
+	if err = checkSchema(ctx, tx); err != nil {
+		return fail("check_schema", outcome, err)
 	}
 	if err = tx.Commit(ctx); err != nil {
 		outcome = commitOutcome(err)

@@ -230,9 +230,10 @@ func TestPostgresRetainedAudit(t *testing.T) {
 	if err = bad.Stop(ctx); err != nil {
 		t.Fatal("partial-start resources did not clean up")
 	}
-	_, checksum := migrationIdentity()
-	if _, err = conn.Exec(ctx, "UPDATE audit.schema_migrations SET checksum=$1", checksum); err != nil {
-		t.Fatal(err)
+	for i, migration := range migrationPlan() {
+		if _, err = conn.Exec(ctx, "UPDATE audit.schema_migrations SET checksum=$1 WHERE version=$2", migration.checksum, i+1); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, err = conn.Exec(ctx, "ALTER TABLE audit.records DISABLE TRIGGER records_reject_mutation"); err != nil {
 		t.Fatal(err)

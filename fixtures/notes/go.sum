@@ -2,12 +2,12 @@ github.com/AChWorks/achrix v0.5.1-0.20261030144430-33b336f40be7 h1:Ch/BzaGXCUVan
 github.com/AChWorks/achrix v0.5.1-0.20261030144430-33b336f40be7/go.mod h1:9Zj1xlOsqGJcF1FNrGVBl+4jUfQX2D5AkR96RpB6PB0=
 github.com/AChWorks/achrix/admin v0.2.1-0.20261030060024-21c529040722 h1:iemk1/JoFUTlP7+wNhgK1Z5fs+/T77xkugO/G7f5H/I=
 github.com/AChWorks/achrix/admin v0.2.1-0.20261030060024-21c529040722/go.mod h1:xVpT4ee9VT6B7GKazD9Hi57BXKQe2pEjwKERHrlqrEs=
-github.com/AChWorks/achrix/audit v0.1.1-0.20261030061705-d9abf8ad3dd9 h1:o9oezDrBU173JRBXUF+ijPXnpfW4vFHmGJePMgPucfM=
-github.com/AChWorks/achrix/audit v0.1.1-0.20261030061705-d9abf8ad3dd9/go.mod h1:/MdiQOnDm/KhuXO1znWIZBoTka+lFzUrwmJ6N5LQYWE=
+github.com/AChWorks/achrix/audit v0.2.1-0.20261030172741-1042336721a2 h1:EgW8X39zmbxYY+4aMn1b1sJSgvvpuOoiT4ke4x80G5I=
+github.com/AChWorks/achrix/audit v0.2.1-0.20261030172741-1042336721a2/go.mod h1:l0jQ5RnkxRP70IgcBerHEeDLrCPxQYPjwGlP1ZsDf2k=
 github.com/AChWorks/achrix/bridge v0.0.0-20261030171359-75121b059dde h1:N+Uf4cYKiGozEQNnQcraKx6icz6Pv/nC7b5g4hvEw9c=
 github.com/AChWorks/achrix/bridge v0.0.0-20261030171359-75121b059dde/go.mod h1:s2hC7PEgo/j5Ss3bHW9KEJ9inZu+jldL379726yS3LM=
-github.com/AChWorks/achrix/identity v0.2.1-0.20261030061736-b9d82bb6d85d h1:Pg0rQ31C5hOYHdxlsMOPHcmCglGOd0cutskhT4Rzdgk=
-github.com/AChWorks/achrix/identity v0.2.1-0.20261030061736-b9d82bb6d85d/go.mod h1:i/2k5H3cQTvAfhFjs72zv8SyZfigzmX+ACsi8KV0310=
+github.com/AChWorks/achrix/identity v0.3.1-0.20261030172815-cd8b9e7a1d7e h1:q7OYAguLmanGiYtjBxgZjagOd+p/I8/J+GnI+gxZmrc=
+github.com/AChWorks/achrix/identity v0.3.1-0.20261030172815-cd8b9e7a1d7e/go.mod h1:X0cEFZxWNsUXofSzLedje0AJpPoycSizeKIQULPtdB0=
 github.com/AChWorks/achrix/installation v0.1.1-0.20261030060024-21c529040722 h1:/VTOXlg8XEXC+uzroubHUjd+ZiKdMOvajAu/KZ9oY/Q=
 github.com/AChWorks/achrix/installation v0.1.1-0.20261030060024-21c529040722/go.mod h1:KvDbSPsuFnfcazVHt9O2D6VsC194hOo65bfeKeLJ6xA=
 github.com/AChWorks/achrix/media v0.3.1-0.20261030171415-469d74f4db85 h1:RfRnwpXv5d8O3e+IlNJcIgk4IlTYCQoNhb1Phhg93k4=

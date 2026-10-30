@@ -1,0 +1,601 @@
+{
+  "openapi": "3.1.1",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "AChrix retained Audit HTTP API",
+    "version": "1.0.0",
+    "description": "Optional explicit Query/Export bindings over the ordinary Audit Service. This version identifies the transport contract, not a component release. No append, edit, deletion, listing of targets, export background work or snapshot claim."
+  },
+  "servers": [
+    {
+      "url": "https://product.example/api/audit",
+      "description": "Example only; replace with the product HTTP ResourceURL and intended audience."
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/records": {
+      "get": {
+        "operationId": "achrix.audit.query",
+        "summary": "Read one bounded Audit page",
+        "description": "Requires exact-target Query permission. Each page reauthorizes. Authorized absence returns an empty array. No body, unknown or repeated query fields, identity/attribution arguments or noncanonical path aliases. Query input is bounded to 512 encoded bytes. Concurrent commits may become visible out of sequence; use product-owned write quiescence or a supported database snapshot for a complete consistent export.",
+        "parameters": [
+          {
+            "name": "target",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 34,
+              "pattern": "^(?:[A-Za-z0-9_-]{34})?$",
+              "description": "Unchanged continuation for this exact target. Omit or empty to restart. The owning Service validates version, sequence and canonical target binding; this is not a grant or snapshot."
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One authorized page of committed visible records.",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "405": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "408": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "413": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    },
+    "/export": {
+      "get": {
+        "operationId": "achrix.audit.export",
+        "summary": "Export one bounded Audit page",
+        "description": "Requires separate exact-target Export permission. This is one JSON page, not a file/job or complete snapshot export. Each page reauthorizes. Authorized absence returns an empty array. No body, unknown or repeated query fields, identity/attribution arguments or noncanonical path aliases. Query input is bounded to 512 encoded bytes. Concurrent commits may become visible out of sequence; use product-owned write quiescence or a supported database snapshot for a complete consistent export.",
+        "parameters": [
+          {
+            "name": "target",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 34,
+              "pattern": "^(?:[A-Za-z0-9_-]{34})?$",
+              "description": "Unchanged continuation for this exact target. Omit or empty to restart. The owning Service validates version, sequence and canonical target binding; this is not a grant or snapshot."
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One authorized page of committed visible records.",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "405": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "408": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "413": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Credential verified for this resource, followed by current connection admission and exact-target Service permission. MCP uses its independently configured audience."
+      }
+    },
+    "schemas": {
+      "PageInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 34,
+            "pattern": "^(?:[A-Za-z0-9_-]{34})?$",
+            "description": "Unchanged continuation for this exact target. Omit or empty to restart. The owning Service validates version, sequence and canonical target binding; this is not a grant or snapshot."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          }
+        }
+      },
+      "AttributionInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "client_id",
+          "channel",
+          "request_id",
+          "operation"
+        ],
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "Trusted non-secret identifier; at most 256 UTF-8 bytes without control characters. URI-like client identifiers are permitted."
+          },
+          "connection_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "Optional trusted non-secret connection identifier, at most 256 UTF-8 bytes without controls; omitted when absent."
+          },
+          "channel": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "operation": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 96,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          }
+        },
+        "description": "Actor-bound provenance retained at Prepare and atomically appended by the owning domain. It is never an authorization grant or caller-selected request field."
+      },
+      "RecordInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "actor",
+          "action",
+          "target",
+          "authority",
+          "outcome",
+          "occurred_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 26,
+            "maxLength": 26,
+            "pattern": "^[a-z2-7]{26}$"
+          },
+          "actor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 96,
+            "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "authority": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 96,
+            "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+          },
+          "outcome": {
+            "type": "string",
+            "const": "succeeded"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC RFC3339 instant at retained microsecond precision."
+          },
+          "attribution": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "client_id",
+              "channel",
+              "request_id",
+              "operation"
+            ],
+            "properties": {
+              "client_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "Trusted non-secret identifier; at most 256 UTF-8 bytes without control characters. URI-like client identifiers are permitted."
+              },
+              "connection_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "Optional trusted non-secret connection identifier, at most 256 UTF-8 bytes without controls; omitted when absent."
+              },
+              "channel": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32,
+                "pattern": "^[A-Za-z0-9._-]+$"
+              },
+              "request_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "operation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96,
+                "pattern": "^[A-Za-z0-9._-]+$"
+              }
+            },
+            "description": "Actor-bound provenance retained at Prepare and atomically appended by the owning domain. It is never an authorization grant or caller-selected request field."
+          }
+        },
+        "description": "Only retained fields. No internal sequence, credentials or arbitrary payload. Historical and direct records omit attribution instead of inventing provenance."
+      },
+      "Page": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "records"
+        ],
+        "properties": {
+          "records": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "actor",
+                "action",
+                "target",
+                "authority",
+                "outcome",
+                "occurred_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 26,
+                  "maxLength": 26,
+                  "pattern": "^[a-z2-7]{26}$"
+                },
+                "actor": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "action": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 96,
+                  "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+                },
+                "target": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "authority": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 96,
+                  "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+                },
+                "outcome": {
+                  "type": "string",
+                  "const": "succeeded"
+                },
+                "occurred_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "UTC RFC3339 instant at retained microsecond precision."
+                },
+                "attribution": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "client_id",
+                    "channel",
+                    "request_id",
+                    "operation"
+                  ],
+                  "properties": {
+                    "client_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256,
+                      "description": "Trusted non-secret identifier; at most 256 UTF-8 bytes without control characters. URI-like client identifiers are permitted."
+                    },
+                    "connection_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256,
+                      "description": "Optional trusted non-secret connection identifier, at most 256 UTF-8 bytes without controls; omitted when absent."
+                    },
+                    "channel": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 32,
+                      "pattern": "^[A-Za-z0-9._-]+$"
+                    },
+                    "request_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                    },
+                    "operation": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 96,
+                      "pattern": "^[A-Za-z0-9._-]+$"
+                    }
+                  },
+                  "description": "Actor-bound provenance retained at Prepare and atomically appended by the owning domain. It is never an authorization grant or caller-selected request field."
+                }
+              },
+              "description": "Only retained fields. No internal sequence, credentials or arbitrary payload. Historical and direct records omit attribution instead of inventing provenance."
+            }
+          },
+          "next_cursor": {
+            "type": "string",
+            "maxLength": 34,
+            "pattern": "^(?:[A-Za-z0-9_-]{34})?$",
+            "description": "Unchanged continuation for this exact target. Omit or empty to restart. The owning Service validates version, sequence and canonical target binding; this is not a grant or snapshot.",
+            "minLength": 34
+          }
+        },
+        "description": "One page of committed visible target records; empty records is []. Absent next_cursor ends this traversal, not a cross-request snapshot."
+      },
+      "Problem": {
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code",
+          "message",
+          "action",
+          "outcome",
+          "request_id"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "about:blank"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "action": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "fields": {
+            "type": "object",
+            "maxProperties": 16,
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 256
+            }
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "not_executed",
+              "not_committed",
+              "succeeded",
+              "unknown"
+            ]
+          },
+          "reference": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Server-generated correlation; incoming identity headers cannot select it."
+          }
+        }
+      }
+    },
+    "responses": {
+      "Failure": {
+        "description": "Safe bounded problem with request correlation and correction guidance. Owning Service read failures are not_executed because no state-changing effect was attempted; actual invocation is separately recorded in protected diagnostics. Raw provider/input values are never exposed.",
+        "headers": {
+          "X-Request-ID": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "Cache-Control": {
+            "schema": {
+              "type": "string",
+              "const": "no-store"
+            }
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      }
+    }
+  }
+}

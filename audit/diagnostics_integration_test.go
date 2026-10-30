@@ -14,10 +14,13 @@ import (
 func TestPostgresAuditMigrationPhaseEvidence(t *testing.T) {
 	for _, tc := range []struct{ name, sql, reason string }{
 		{"missing ledger entry", "DELETE FROM audit.schema_migrations", "ledger_incomplete"},
-		{"incompatible version", "UPDATE audit.schema_migrations SET version=2", "migration_version_incompatible"},
+		{"incompatible version", "UPDATE audit.schema_migrations SET version=version+2", "migration_version_incompatible"},
+		{"noncontiguous ledger", "DELETE FROM audit.schema_migrations WHERE version=1", "ledger_noncontiguous"},
 		{"changed checksum", "UPDATE audit.schema_migrations SET checksum=repeat('0',64)", "migration_checksum_changed"},
 		{"missing runtime column", "ALTER TABLE audit.records DROP COLUMN authority", "schema_incomplete"},
 		{"disabled guard", "ALTER TABLE audit.records DISABLE TRIGGER records_reject_mutation", "guard_missing"},
+		{"missing attribution column", "ALTER TABLE audit.records DROP COLUMN client_id", "schema_incomplete"},
+		{"missing attribution constraint", "ALTER TABLE audit.records DROP CONSTRAINT records_attribution_complete", "constraint_missing"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dsn := testDSN(t)

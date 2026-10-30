@@ -5,9 +5,9 @@ go 1.27.3
 require (
 	github.com/AChWorks/achrix v0.5.1-0.20261030144430-33b336f40be7
 	github.com/AChWorks/achrix/admin v0.2.1-0.20261030060024-21c529040722
-	github.com/AChWorks/achrix/audit v0.1.1-0.20261030061705-d9abf8ad3dd9
+	github.com/AChWorks/achrix/audit v0.2.1-0.20261030172741-1042336721a2
 	github.com/AChWorks/achrix/bridge v0.0.0-20261030171359-75121b059dde
-	github.com/AChWorks/achrix/identity v0.2.1-0.20261030061736-b9d82bb6d85d
+	github.com/AChWorks/achrix/identity v0.3.1-0.20261030172815-cd8b9e7a1d7e
 	github.com/AChWorks/achrix/installation v0.1.1-0.20261030060024-21c529040722
 	github.com/AChWorks/achrix/media v0.3.1-0.20261030171415-469d74f4db85
 	github.com/AChWorks/achrix/multisite v0.1.2-0.20261030163915-c0df7f4bf362
