@@ -23,13 +23,17 @@ import (
 
 var errResponseLimit = errors.New("bridge response exceeded the configured byte limit")
 
-// ServeHTTP handles only authenticated request/response MCP POSTs. Each request
+// ServeHTTP handles the endpoint's bounded MCP or JSON HTTP profile. Each request
 // verifies the credential and current admission; no connection principal or
 // business permission is cached. No request or operation is automatically replayed.
 func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), e.config.Limits.Timeout)
 	defer cancel()
-	s := &requestState{request: Request{ID: rand.Text(), Channel: "mcp"}, outcome: NotExecuted}
+	channel := "mcp"
+	if e.jsonHTTP {
+		channel = "http"
+	}
+	s := &requestState{endpoint: e, request: Request{ID: rand.Text(), Channel: channel}, outcome: NotExecuted}
 	ctx = context.WithValue(ctx, requestKey{}, s)
 	s.ctx = ctx
 	r = r.WithContext(ctx)
@@ -48,7 +52,7 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		e.failHTTP(w, r, s, status, "transport", f, errors.New(f.Message))
 		return
 	}
-	if r.Header.Get("Mcp-Protocol-Version") == "" {
+	if !e.jsonHTTP && r.Header.Get("Mcp-Protocol-Version") == "" {
 		// The SDK otherwise defaults to 2025-03-26, which still permits batch
 		// arrays. This adapter has one invocation state per POST. Select the
 		// supported legacy profile so SDK rejects batches before dispatch,
@@ -66,6 +70,9 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// Keep the exact body I/O failure before the SDK converts it to HTTP text.
 	if r.Body != nil {
+		if e.jsonHTTP {
+			r.Body = http.MaxBytesReader(w, r.Body, e.config.Limits.RequestBytes)
+		}
 		r.Body = &recordingBody{ReadCloser: r.Body, state: s}
 	}
 	response := &boundedResponse{header: make(http.Header), limit: e.config.Limits.ResponseBytes}
@@ -91,7 +98,11 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			status := response.status
 			f := ownFault
 			if f == nil {
-				f = sdkHTTPFault(status)
+				if e.jsonHTTP {
+					f = jsonHTTPFault(status)
+				} else {
+					f = sdkHTTPFault(status)
+				}
 			}
 			if ownPhase == "authentication" && status >= 500 {
 				status = http.StatusServiceUnavailable
@@ -117,9 +128,11 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				} else {
 					ownCause = errors.New(response.body.String())
 					ownPhase = "protocol"
-					if wire := decodeRPCError(response.body.Bytes()); wire != nil {
-						ownCause = wire
-						f = protocolFault(wire)
+					if !e.jsonHTTP {
+						if wire := decodeRPCError(response.body.Bytes()); wire != nil {
+							ownCause = wire
+							f = protocolFault(wire)
+						}
 					}
 				}
 			}
@@ -142,29 +155,31 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Preserve the protocol code and original typed error while projecting
 	// only safe correction details. Use the SDK's JSON-RPC codec, not a second
 	// envelope parser or dispatcher.
-	if message, err := jsonrpc.DecodeMessage(response.body.Bytes()); err == nil {
-		if rpc, ok := message.(*jsonrpc.Response); ok && rpc.Error != nil {
-			s.mu.Lock()
-			reported := s.reported
-			s.mu.Unlock()
-			if !reported {
-				var wire *jsonrpc.Error
-				if !errors.As(rpc.Error, &wire) {
-					wire = &jsonrpc.Error{Code: jsonrpc.CodeInternalError, Message: "MCP response construction failed"}
-				}
-				f := protocolFault(wire)
-				phase := "protocol"
-				if s.snapshot().Dispatched {
-					phase = "output"
-					f = &Fault{Code: "output_unavailable", Message: "The operation ran but its response could not be produced.", Action: "Reconcile the known outcome and reference before repeating a write.", Outcome: s.snapshot().Outcome}
-				}
-				e.report(ctx, s, phase, f.Code, rpc.Error, true)
-				data, _ := json.Marshal(project(f, s))
-				rpc.Error = &jsonrpc.Error{Code: wire.Code, Message: f.Message, Data: data}
-				encoded, encodeErr := jsonrpc.EncodeMessage(rpc)
-				if encodeErr == nil {
-					response.body.Reset()
-					_, _ = response.Write(encoded)
+	if !e.jsonHTTP {
+		if message, err := jsonrpc.DecodeMessage(response.body.Bytes()); err == nil {
+			if rpc, ok := message.(*jsonrpc.Response); ok && rpc.Error != nil {
+				s.mu.Lock()
+				reported := s.reported
+				s.mu.Unlock()
+				if !reported {
+					var wire *jsonrpc.Error
+					if !errors.As(rpc.Error, &wire) {
+						wire = &jsonrpc.Error{Code: jsonrpc.CodeInternalError, Message: "MCP response construction failed"}
+					}
+					f := protocolFault(wire)
+					phase := "protocol"
+					if s.snapshot().Dispatched {
+						phase = "output"
+						f = &Fault{Code: "output_unavailable", Message: "The operation ran but its response could not be produced.", Action: "Reconcile the known outcome and reference before repeating a write.", Outcome: s.snapshot().Outcome}
+					}
+					e.report(ctx, s, phase, f.Code, rpc.Error, true)
+					data, _ := json.Marshal(project(f, s))
+					rpc.Error = &jsonrpc.Error{Code: wire.Code, Message: f.Message, Data: data}
+					encoded, encodeErr := jsonrpc.EncodeMessage(rpc)
+					if encodeErr == nil {
+						response.body.Reset()
+						_, _ = response.Write(encoded)
+					}
 				}
 			}
 		}
@@ -199,16 +214,9 @@ func (e *Endpoint) validateHTTP(r *http.Request) (int, *Fault) {
 	if !strings.EqualFold(r.Host, e.resource.Host) {
 		return failure(http.StatusForbidden, "invalid_host", "The request host does not match this endpoint.", "Use the configured canonical resource URL.")
 	}
-	path := e.resource.Path
-	if path == "" {
-		path = "/"
-	}
-	if r.URL.Path != path || r.URL.RawPath != "" || r.URL.RawQuery != "" {
-		return failure(http.StatusBadRequest, "invalid_resource", "The request does not address the configured resource.", "Use the canonical resource URL without query parameters.")
-	}
-	for _, name := range []string{"Authorization", "Origin", "Content-Type", "Mcp-Protocol-Version", "Mcp-Method", "Mcp-Name", "Mcp-Session-Id"} {
+	for _, name := range []string{"Authorization", "Origin", "Sec-Fetch-Site", "Content-Type", "Mcp-Protocol-Version", "Mcp-Method", "Mcp-Name", "Mcp-Session-Id"} {
 		if len(r.Header.Values(name)) > 1 {
-			return failure(http.StatusBadRequest, "ambiguous_header", "A security-relevant request header appears more than once.", "Send one value for each authorization and MCP control header.")
+			return failure(http.StatusBadRequest, "ambiguous_header", "A security-relevant request header appears more than once.", "Send one value for each authorization and protocol control header.")
 		}
 	}
 	if origin := r.Header.Get("Origin"); origin != "" && !e.origins[origin] {
@@ -216,6 +224,22 @@ func (e *Endpoint) validateHTTP(r *http.Request) (int, *Fault) {
 	}
 	if r.Header.Get("Sec-Fetch-Site") == "cross-site" && r.Header.Get("Origin") == "" {
 		return failure(http.StatusForbidden, "origin_denied", "A cross-site browser request lacks an admitted origin.", "Use an explicitly admitted product origin.")
+	}
+	if r.ContentLength > e.config.Limits.RequestBytes {
+		return failure(http.StatusRequestEntityTooLarge, "request_too_large", "The request exceeds the endpoint's input limit.", "Reduce the request to the operation's bounded input contract.")
+	}
+	if len(r.Header.Get("Authorization")) > 8192 {
+		return failure(http.StatusUnauthorized, "invalid_credential", "The supplied credential cannot be accepted.", "Obtain a current credential for this resource and send it in one Bearer authorization header.")
+	}
+	if e.jsonHTTP {
+		return e.validateJSONHTTP(r)
+	}
+	path := e.resource.Path
+	if path == "" {
+		path = "/"
+	}
+	if r.URL.Path != path || r.URL.RawPath != "" || r.URL.RawQuery != "" {
+		return failure(http.StatusBadRequest, "invalid_resource", "The request does not address the configured resource.", "Use the canonical resource URL without query parameters.")
 	}
 	if r.Method != http.MethodPost {
 		return failure(http.StatusMethodNotAllowed, "method_not_allowed", "This endpoint accepts request-only MCP POSTs.", "Use POST with JSON; listening, sessions and subscriptions are not enabled.")
@@ -232,12 +256,6 @@ func (e *Endpoint) validateHTTP(r *http.Request) (int, *Fault) {
 	}
 	if version := r.Header.Get("Mcp-Protocol-Version"); version != "" && version != "2026-07-28" && version != "2025-11-25" {
 		return failure(http.StatusBadRequest, "unsupported_protocol", "This MCP protocol version is not enabled.", "Use protocol 2026-07-28 or 2025-11-25.")
-	}
-	if r.ContentLength > e.config.Limits.RequestBytes {
-		return failure(http.StatusRequestEntityTooLarge, "request_too_large", "The request exceeds the endpoint's input limit.", "Reduce the request to the registered tool's bounded input contract.")
-	}
-	if len(r.Header.Get("Authorization")) > 8192 {
-		return failure(http.StatusUnauthorized, "invalid_credential", "The supplied credential cannot be accepted.", "Obtain a current credential for this resource and send it in one Bearer authorization header.")
 	}
 	return 0, nil
 }
@@ -308,7 +326,7 @@ func (e *Endpoint) writeProblem(w http.ResponseWriter, r *http.Request, s *reque
 		w.Header().Del("WWW-Authenticate")
 		w.Header().Del("Allow")
 	}
-	if status == http.StatusMethodNotAllowed {
+	if status == http.StatusMethodNotAllowed && !e.jsonHTTP {
 		w.Header().Set("Allow", http.MethodPost)
 	}
 	if status == http.StatusUnauthorized || status == http.StatusForbidden && p.Code == "insufficient_scope" {

@@ -14,7 +14,7 @@ Shutdown is graceful. Readiness probes only dependencies necessary for local rea
 
 Configured external access must not start dedicated polling, sockets, session workers or timers for each idle connection. Store only the bounded metadata actually needed, acquire request resources on demand, and release them when work ends. Token refresh, discovery refresh or durable background work needs a real workload and explicit lifetime/budget; connection existence alone is not that workload.
 
-The optional [Bridge profile](../../bridge/README.md) uses fixed registration and stateless JSON requests without subscriptions or session upkeep. It bounds admitted requests, bodies, responses and cooperative execution time; products still bound their returned objects and own listener/TLS/header/read/write/drain limits. A deadline does not forcibly terminate arbitrary trusted in-process code. Sum these limits with the real product's pools, replicas and other ingress rather than treating the component limit as a fleet capacity promise.
+The optional [Bridge profiles](../../bridge/README.md) use fixed MCP registration or explicit JSON HTTP routes, without subscriptions or session upkeep. JSON HTTP constructs no MCP server; both profiles share per-request authentication/admission and limits. It bounds admitted requests, bodies, responses and cooperative execution time; products still bound their returned objects and own listener/TLS/header/read/write/drain limits. A deadline does not forcibly terminate arbitrary trusted in-process code. Sum these limits with the real product's pools, replicas and other ingress rather than treating the component limit as a fleet capacity promise.
 
 ## Module resource configuration
 

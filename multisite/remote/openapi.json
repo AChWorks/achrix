@@ -1,0 +1,439 @@
+{
+  "openapi": "3.1.1",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "AChrix Multi-Site read API",
+    "version": "1.0.0",
+    "description": "Optional explicit HTTP binding to existing Multi-Site Inventory and Site services. This schema version identifies the transport contract, not the independently packaged component release. Replace the example server URL with the configured HTTP ResourceURL. No host resolution, activation, mutation, provisioning or OAuth issuer is exposed."
+  },
+  "servers": [
+    {
+      "url": "https://product.example/api/multisite",
+      "description": "Example only; configure the product's actual HTTP resource and its distinct intended audience."
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/sites": {
+      "get": {
+        "operationId": "achrix.multisite.inventory.read",
+        "summary": "Read the current account's permitted site inventory",
+        "description": "Use a Bearer credential verified for this HTTP resource. Current administrator admission, grant/channel narrowing and the ordinary Service authorization all apply. GET bodies, unknown query parameters and repeated parameters are rejected. Requests and response output are bounded by the configured Bridge limits. No retries are performed automatically. Authorizes collection discovery and each examined exact site. Sparse denied entries are skipped by the Service; other authorization failures abort the whole page. No total is exposed. Every page rechecks permissions. At most 512 encoded query bytes are accepted. Large results may exceed the configured response limit; reduce limit instead of treating a failed delivery as a partial page.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 86,
+              "pattern": "^[A-Za-z0-9_-]*$",
+              "description": "Unchanged cursor from a previous inventory page; omit or use an empty string to start. Canonical base64url encoding is validated by the owning Service. A cursor carries no authority and is not a snapshot."
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized bounded page; sites is always an array, including when empty.",
+            "headers": {
+              "X-Request-ID": {
+                "description": "Server-generated request correlation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryPage"
+                },
+                "example": {
+                  "sites": [
+                    {
+                      "id": "site-a",
+                      "disabled": false,
+                      "modules": [],
+                      "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  ],
+                  "next_cursor": "c2l0ZS1h"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "405": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "408": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "413": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    },
+    "/sites/{site_id}": {
+      "get": {
+        "operationId": "achrix.multisite.site.read",
+        "summary": "Read one exact authorized site",
+        "description": "Use a Bearer credential verified for this HTTP resource. Current administrator admission, grant/channel narrowing and the ordinary Service authorization all apply. GET bodies, unknown query parameters and repeated parameters are rejected. Requests and response output are bounded by the configured Bridge limits. No retries are performed automatically. The Service authorizes the exact target before looking up existence. Denied existing and denied missing sites have the same permission failure. An authorized disabled site remains readable; disabled is returned truthfully. No query parameters are accepted.",
+        "parameters": [
+          {
+            "name": "site_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+              "description": "Exact case-sensitive configured site ID; not an authority claim."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Exact authorized site metadata. Empty modules is [], never null.",
+            "headers": {
+              "X-Request-ID": {
+                "description": "Server-generated request correlation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteInfo"
+                },
+                "example": {
+                  "id": "site-a",
+                  "disabled": false,
+                  "modules": [],
+                  "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "405": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "408": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "413": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Product-verified credential for this HTTP resource. Tokens and identity/grant state are product-owned; this API does not issue or refresh them."
+      }
+    },
+    "schemas": {
+      "InventoryInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "maxLength": 86,
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "Unchanged cursor from a previous inventory page; omit or use an empty string to start. Canonical base64url encoding is validated by the owning Service. A cursor carries no authority and is not a snapshot."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          }
+        }
+      },
+      "SiteInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "site_id"
+        ],
+        "properties": {
+          "site_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+            "description": "Exact case-sensitive configured site ID; not an authority claim."
+          }
+        }
+      },
+      "SiteInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "disabled",
+          "modules",
+          "revision"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+            "description": "Exact case-sensitive configured site ID; not an authority claim."
+          },
+          "disabled": {
+            "type": "boolean",
+            "description": "Routing-disabled state, not a universal product lifecycle state."
+          },
+          "modules": {
+            "type": "array",
+            "maxItems": 256,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+            }
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "minLength": 64,
+            "maxLength": 64,
+            "description": "Opaque configuration revision. It grants no permission and is never a JSON number."
+          }
+        }
+      },
+      "InventoryPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sites"
+        ],
+        "properties": {
+          "sites": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "disabled",
+                "modules",
+                "revision"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+                  "description": "Exact case-sensitive configured site ID; not an authority claim."
+                },
+                "disabled": {
+                  "type": "boolean",
+                  "description": "Routing-disabled state, not a universal product lifecycle state."
+                },
+                "modules": {
+                  "type": "array",
+                  "maxItems": 256,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+                  }
+                },
+                "revision": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$",
+                  "minLength": 64,
+                  "maxLength": 64,
+                  "description": "Opaque configuration revision. It grants no permission and is never a JSON number."
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": "string",
+            "maxLength": 86,
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "Absent when exhausted under permissions evaluated for this page. Contains only the last returned authorized site ID; no denied identities or totals.",
+            "minLength": 1
+          }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code",
+          "message",
+          "action",
+          "outcome",
+          "request_id"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "about:blank"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "action": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "fields": {
+            "type": "object",
+            "maxProperties": 16,
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 256
+            }
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "not_executed",
+              "not_committed",
+              "succeeded",
+              "unknown"
+            ]
+          },
+          "reference": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Only a confirmed authorized result supplies a site reference; a requested ID is not a verified reference."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Server-generated correlation; request headers cannot choose it."
+          }
+        }
+      }
+    },
+    "responses": {
+      "Failure": {
+        "description": "RFC 9457 safe problem with code, correction action, truthful outcome and request correlation. Protected original causes are not serialized.",
+        "headers": {
+          "X-Request-ID": {
+            "description": "Server-generated request correlation.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "Cache-Control": {
+            "schema": {
+              "type": "string",
+              "const": "no-store"
+            }
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      }
+    }
+  }
+}

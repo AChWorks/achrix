@@ -24,6 +24,22 @@ Products own actual TLS, Host and trusted-proxy validation; authentication of th
 
 The package tests prove immutable construction, exact mapping, authorized failure, independent instances, optional Core composition, cancellation and lifecycle/concurrency behavior. The management tests additionally prove selection/dependency validation, target-specific authorization, stale/ABA preconditions and resource omission under reconstructed Applications. They do **not** establish real account/database/storage/TLS isolation or preservation of site-owned state under a shared Foundation update. Real-consumer proof remains necessary; the independent Notes composition and actual products own their persisted-state proof.
 
+## Optional HTTP API and MCP access
+
+The component-owned [remote package](remote/README.md) binds existing `Inventory`
+and `Site` to authenticated HTTP and MCP with the same current product policy.
+It owns the operation/consumer table, [OpenAPI contract](remote/openapi.json),
+MCP schemas, bounded inputs/results and transport examples. No resolver,
+activation/provisioning or host-management operation is exported by this profile.
+
+Import and construct `multisite/remote` only when these adapters are needed.
+Direct `multisite` imports continue to work without compiling Bridge or its MCP
+SDK. The shared Multi-Site version's manifest does include the optional package's
+dependencies; this is a package/runtime boundary, not zero module-graph/download
+cost. Core has no new dependency. Products supply audience-bound verification,
+current connection admission and normal policy, and can still call the Service
+directly without an HTTP/MCP loopback or Gateway.
+
 ## Optional management and per-site composition
 
 The resolver's current data and lifecycle are also the coherent owner of bounded
