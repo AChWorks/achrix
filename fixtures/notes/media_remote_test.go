@@ -628,6 +628,27 @@ func TestPublicMediaRemotePrivateWorkflowAndCurrentAuthority(t *testing.T) {
 		t.Fatal("confirmed deletion retained original bytes", err)
 	}
 
+	// The second ready original also exercises the successful HTTP JSON route;
+	// the first original above deliberately retains MCP Delete coverage.
+	f.grant("alice", media.Delete, second.ID, true)
+	deleteBody, err := json.Marshal(map[string]string{"expected_revision": second.Revision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	httpDeleted := f.request(t, f.tokens["http/alice"], http.MethodPost, "/assets/"+second.ID+"/delete", "application/json", bytes.NewReader(deleteBody), "")
+	if httpDeleted.status != http.StatusOK {
+		t.Fatal("HTTP conditional deletion failed", httpDeleted.status, string(httpDeleted.data))
+	}
+	deleteResult := mediaRemoteDecode[mediaremote.DeleteResult](t, httpDeleted.data)
+	if deleteResult.AssetID != second.ID || deleteResult.Outcome != "succeeded" {
+		t.Fatal("HTTP deletion lost its confirmed identity/outcome", deleteResult)
+	}
+	f.grant("alice", media.Read, second.ID, true)
+	secondTombstone := mediaRemoteSuccess[mediaremote.AssetInfo](t, alice, mediaremote.StatusOperation, mediaremote.StatusInput{AssetID: second.ID})
+	if secondTombstone.ID != second.ID || secondTombstone.State != "deleted" || secondTombstone.Revision != "4" || secondTombstone.Content != nil || secondTombstone.Filename != "" {
+		t.Fatal("HTTP deletion did not produce the MCP-visible minimal tombstone", secondTombstone)
+	}
+
 	privateCause := errors.New("PRIVATE_MEDIA_AUTHORIZATION_PROVIDER")
 	f.mu.Lock()
 	f.policyCause = privateCause
@@ -689,6 +710,15 @@ func TestPublicMediaRemotePublicationLossAndBoundedReconciliation(t *testing.T) 
 	result := mediaRemoteSuccess[mediaremote.ReconcileResult](t, alice, mediaremote.ReconcileOperation, mediaremote.ReconcileInput{Limit: &limit})
 	if result.Processed != 1 || result.Busy != 0 {
 		t.Fatal("bounded authorized reconciliation did not finish the durable intent", result)
+	}
+	beforeHTTPReconcile := f.countCalls(media.Reconcile)
+	httpReconciled := f.request(t, f.tokens["http/alice"], http.MethodPost, "/reconcile", "application/json", strings.NewReader(`{"limit":1}`), "")
+	if httpReconciled.status != http.StatusOK {
+		t.Fatal("HTTP bounded reconciliation failed", httpReconciled.status, string(httpReconciled.data))
+	}
+	httpResult := mediaRemoteDecode[mediaremote.ReconcileResult](t, httpReconciled.data)
+	if httpResult.Processed != 0 || httpResult.Busy != 0 || f.countCalls(media.Reconcile) != beforeHTTPReconcile+1 {
+		t.Fatal("HTTP reconciliation did not invoke exactly one bounded no-op", httpResult)
 	}
 	status = mediaRemoteSuccess[mediaremote.AssetInfo](t, alice, mediaremote.StatusOperation, mediaremote.StatusInput{AssetID: failure.Reference})
 	if status.State != "deleted" || status.Content != nil || status.Filename != "" {
