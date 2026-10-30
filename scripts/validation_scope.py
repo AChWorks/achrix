@@ -10,7 +10,7 @@ DOCUMENTS = {
     "fixtures/notes/THIRD_PARTY_NOTICES.md",
     "identity/README.md", "audit/README.md", "media/README.md",
     "admin/README.md", "media/admin/README.md",
-    "installation/README.md", "multisite/README.md",
+    "installation/README.md", "multisite/README.md", "bridge/README.md",
 }
 ROUTING = {
     ".github/workflows/baseline.yml", "scripts/validation_scope.py",

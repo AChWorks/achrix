@@ -14,6 +14,7 @@ Use AChrix when you want shared application capabilities that you can consume an
 | [Multi-Site](multisite/README.md) | Site resolution, authorized inventory and per-site Module selection planning |
 | [Admin](admin/README.md) | A composable administration shell with Identity and Media screens, including file-based English/Persian localization and RTL/LTR presentation |
 | [Installation](installation/README.md) | Installation requirement assessment and safe re-entry planning |
+| [Bridge](bridge/README.md) | Optional MCP resource-server adapter for existing application operations and user permissions; products supply credential verification and connection admission |
 
 Supported failure paths preserve useful machine categories and corrective guidance. Runtime components provide structured local diagnostics, and products can compose a protected callback for the underlying operational cause; see [diagnosis and audit](docs/operations/operability-performance.md#diagnosis-and-audit) for access, correlation and retention responsibilities.
 

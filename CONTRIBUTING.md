@@ -36,6 +36,8 @@ Follow [Engineering principles](docs/principles/engineering-principles.md) and t
 
 When changing failure paths, prove useful cause/phase/field/outcome evidence as well as outward data protection. Capture causes before public canonicalization, preserve confirmed and uncertain mutation results, and keep suppression counts observable after traffic stops; [Operations](docs/operations/operability-performance.md#diagnosis-and-audit) owns the diagnostic contract.
 
+External-client changes must prove the ordinary application policy still owns authority, current connection/channel restrictions only narrow it, and idle configuration does not start per-connection work. Include a real consumer and a discriminating post-dispatch failure check when mutations are exposed. A resource-server fixture or existing browser regression pass is not evidence of OAuth onboarding or a real AI client's interoperability; record those separately under the [Bridge contract](bridge/README.md).
+
 ## Rights and sensitive data
 
 [Licensing](docs/legal/licensing.md) owns file/artifact scope; preserve third-party notices and use actual-license SPDX headers for new source. Templates/generated files need unambiguous scope. [CLA](docs/legal/cla.md) requires verified signed versioned consent and sufficient contributor/employer rights before covered external code merges; a PR checkbox or agent assertion is insufficient.

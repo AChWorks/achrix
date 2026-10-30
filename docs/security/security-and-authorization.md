@@ -70,6 +70,16 @@ AI/MCP/API access is never more privileged merely because it is automated.
 
 Every machine action must execute under an explicit principal/context and permission boundary. Discovery is not permission. Use product-required preview/approval boundaries for sensitive mutations; [Contracts](../architecture/contracts-and-interfaces.md) owns concurrency and replay safety.
 
+### User delegation and channel restrictions
+
+External access has two separate checks: the product administrator permits the connection/channel, and the owning application operation permits this current user to act on this resource. UI, API and MCP share those ordinary services and user permissions. Do not maintain another set of AI business roles or copy policy into a Gateway. A connection grant or channel rule may only narrow current product authority; allowing an action in the UI does not require allowing it through every external channel.
+
+For interactive use, bind a verified product account to the actual client and product resource/audience. A shared privileged credential plus a claimed user, matching email, MCP client display metadata or JSON `actor` field does not establish delegation. Gateway login and product authorization have separate audiences; use verified product account linking and a product-bound grant rather than token passthrough. Keep unrelated users, products, sites and client grants separate.
+
+The optional [Bridge](../../bridge/README.md) is a resource-server adapter. Products supply credential verification, current account/grant validity, admission and their normal application policy. Verification must check issuer, intended resource/audience, signature or authoritative introspection, expiry and revocation under a stated tested consistency contract. Recheck on each request; an initialized connection or previously listed tool never freezes permission. Revocation stops later admission but cannot undo completed effects. The initial adapter does not supply an OAuth authorization server, consent UI or refresh-token store; those integrations and actual supported clients need their own evidence.
+
+Never publish raw verifier/provider errors or capture bearer credentials in ordinary logs. Preserve the actual protected cause and trusted user/client/channel/operation/request attribution before safe projection. Bounded endpoint metadata may be public; authenticated catalogs and operation results use private/no-store behavior. The product owns trusted HTTPS ingress, host/origin configuration, header/time limits, and any browser-specific CORS/consent profile.
+
 Do not expose:
 
 - arbitrary SQL;

@@ -2,7 +2,7 @@
 
 This separately composed Go module proves consumption of AChrix's public boundary. It is a benign local fixture, not a production content product, CMS, shared Content Module or real product repository. It owns immutable notes, its schema/migration, authentication policy and HTTP adapter. AChrix supplies shared composition/authorization/lifecycle contracts and explicitly selected reusable components.
 
-Its `go.mod` pins source-backed Core and independently versioned component dependencies plus pgx; `go.sum` retains normal checksums. [Consumption](../../docs/architecture/consumption-and-packaging.md) owns compatible selection and the coherent transition from monolithic releases; [modules.json](../../modules.json) owns the component inventory. There is no `replace`, workspace override, source copy or Foundation internal import. `internal/domain` owns text/ID invariants; `internal/application` authorizes typed create/read operations; `internal/infrastructure` owns SQL/resources; `internal/presentation` maps HTTP to the same Service.
+Its `go.mod` pins source-backed Core and independently versioned component dependencies plus pgx; `go.sum` retains normal checksums. [Consumption](../../docs/architecture/consumption-and-packaging.md) owns compatible selection and the coherent transition from monolithic releases; [modules.json](../../modules.json) owns the component inventory. There is no `replace`, workspace override, source copy or Foundation internal import. `internal/domain` owns text/ID invariants; `internal/application` authorizes typed create/read operations; `internal/infrastructure` owns SQL/resources; `internal/presentation` maps ordinary HTTP and the optional MCP Bridge to the same Service.
 
 ## Setup and validation
 
@@ -21,6 +21,7 @@ Root `go test ./...` covers Core only. Focused checks run inside their owning Go
 | Core | repository root | `GOWORK=off go test -race ./...` |
 | Installation planner | `installation` | `GOWORK=off go test -race ./...` |
 | Multi-Site module | `multisite` | `GOWORK=off go test -race ./...` |
+| MCP resource-server adapter | `bridge` | `GOWORK=off go test -race ./...` |
 | Pure consumer domain/configuration | `fixtures/notes` | `GOWORK=off go test -race ./internal/domain ./internal/config` |
 
 Persisted consumer tests require their dedicated empty disposable databases and explicit test DSNs; use `scripts/validate.sh full` to supply those safely. Module-local planner/resolver tests do not replace the real PostgreSQL consumer or retained-state checks. These commands describe validation; exact passing candidate evidence belongs to Git/CI and the active work item.
@@ -72,6 +73,16 @@ curl --fail-with-body -H "Authorization: Bearer $NOTES_WRITER_TOKEN" \
 ```
 
 Retain the returned opaque ID to read it. Authentication tokens are not used as principal IDs, logged, stored in domain records or included in discovery metadata. This loopback-only fixture does not establish a remote/TLS/authentication deployment profile.
+
+## Optional MCP Bridge
+
+The product-owned Bridge binding exposes only Notes Create and Read, calling the same Service and current Policy as the ordinary HTTP adapter. The optional [Bridge module](../../bridge/README.md) supplies protocol, trusted caller context, bounded admission and safe error projection. Products supply verified product-user/client credentials and current external-connection admission; a narrower MCP operation rule does not grant a reader write access or remove the writer's independent ordinary HTTP rights.
+
+The consumer tests use disposable credential-verifier fixtures and two users. They check permission changes without reconnecting, endpoint disablement, channel restrictions, useful safe failures, and the same trusted request identity in Notes logs and protected diagnostics. A dedicated `NOTES_BRIDGE_DATABASE_URL` points to the validator-owned `achrix_test_bridge` database, separate from the existing two-row Notes restore dataset. A controlled fault persists through the real PostgreSQL Store once and then loses its acknowledgement; the returned unknown result retains the authorized note ID, and Read reconciles it under ordinary policy. This is a discriminating acknowledgement-loss simulation, not a reproduced database network partition.
+
+Known no-execution, attempted noncommit, confirmed success and unknown effects remain distinct. Neither the adapter nor the fixture automatically repeats a write. Notes generates the ID on the server and has no client operation key, list or status ledger: losing the entire response may also lose the ID, and a later not-found read does not prove non-execution. A real product needing stronger recovery owns its operation key and status contract.
+
+The Bridge is an explicit composition entry, not an automatically enabled route in the local CLI. These tests prove normal consumption and shared application behavior; they do not provide a production OAuth issuer, user consent/refresh UI or live ChatGPT/Claude/Gateway compatibility. [Issue #5](https://github.com/AChWorks/achrix/issues/5) and the owning product Issues track that remaining proof.
 
 ## Identity and deliberate updates
 
@@ -151,7 +162,7 @@ The runner requires supported Go/PostgreSQL tools, normal checksums and cold com
 
 ## Licensing
 
-First-party files, including this fixture and its public Foundation contracts, are MPL-2.0. No Apache SDK exists. Preserve [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md) with distributed executables and provide matching covered source for the identified build and Core/component dependency set. Dependencies retain their own compatible terms. Normal dependency use neither creates an official badge nor changes product data ownership.
+First-party files, including this fixture and its public Foundation contracts, are MPL-2.0. No AChrix Apache-licensed SDK is designated. Preserve [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md) with distributed executables and provide matching covered source for the identified build and Core/component dependency set. Dependencies retain their own compatible terms. Normal dependency use neither creates an official badge nor changes product data ownership.
 
 ## Resource capacity observation
 

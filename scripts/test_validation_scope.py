@@ -18,7 +18,7 @@ class ValidationScopeTests(unittest.TestCase):
         self.git("config", "user.email", "validation@example.invalid")
         for name in ("README.md", "achrix.go", "achrix_test.go",
                      "identity/README.md", "audit/README.md", "media/README.md",
-                     "admin/README.md", "media/admin/README.md"):
+                     "admin/README.md", "media/admin/README.md", "bridge/README.md"):
             self.write(name, "baseline\n")
         self.commit()
         self.base = self.git("rev-parse", "HEAD").strip()
@@ -49,7 +49,7 @@ class ValidationScopeTests(unittest.TestCase):
 
     def test_known_module_readme_edits_need_no_runtime_setup(self):
         for path in ("identity/README.md", "audit/README.md", "media/README.md",
-                     "admin/README.md", "media/admin/README.md"):
+                     "admin/README.md", "media/admin/README.md", "bridge/README.md"):
             with self.subTest(path=path):
                 base = self.git("rev-parse", "HEAD").strip()
                 self.write(path)
@@ -64,7 +64,7 @@ class ValidationScopeTests(unittest.TestCase):
 
     def test_module_docs_cannot_hide_runtime_or_unknown_markdown(self):
         for index, path in enumerate((
-            "media/media.go", "identity/migrations/new.sql",
+            "media/media.go", "bridge/bridge.go", "bridge/go.mod", "identity/migrations/new.sql",
             "media/admin/assets/app.js", "go.mod", "new-module/README.md",
         )):
             with self.subTest(path=path):

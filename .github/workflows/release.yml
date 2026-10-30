@@ -8,7 +8,7 @@ on:
         required: true
         default: core
         type: choice
-        options: [core, admin, audit, identity, media, multisite, installation]
+        options: [core, admin, audit, identity, media, multisite, installation, bridge]
       version:
         description: Unpublished developer version (v0.MINOR.PATCH)
         required: true
