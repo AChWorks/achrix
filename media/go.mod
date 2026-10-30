@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/AChWorks/achrix v0.5.0
 	github.com/AChWorks/achrix/admin v0.2.1-0.20261030060024-21c529040722
-	github.com/AChWorks/achrix/bridge v0.0.0-20261030170236-1f81427d6501
+	github.com/AChWorks/achrix/bridge v0.0.0-20261030171236-0a6cf58783db
 	github.com/gabriel-vasile/mimetype v1.4.16
 	github.com/google/jsonschema-go v0.4.3
 	github.com/jackc/pgx/v5 v5.11.0

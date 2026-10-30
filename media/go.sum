@@ -2,8 +2,8 @@ github.com/AChWorks/achrix v0.5.0 h1:a9C/Ge1nwOGCO51NNS0ph/jGTZzjiVjw4Bxl/hBqaAk
 github.com/AChWorks/achrix v0.5.0/go.mod h1:9Zj1xlOsqGJcF1FNrGVBl+4jUfQX2D5AkR96RpB6PB0=
 github.com/AChWorks/achrix/admin v0.2.1-0.20261030060024-21c529040722 h1:iemk1/JoFUTlP7+wNhgK1Z5fs+/T77xkugO/G7f5H/I=
 github.com/AChWorks/achrix/admin v0.2.1-0.20261030060024-21c529040722/go.mod h1:xVpT4ee9VT6B7GKazD9Hi57BXKQe2pEjwKERHrlqrEs=
-github.com/AChWorks/achrix/bridge v0.0.0-20261030170236-1f81427d6501 h1:K4A0pc+2f+Sui0CIFudtKT5XWlNRrW3QeDREXdLyxmM=
-github.com/AChWorks/achrix/bridge v0.0.0-20261030170236-1f81427d6501/go.mod h1:s2hC7PEgo/j5Ss3bHW9KEJ9inZu+jldL379726yS3LM=
+github.com/AChWorks/achrix/bridge v0.0.0-20261030171236-0a6cf58783db h1:XbaP7U+3lzRNet3kd+xxQkWszkow14kEuA7uUl9ddZ8=
+github.com/AChWorks/achrix/bridge v0.0.0-20261030171236-0a6cf58783db/go.mod h1:s2hC7PEgo/j5Ss3bHW9KEJ9inZu+jldL379726yS3LM=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
