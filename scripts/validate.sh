@@ -25,14 +25,27 @@ fi
 # cold; an older bootstrap Go need not download that identical SDK a second time.
 export PATH="$(go env GOROOT)/bin:$PATH"
 validation_root=$(mktemp -d /tmp/achrix-validation.XXXXXXXX)
-started=0
+start_attempted=0
 cleanup() {
   result=$?
   keep_resources=0
-  if [[ $started == 1 ]] && ! pg_ctl -D "$validation_root/database" -m fast -w stop >/dev/null; then
-    keep_resources=1
-    echo "Validation cleanup failed: PostgreSQL stop" >&2
-    if [[ $result == 0 ]]; then result=1; stage=postgres_stop; fi
+  if [[ $start_attempted == 1 ]]; then
+    if pg_ctl -D "$validation_root/database" -m fast -t 10 -w stop >/dev/null; then
+      :
+    else
+      stop_result=$?
+      echo "Validation cleanup: PostgreSQL stop exited $stop_result; reconciling stopped state" >&2
+      if [[ $result == 0 ]]; then result=$stop_result; stage=postgres_stop; fi
+    fi
+    # pg_ctl status exit 3 means no running server. Require the owned PID file
+    # to be absent too; permission/unknown state or a starting postmaster stays.
+    if pg_ctl -D "$validation_root/database" status >/dev/null 2>&1; then
+      keep_resources=1
+    else
+      status_result=$?
+      if [[ $status_result != 3 || -e $validation_root/database/postmaster.pid ]]; then keep_resources=1; fi
+    fi
+    if [[ $keep_resources == 1 && $result == 0 ]]; then result=1; stage=postgres_stop; fi
   fi
   # Go's module cache is intentionally read-only. Use Go's supported cleanup on
   # this exact task-owned cache rather than trying to remove protected files.
@@ -52,7 +65,16 @@ cleanup() {
     echo "Task cluster stop is unverified; retained resources: $validation_root" >&2
     exit "$result"
   fi
-  rm -rf -- "$validation_root" || result=1
+  if rm -rf -- "$validation_root"; then
+    :
+  else
+    remove_result=$?
+    echo "Validation cleanup failed: task directory removal exited $remove_result; primary exit $result" >&2
+    if [[ $result == 0 ]]; then result=$remove_result; stage=workspace_cleanup; fi
+    if [[ -d $validation_root ]]; then
+      python3 "$repository/scripts/validation_diagnostics.py" "$validation_root" "$stage" "$result" "$failure_line" >&2 || echo "Cleanup evidence capture failed; retained $validation_root" >&2
+    fi
+  fi
   exit "$result"
 }
 trap cleanup EXIT
@@ -94,9 +116,9 @@ stage=postgres_start
 mkdir "$validation_root/socket"
 initdb -D "$validation_root/database" -A trust --no-locale -E UTF8 >/dev/null
 # A mode-0700 task-owned directory and Unix socket only; no host DB/service/port is used.
+start_attempted=1
 pg_ctl -D "$validation_root/database" -l "$validation_root/postgres.log" \
   -o "-k $validation_root/socket -h ''" -w start >/dev/null
-started=1
 export PGHOST="$validation_root/socket" PGPORT=5432 PGUSER
 PGUSER=$(id -un)
 createdb -T template0 achrix_test_notes

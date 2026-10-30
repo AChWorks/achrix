@@ -195,7 +195,13 @@ func writeOutcome(err error) (string, error) {
 	}
 	var rejected *pgconn.PgError
 	if errors.As(err, &rejected) && rejected.Code != "40003" && !strings.HasPrefix(rejected.Code, "08") {
-		return "not_committed", domain.ErrNotCommitted
+		severity := rejected.SeverityUnlocalized
+		if severity == "" {
+			severity = rejected.Severity
+		}
+		if severity == "ERROR" {
+			return "not_committed", domain.ErrNotCommitted
+		}
 	}
 	return "unknown", domain.ErrUnknownOutcome
 }

@@ -39,6 +39,18 @@ type brokenBody struct{ cause error }
 func (b brokenBody) Read([]byte) (int, error) { return 0, b.cause }
 func (brokenBody) Close() error               { return nil }
 
+type bytesAndFailure struct {
+	data  []byte
+	cause error
+}
+
+func (b *bytesAndFailure) Read(p []byte) (int, error) {
+	n := copy(p, b.data)
+	b.data = b.data[n:]
+	return n, b.cause
+}
+func (*bytesAndFailure) Close() error { return nil }
+
 type brokenResponse struct {
 	*httptest.ResponseRecorder
 	cause error
@@ -155,5 +167,103 @@ func TestFieldCorrectionDoesNotEchoInput(t *testing.T) {
 	var detail *domain.InputError
 	if !errors.Is(err, domain.ErrInvalid) || !errors.As(err, &detail) || detail.Field != "text" || !strings.Contains(detail.Problem, "200") || strings.Contains(err.Error(), "PRIVATE_") {
 		t.Fatal(err)
+	}
+}
+
+func TestBodyIOFailureRetainedBeforeInputMappingOrDispatch(t *testing.T) {
+	type trustedKey struct{}
+	for _, tc := range []struct {
+		name, prefix      string
+		cause             error
+		together, aborted bool
+		status            int
+		reason            string
+	}{
+		{name: "initial_closed_pipe", cause: fmt.Errorf("PRIVATE_READ: %w", io.ErrClosedPipe), status: 503, reason: "closed_pipe"},
+		{name: "trailing_closed_pipe", prefix: `{"text":"PRIVATE_NOTE"}`, cause: fmt.Errorf("PRIVATE_READ: %w", io.ErrClosedPipe), status: 503, reason: "closed_pipe"},
+		{name: "bytes_with_error", prefix: `{"text":"PRIVATE_NOTE"}`, cause: fmt.Errorf("PRIVATE_READ: %w", io.ErrClosedPipe), together: true, status: 503, reason: "closed_pipe"},
+		{name: "joined_eof", prefix: `{"text":"PRIVATE_NOTE"}`, cause: errors.Join(io.EOF, fmt.Errorf("PRIVATE_READ: %w", io.ErrClosedPipe)), together: true, status: 503, reason: "closed_pipe"},
+		{name: "live_dependency_cancel", cause: fmt.Errorf("PRIVATE_READ: %w", context.Canceled), status: 503, reason: "canceled"},
+		{name: "caller_abort", cause: fmt.Errorf("PRIVATE_READ: %w", context.Canceled), aborted: true, status: 408, reason: "canceled"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var logs strings.Builder
+			logger := diagnosis.New(&logs)
+			defer diagnosis.Flush(logger)
+			app, err := achrix.New(achrix.Config{StartupTimeout: time.Second, ShutdownTimeout: time.Second, Logger: logger}, achrix.PolicyFunc(application.Policy), &testModule{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = app.Start(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			defer app.Shutdown(context.Background())
+			repository := &outcomeRepository{}
+			var captured error
+			handler := presentation.NewWithDiagnostics(app, application.New(app, repository, logger), "writer", "reader", logger, func(ctx context.Context, operation, phase string, cause error) {
+				if operation != "request" || phase != "decode_body" || ctx.Value(trustedKey{}) != "trusted-parent" {
+					t.Fatal("lost phase/context", operation, phase)
+				}
+				captured = cause
+			})
+			request := httptest.NewRequest("POST", "/notes", nil)
+			request.Body = io.NopCloser(io.MultiReader(strings.NewReader(tc.prefix), brokenBody{tc.cause}))
+			if tc.together {
+				request.Body = &bytesAndFailure{[]byte(tc.prefix), tc.cause}
+			}
+			ctx := context.WithValue(request.Context(), trustedKey{}, "trusted-parent")
+			if tc.aborted {
+				aborted, cancel := context.WithCancel(ctx)
+				cancel()
+				ctx = aborted
+			}
+			request = request.WithContext(ctx)
+			request.Header.Set("Authorization", "Bearer writer")
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("X-Request-ID", "PRIVATE_UNTRUSTED_ID")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			diagnosis.Flush(logger)
+			expectedCause := tc.cause
+			if tc.aborted {
+				expectedCause = context.Canceled
+			}
+			if response.Code != tc.status || repository.writes != 0 || captured != expectedCause || !strings.Contains(response.Body.String(), `"outcome":"not_executed"`) {
+				t.Fatal("I/O failure lost or dispatched", response.Code, response.Body.String(), repository.writes)
+			}
+			if !tc.aborted && (!strings.Contains(logs.String(), `"phase":"decode_body"`) || !strings.Contains(logs.String(), `"reason":"`+tc.reason+`"`) || !strings.Contains(logs.String(), response.Header().Get("X-Request-ID"))) {
+				t.Fatal("local operational evidence missing", logs.String())
+			}
+			if tc.aborted && strings.Contains(logs.String(), `"level":"ERROR"`) {
+				t.Fatal("caller abort misclassified as dependency alarm")
+			}
+			if strings.Contains(response.Body.String(), "PRIVATE_") || strings.Contains(logs.String(), "PRIVATE_") {
+				t.Fatal("raw body/transport data escaped")
+			}
+		})
+	}
+}
+
+func TestMalformedBodiesRemainCallerCorrections(t *testing.T) {
+	for _, tc := range []struct {
+		body   string
+		status int
+	}{
+		{`{"text":7}`, 400}, {`{"unexpected":"PRIVATE_FIELD"}`, 400}, {`{"text":`, 400}, {`{"text":"ok"} {}`, 400}, {strings.Repeat(" ", 1025), 413},
+	} {
+		var logs strings.Builder
+		logger := diagnosis.New(&logs)
+		// A malformed request must never need an Application/Service instance.
+		captures := 0
+		handler := presentation.NewWithDiagnostics(nil, nil, "writer", "reader", logger, func(context.Context, string, string, error) { captures++ })
+		request := httptest.NewRequest("POST", "/notes", strings.NewReader(tc.body))
+		request.Header.Set("Authorization", "Bearer writer")
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		diagnosis.Flush(logger)
+		if response.Code != tc.status || captures != 0 || strings.Contains(response.Body.String(), "PRIVATE_") {
+			t.Fatal(response.Code, response.Body.String(), captures)
+		}
 	}
 }

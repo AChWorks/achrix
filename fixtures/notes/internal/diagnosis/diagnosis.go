@@ -273,6 +273,10 @@ func IOReason(err error) string {
 		return "broken_pipe"
 	case errors.Is(err, syscall.ECONNREFUSED):
 		return "connection_refused"
+	case errors.Is(err, syscall.ECONNRESET):
+		return "connection_reset"
+	case errors.Is(err, io.ErrClosedPipe):
+		return "closed_pipe"
 	case errors.Is(err, syscall.ENOENT):
 		return "file_missing"
 	case errors.Is(err, syscall.EINVAL):

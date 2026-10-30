@@ -11,6 +11,8 @@ cd "$repository"
 export GOWORK=off
 if [[ $(id -u) == 0 ]]; then echo 'Run browser validation as a non-root user' >&2; exit 1; fi
 if [[ $(go env GOVERSION) != go1.27.3 || $(go env GOSUMDB) == off ]]; then echo 'Go 1.27.3 with checksum verification is required' >&2; exit 1; fi
+# Keep the already verified toolchain when the isolated dependency cache is cold.
+export PATH="$(go env GOROOT)/bin:$PATH"
 node=${ACHRIX_BROWSER_NODE:-node}
 if [[ $("$node" --version) != v24.21.0 ]]; then echo 'Node 24.21.0 is required for this test-only browser profile' >&2; exit 1; fi
 : "${ACHRIX_PLAYWRIGHT_MODULE:?set the installed Playwright module directory}"
@@ -21,7 +23,7 @@ for tool in initdb pg_ctl createdb; do
  if [[ $("$tool" --version | awk '{print $3}') != 18.6 ]]; then echo 'PostgreSQL 18.6 is required' >&2; exit 1; fi
 done
 validation_root=$(mktemp -d /tmp/achrix-admin-browser.XXXXXXXX)
-started=0
+start_attempted=0
 fixture_pid=''
 cleanup() {
  result=$?
@@ -33,10 +35,21 @@ cleanup() {
   fi
   if [[ $result == 0 ]]; then cat "$validation_root/fixture.log"; fi
  fi
- if [[ $started == 1 ]] && ! pg_ctl -D "$validation_root/database" -m fast -w stop >/dev/null; then
-  keep_resources=1
-  echo "Browser validation cleanup failed: PostgreSQL stop" >&2
-  if [[ $result == 0 ]]; then result=1; stage=postgres_stop; fi
+ if [[ $start_attempted == 1 ]]; then
+  if pg_ctl -D "$validation_root/database" -m fast -t 10 -w stop >/dev/null; then
+   :
+  else
+   stop_result=$?
+   echo "Browser validation cleanup: PostgreSQL stop exited $stop_result; reconciling stopped state" >&2
+   if [[ $result == 0 ]]; then result=$stop_result; stage=postgres_stop; fi
+  fi
+  if pg_ctl -D "$validation_root/database" status >/dev/null 2>&1; then
+   keep_resources=1
+  else
+   status_result=$?
+   if [[ $status_result != 3 || -e $validation_root/database/postmaster.pid ]]; then keep_resources=1; fi
+  fi
+  if [[ $keep_resources == 1 && $result == 0 ]]; then result=1; stage=postgres_stop; fi
  fi
  if [[ -d $validation_root/module-cache ]] && ! GOMODCACHE="$validation_root/module-cache" go clean -modcache; then
   if [[ $result == 0 ]]; then result=1; stage=module_cache_cleanup; fi
@@ -51,15 +64,24 @@ cleanup() {
     echo "Task cluster stop is unverified; retained resources: $validation_root" >&2
     exit "$result"
   fi
-  rm -rf -- "$validation_root" || result=1
+ if rm -rf -- "$validation_root"; then
+  :
+ else
+  remove_result=$?
+  echo "Browser validation cleanup failed: task directory removal exited $remove_result; primary exit $result" >&2
+  if [[ $result == 0 ]]; then result=$remove_result; stage=workspace_cleanup; fi
+  if [[ -d $validation_root ]]; then
+   python3 "$repository/scripts/validation_diagnostics.py" "$validation_root" "$stage" "$result" "$failure_line" >&2 || echo "Cleanup evidence capture failed; retained $validation_root" >&2
+  fi
+ fi
  exit "$result"
 }
 trap cleanup EXIT
 stage=postgres_start
 mkdir "$validation_root/socket"
 initdb -D "$validation_root/database" -A trust --no-locale -E UTF8 >/dev/null
+start_attempted=1
 pg_ctl -D "$validation_root/database" -l "$validation_root/postgres.log" -o "-k $validation_root/socket -h ''" -w start >/dev/null
-started=1
 PGHOST="$validation_root/socket" PGPORT=5432 PGUSER=$(id -un) createdb -T template0 achrix_admin_test
 stage=isolated_consumer
 # Consumer-owned fixture source only: the complete SDK comes from Go resolution.

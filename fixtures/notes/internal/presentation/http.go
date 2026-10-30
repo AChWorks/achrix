@@ -94,18 +94,23 @@ func (a *Adapter) create(w http.ResponseWriter, r *http.Request) {
 		a.failure(w, r, 415, "json_required")
 		return
 	}
+	if err := r.Context().Err(); err != nil {
+		a.decodeFailure(w, r, err, err)
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1024)
+	body := &bodyReader{reader: r.Body}
 	var input struct {
 		Text string `json:"text"`
 	}
-	d := json.NewDecoder(r.Body)
+	d := json.NewDecoder(body)
 	d.DisallowUnknownFields()
-	if err := d.Decode(&input); err != nil {
-		a.decodeFailure(w, r, err)
+	if err := d.Decode(&input); err != nil || body.cause != nil {
+		a.decodeFailure(w, r, err, body.cause)
 		return
 	}
-	if err := d.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		a.decodeFailure(w, r, err)
+	if err := d.Decode(&struct{}{}); err != io.EOF || body.cause != nil {
+		a.decodeFailure(w, r, err, body.cause)
 		return
 	}
 	n, err := a.service.Create(r.Context(), p, input.Text)
@@ -133,23 +138,39 @@ func (a *Adapter) read(w http.ResponseWriter, r *http.Request) {
 	a.reply(w, r, 200, n, "not_applicable")
 }
 
-func (a *Adapter) decodeFailure(w http.ResponseWriter, r *http.Request, err error) {
-	var timeout net.Error
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.As(err, &timeout) && timeout.Timeout() {
-		a.diagnose(r.Context(), "decode_body", err, "not_executed")
-		a.failureWith(w, r, http.StatusRequestTimeout, "body_timeout", map[string]string{"outcome": "not_executed", "next_action": "send the complete JSON body within the request deadline"})
+// Decoder errors do not reliably distinguish parser rejection from underlying
+// I/O. Retain the original Read failure before the decoder can transform it.
+type bodyReader struct {
+	reader io.Reader
+	cause  error
+}
+
+func (b *bodyReader) Read(p []byte) (int, error) {
+	n, err := b.reader.Read(p)
+	if err != nil && err != io.EOF && b.cause == nil {
+		b.cause = err
+	}
+	return n, err
+}
+
+func (a *Adapter) decodeFailure(w http.ResponseWriter, r *http.Request, err, readCause error) {
+	var size *http.MaxBytesError
+	if errors.As(err, &size) || errors.As(readCause, &size) {
+		a.failureWith(w, r, http.StatusRequestEntityTooLarge, "input_too_large", map[string]string{"detail": "request body must contain at most 1024 bytes", "outcome": "not_executed"})
 		return
 	}
-	var syntax *json.SyntaxError
-	var mismatch *json.UnmarshalTypeError
-	// JSON syntax/type/size rejection is a caller correction. Transport failures
-	// still reach the protected callback before the outward canonical response.
-	if err != nil && !errors.As(err, &syntax) && !errors.As(err, &mismatch) && !errors.Is(err, io.EOF) {
-		if a.diagnostic != nil {
-			a.diagnostic(r.Context(), "request", "decode_body", err)
+	if readCause != nil {
+		a.diagnose(r.Context(), "decode_body", readCause, "not_executed")
+		var timeout net.Error
+		callerAborted := r.Context().Err() != nil && errors.Is(readCause, r.Context().Err())
+		if callerAborted || errors.Is(readCause, context.DeadlineExceeded) || errors.As(readCause, &timeout) && timeout.Timeout() {
+			a.failureWith(w, r, http.StatusRequestTimeout, "body_timeout", map[string]string{"outcome": "not_executed", "next_action": "send the complete JSON body within the request deadline"})
+		} else {
+			a.failureWith(w, r, http.StatusServiceUnavailable, "unavailable", map[string]string{"outcome": "not_executed", "next_action": "check the connection and service before sending a new request"})
 		}
+		return
 	}
-	a.failureWith(w, r, 400, "invalid_input", map[string]string{"detail": "send one JSON object with a text field", "outcome": "not_executed"})
+	a.failureWith(w, r, http.StatusBadRequest, "invalid_input", map[string]string{"detail": "send one JSON object with a text field", "outcome": "not_executed"})
 }
 func (a *Adapter) applicationError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
@@ -203,5 +224,9 @@ func (a *Adapter) diagnose(ctx context.Context, phase string, cause error, outco
 	if a.diagnostic != nil {
 		a.diagnostic(ctx, "request", phase, cause)
 	}
-	a.logger.ErrorContext(ctx, "HTTP transport failed", "component", "notes.http", "operation", "request", "phase", phase, "reason", diagnosis.IOReason(cause), "outcome", outcome)
+	level := slog.LevelError
+	if outcome == "not_executed" && ctx.Err() != nil && errors.Is(cause, ctx.Err()) {
+		level = slog.LevelDebug
+	}
+	a.logger.Log(ctx, level, "HTTP transport failed", "component", "notes.http", "operation", "request", "phase", phase, "reason", diagnosis.IOReason(cause), "outcome", outcome)
 }

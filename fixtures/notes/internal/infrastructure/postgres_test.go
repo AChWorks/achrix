@@ -42,7 +42,10 @@ func TestWriteOutcomeRequiresEvidenceBeyondTimeoutOrErrorType(t *testing.T) {
 		{context.Canceled, "unknown", domain.ErrUnknownOutcome},
 		{&pgconn.PgError{Code: "40003", Message: "PRIVATE_SQL"}, "unknown", domain.ErrUnknownOutcome},
 		{&pgconn.PgError{Code: "08007", Message: "PRIVATE_SQL"}, "unknown", domain.ErrUnknownOutcome},
-		{&pgconn.PgError{Code: "42P01", Message: "PRIVATE_SQL"}, "not_committed", domain.ErrNotCommitted},
+		{&pgconn.PgError{Code: "42P01", Severity: "ERROR", Message: "PRIVATE_SQL"}, "not_committed", domain.ErrNotCommitted},
+		{&pgconn.PgError{Code: "57P01", Severity: "FATAL", Message: "PRIVATE_SQL"}, "unknown", domain.ErrUnknownOutcome},
+		{&pgconn.PgError{Code: "57P02", Severity: "PANIC", Message: "PRIVATE_SQL"}, "unknown", domain.ErrUnknownOutcome},
+		{&pgconn.PgError{Code: "42P01", Message: "PRIVATE_SQL"}, "unknown", domain.ErrUnknownOutcome},
 	} {
 		outcome, outward := writeOutcome(fmt.Errorf("PRIVATE_PROVIDER: %w", tc.cause))
 		if outcome != tc.outcome || outward != tc.public || !errors.Is(outward, domain.ErrUnavailable) || strings.Contains(outward.Error(), "PRIVATE_") {
