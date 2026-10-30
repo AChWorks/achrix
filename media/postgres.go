@@ -427,8 +427,9 @@ func Migrate(ctx context.Context, dsn string) error {
 func MigrateWithDiagnostics(ctx context.Context, dsn string, logger *slog.Logger, diagnostic func(context.Context, string, string, error)) error {
 	m := &Module{logger: logger, config: Config{Diagnostic: diagnostic}}
 	defer m.flushDiagnostics()
+	effectOutcome := "not_executed"
 	fail := func(phase string, cause error, result error) error {
-		outcome := "not_executed"
+		outcome := effectOutcome
 		if errors.Is(result, ErrUnknownOutcome) {
 			outcome = "unknown"
 		}
@@ -478,6 +479,9 @@ func MigrateWithDiagnostics(ctx context.Context, dsn string, logger *slog.Logger
 		}
 	}
 	for i := version; i < len(plan); i++ {
+		// DDL may execute within the transaction before a later statement fails.
+		// A pre-commit failure proves no commit, not that nothing ran.
+		effectOutcome = "not_committed"
 		if _, err = tx.Exec(ctx, plan[i].sql); err != nil {
 			return fail("ddl", fault("ddl", "migration_ddl_failed", err, slog.Int("version", i+1)), ErrUnavailable)
 		}

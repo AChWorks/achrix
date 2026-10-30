@@ -248,8 +248,8 @@ func TestMigrationDDLFailureRollsBackWholeUpgrade(t *testing.T) {
 		t.Fatal("expected transaction failure", err)
 	}
 	var postgres *pgconn.PgError
-	if !errors.As(captured, &postgres) || postgres.Code != "42710" || !strings.Contains(diagnostics.String(), `"version":2`) || !strings.Contains(diagnostics.String(), `"sqlstate":"42710"`) {
-		t.Fatal("DDL cause/version lost", captured, diagnostics.String())
+	if !errors.As(captured, &postgres) || postgres.Code != "42710" || !strings.Contains(diagnostics.String(), `"version":2`) || !strings.Contains(diagnostics.String(), `"sqlstate":"42710"`) || !strings.Contains(diagnostics.String(), `"outcome":"not_committed"`) || strings.Contains(diagnostics.String(), `"outcome":"not_executed"`) {
+		t.Fatal("DDL cause/version or transaction outcome lost", captured, diagnostics.String())
 	}
 	if after := schemaSnapshot(t, f); after != before {
 		t.Fatal("failed 002 left partial ledger or constraints")
