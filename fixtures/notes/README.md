@@ -135,7 +135,9 @@ The opt-in `admin_test.go` composes the real Admin shell with Identity-owned acc
 
 The required `baseline` workflow automatically selects this proof for relevant or ambiguous changes under [Operations](../../docs/operations/operability-performance.md#conditional-https-browser-proof). The explicit command also supports protected local diagnosis.
 
-Run from the repository root after installing the exact test-only Node/Playwright/Chromium profile required by `scripts/validate-admin-browser.sh` into an explicitly owned directory:
+For reproducible tool setup, copy the [locked browser-tool manifests](../browser-tools/) into an explicitly owned directory and run `npm ci --ignore-scripts` there with the supported Node version. Use the installed Playwright CLI to acquire Chromium into `PLAYWRIGHT_BROWSERS_PATH`; the [baseline workflow](../../.github/workflows/baseline.yml) records the exact acquisition steps. Its `--with-deps` step provisions OS libraries on a disposable CI runner; on a persistent host, verify those libraries separately. Keep tool downloads outside the checkout and remove only the task-owned installation after its last user finishes.
+
+Run from the repository root with that installed profile:
 
 ```bash
 ACHRIX_BROWSER_NODE=/absolute/owned/browser-tools/node/bin/node \

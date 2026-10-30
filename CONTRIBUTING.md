@@ -4,6 +4,8 @@
 
 Start from the repository's current canonical integration branch, the relevant Issue/PR and [Project Map](docs/PROJECT-MAP.md). Read only the specification/rules relevant to the change, inspect existing capabilities, and resolve ownership before creating parallel functionality.
 
+For hands-on setup, follow [Develop and extend a component](docs/architecture/consumption-and-packaging.md#develop-and-extend-a-component) and the [Notes setup and validation guide](fixtures/notes/README.md#setup-and-validation); [Operations](docs/operations/operability-performance.md#supported-environment) owns the supported tool prerequisites.
+
 Use a focused branch and Pull Request for tracked changes to intent, architecture, implementation, CI, lifecycle, metadata or working rules. Link the existing outcome when applicable and keep one meaningful change reviewable together. Do not overwrite unrelated work or force through protected state.
 
 Validate the exact candidate with change-appropriate checks and review the full diff. Live GitHub rulesets own enforced integration branch, merge method, approval/check/thread requirements, branch protection and bypass policy; inspect them before integration rather than duplicating their current settings here. Repository rules do not waive risk-required independent review or owner decisions. Never describe self-review as independent.
