@@ -25,7 +25,7 @@
    const label=element("label");const confirm=element("input");confirm.type="checkbox";confirm.dataset.confirm="";confirm.required=true;label.append(confirm,document.createTextNode(text("delete.confirm")));form.append(label);
    const submit=element("button",text("delete.action"));submit.type="submit";submit.disabled=true;form.append(submit);actions.append(form);
   }
-  if (value.permissions.read!==true && value.permissions.delete!==true) actions.append(element("p",text("asset.denied")));
+  if (value.permissions.read!==true && value.permissions.delete!==true) actions.append(element("p",text(value.warning==="permissions_unavailable"?"permissions.unavailable":"asset.denied")));
   tr.append(actions);return tr;
  }
  document.addEventListener("admin:success",event => {

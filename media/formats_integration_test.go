@@ -7,11 +7,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/AChWorks/achrix"
+	"github.com/jackc/pgx/v5/pgconn"
 	"time"
 )
 
@@ -175,14 +178,15 @@ func schemaSnapshot(t *testing.T, f *fixture) string {
 	return snapshot
 }
 func TestMigrationRejectsUnknownChangedMissingLedgerWithoutEffects(t *testing.T) {
-	for _, mutation := range []string{
-		"UPDATE media.schema_migrations SET checksum=repeat('0',64) WHERE version=1",
-		"DELETE FROM media.schema_migrations WHERE version=1",
-		"INSERT INTO media.schema_migrations VALUES(4,repeat('0',64))",
-		"DELETE FROM media.schema_migrations",
-		"UPDATE media.schema_migrations SET version=4 WHERE version=2",
+	for _, scenario := range []struct{ mutation, reason string }{
+		{"UPDATE media.schema_migrations SET checksum=repeat('0',64) WHERE version=1", "ledger_checksum_changed"},
+		{"DELETE FROM media.schema_migrations WHERE version=1", "ledger_noncontiguous"},
+		{"INSERT INTO media.schema_migrations VALUES(4,repeat('0',64))", "ledger_unknown_version"},
+		{"DELETE FROM media.schema_migrations", "ledger_empty"},
+		{"UPDATE media.schema_migrations SET version=4 WHERE version=2", "ledger_noncontiguous"},
 	} {
-		t.Run(mutation, func(t *testing.T) {
+		t.Run(scenario.reason+scenario.mutation, func(t *testing.T) {
+			mutation := scenario.mutation
 			f := newFixture(t)
 			ctx, cancel := operationContext(t)
 			defer cancel()
@@ -198,8 +202,19 @@ func TestMigrationRejectsUnknownChangedMissingLedgerWithoutEffects(t *testing.T)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := Migrate(ctx, f.dsn); !errors.Is(err, ErrUnavailable) {
+			var diagnostics bytes.Buffer
+			var captured error
+			if err := MigrateWithDiagnostics(ctx, f.dsn, slog.New(slog.NewJSONHandler(&diagnostics, nil)), func(_ context.Context, operation, phase string, cause error) {
+				if operation != "migrate" || phase != "ledger_validate" {
+					t.Error("ledger diagnostic phase", operation, phase)
+				}
+				captured = cause
+			}); !errors.Is(err, ErrUnavailable) {
 				t.Fatal("unknown ledger accepted", err)
+			}
+			var detail *diagnosticFault
+			if !errors.As(captured, &detail) || detail.reason != scenario.reason || !strings.Contains(diagnostics.String(), scenario.reason) || !strings.Contains(diagnostics.String(), `"outcome":"not_executed"`) {
+				t.Fatal("ledger evidence lost", captured, diagnostics.String())
 			}
 			if after := schemaSnapshot(t, f); after != before {
 				t.Fatal("rejected migration changed database")
@@ -222,8 +237,19 @@ func TestMigrationDDLFailureRollsBackWholeUpgrade(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := schemaSnapshot(t, f)
-	if err := Migrate(ctx, f.dsn); !errors.Is(err, ErrUnavailable) {
+	var diagnostics bytes.Buffer
+	var captured error
+	if err := MigrateWithDiagnostics(ctx, f.dsn, slog.New(slog.NewJSONHandler(&diagnostics, nil)), func(_ context.Context, operation, phase string, cause error) {
+		if operation != "migrate" || phase != "ddl" {
+			t.Error("DDL phase lost", operation, phase)
+		}
+		captured = cause
+	}); !errors.Is(err, ErrUnavailable) {
 		t.Fatal("expected transaction failure", err)
+	}
+	var postgres *pgconn.PgError
+	if !errors.As(captured, &postgres) || postgres.Code != "42710" || !strings.Contains(diagnostics.String(), `"version":2`) || !strings.Contains(diagnostics.String(), `"sqlstate":"42710"`) {
+		t.Fatal("DDL cause/version lost", captured, diagnostics.String())
 	}
 	if after := schemaSnapshot(t, f); after != before {
 		t.Fatal("failed 002 left partial ledger or constraints")

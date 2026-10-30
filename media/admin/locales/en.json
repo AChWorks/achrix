@@ -91,6 +91,9 @@
     },
     "upload.unknown": {
       "other": "Outcome unknown. Do not upload again automatically. Inspect a known ID; otherwise inspect the permitted library and contact the product operator. Filenames can repeat and cannot identify this operation."
+    },
+    "permissions.unavailable": {
+      "other": "Permission checks are temporarily unavailable. Actions are disabled; refresh to check them again. Completed uploads remain saved."
     }
   }
 }

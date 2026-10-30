@@ -298,7 +298,7 @@ func TestPostgresPublicImageDestinationErrorsAreSafe(t *testing.T) {
 	if strings.Contains(logs.String(), "private") || strings.Contains(logs.String(), "password=") {
 		t.Fatal("private writer details logged")
 	}
-	if f.module.FailureCount() != 2 {
+	if f.module.FailureCount() != 4 {
 		t.Fatal("unexpected safe diagnostic classification", f.module.FailureCount())
 	}
 	f.module.mu.Lock()
@@ -366,8 +366,13 @@ func TestPostgresReadAndPublicImageDependencyErrorsAreSafe(t *testing.T) {
 			if got != category || errors.As(got, &connectionError) || ctx.Err() != nil || result != (PublicImage{}) || output.Len() != 0 {
 				t.Fatal("dependency failure was not canonical with a live caller", got, result)
 			}
-			if strings.Contains(logs.String(), private) || strings.Contains(got.Error(), private) || f.module.FailureCount() != 0 {
-				t.Fatal("dependency error leaked or changed expected cancellation diagnostics")
+			if strings.Contains(logs.String(), private) || strings.Contains(got.Error(), private) || f.module.FailureCount() != 2 {
+				t.Fatal("dependency error leaked or missing live-caller diagnostics")
+			}
+			for _, phase := range []string{"read_lock", "prepare_asset_lock"} {
+				if !strings.Contains(logs.String(), phase) {
+					t.Fatal("missing distinct dependency phase", logs.String())
+				}
 			}
 			f.module.mu.Lock()
 			active := f.module.active

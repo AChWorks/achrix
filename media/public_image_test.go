@@ -725,13 +725,15 @@ func TestPublicImagePNGTransparencyCountsTowardMetadata(t *testing.T) {
 type wrappedPublicWriter struct{ err error }
 
 func (w wrappedPublicWriter) Write([]byte) (int, error) { return 0, w.err }
-func TestPublicImageWriterCanonicalizesWrappedCategories(t *testing.T) {
+func TestPublicImageWriterPreservesCauseUntilPublicBoundary(t *testing.T) {
 	private := "private-path password=private-credential"
 	for _, category := range []error{context.Canceled, context.DeadlineExceeded, ErrInput, ErrConflict, ErrLimited, ErrNotFound, ErrUnavailable} {
 		t.Run(category.Error(), func(t *testing.T) {
-			writer := publicImageWriter{ctx: context.Background(), destination: wrappedPublicWriter{fmt.Errorf("%s: %w", private, category)}, digest: sha256.New(), limit: 100}
-			if _, err := writer.Write([]byte("test")); err != category {
-				t.Fatal("noncanonical error", err)
+			cause := fmt.Errorf("%s: %w", private, category)
+			writer := publicImageWriter{ctx: context.Background(), destination: wrappedPublicWriter{cause}, digest: sha256.New(), limit: 100}
+			_, err := writer.Write([]byte("test"))
+			if err != cause || canonicalPreparationError(err) != category {
+				t.Fatal("cause lost before diagnostic boundary or unsafe outward identity", err)
 			}
 		})
 	}

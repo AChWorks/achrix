@@ -52,8 +52,14 @@ type PublicImage struct {
 // Trusted synchronous I/O must honor actual transport/caller deadlines; a
 // context cannot forcibly interrupt arbitrary Write or native codec work.
 func (s *Service) PreparePublicImage(parent context.Context, actor achrix.Principal, request PreparePublicImageRequest, destination io.Writer) (PublicImage, error) {
-	if !validID(request.AssetID) || request.ExpectedRevision < 1 || destination == nil {
-		return PublicImage{}, ErrInput
+	if !validID(request.AssetID) {
+		return PublicImage{}, inputFailure("asset_id", "invalid_asset_id", "must be the 26-character generated asset identity")
+	}
+	if request.ExpectedRevision < 1 {
+		return PublicImage{}, inputFailure("revision", "invalid_revision", "must be the positive revision returned by Status")
+	}
+	if destination == nil {
+		return PublicImage{}, inputFailure("destination", "missing_destination", "requires a private writer")
 	}
 	ctx, cancel := deadline(parent, 15*time.Second)
 	defer cancel()
@@ -82,17 +88,17 @@ func (m *Module) preparePublicImage(parent context.Context, request PreparePubli
 	}
 	releaseStorage, err := storage.lock(true)
 	if err != nil {
-		return PublicImage{}, m.failure(ctx, "prepare_storage_lock", canonicalPreparationError(err))
+		return PublicImage{}, m.preparationFailure(ctx, "prepare_storage_lock", err)
 	}
-	defer releaseStorage()
+	defer func() { m.cleanupFailure(ctx, "prepare", "storage_unlock", releaseStorage()) }()
 	connection, releaseAsset, err := lockAsset(ctx, pool, request.AssetID, true)
 	if err != nil {
-		return PublicImage{}, m.failure(ctx, "prepare_asset_lock", canonicalPreparationError(err))
+		return PublicImage{}, m.preparationFailure(ctx, "prepare_asset_lock", err)
 	}
-	defer releaseAsset()
+	defer func() { m.cleanupFailure(ctx, "prepare", "asset_unlock", releaseAsset()) }()
 	asset, err := findAsset(ctx, connection, request.AssetID)
 	if err != nil {
-		return PublicImage{}, m.failure(ctx, "prepare_source", canonicalPreparationError(err))
+		return PublicImage{}, m.preparationFailure(ctx, "prepare_source", err)
 	}
 	if asset.State != "ready" {
 		return PublicImage{}, ErrNotFound
@@ -101,42 +107,51 @@ func (m *Module) preparePublicImage(parent context.Context, request PreparePubli
 		return PublicImage{}, ErrConflict
 	}
 	if asset.MIME != "image/png" && asset.MIME != "image/jpeg" {
-		return PublicImage{}, ErrInput
+		return PublicImage{}, inputFailure("file", "public_image_format", "must be a PNG or JPEG for public-image preparation")
 	}
 	if asset.Size < 1 || asset.Size > MaxUploadBytes || !publicDimensions(asset.Width, asset.Height) {
-		return PublicImage{}, m.failure(ctx, "prepare_source_metadata", canonicalPreparationError(ErrUnavailable))
+		return PublicImage{}, m.preparationFailure(ctx, "prepare_source_metadata", fault("source_metadata", "invalid_stored_metadata", ErrUnavailable))
 	}
 	file, err := storage.open(asset.ID)
 	if err != nil {
-		return PublicImage{}, m.failure(ctx, "prepare_source_storage", canonicalPreparationError(err))
+		return PublicImage{}, m.preparationFailure(ctx, "prepare_source_storage", err)
 	}
-	defer func() { _ = file.Close() }()
+	defer func() { m.cleanupFailure(ctx, "prepare", "source_close", file.Close()) }()
 	info, err := file.Stat()
-	if err != nil || info.Size() != asset.Size {
-		return PublicImage{}, m.failure(ctx, "prepare_source_size", canonicalPreparationError(ErrUnavailable))
+	if err != nil {
+		return PublicImage{}, m.preparationFailure(ctx, "prepare_source_stat", err)
+	}
+	if info.Size() != asset.Size {
+		return PublicImage{}, m.preparationFailure(ctx, "prepare_source_size", fault("source_size", "stored_size_mismatch", ErrUnavailable))
 	}
 	snapshot := make([]byte, int(asset.Size))
 	if _, err = io.ReadFull(contextReader{ctx, file}, snapshot); err != nil {
-		return PublicImage{}, m.failure(ctx, "prepare_snapshot", canonicalPreparationError(err))
+		return PublicImage{}, m.preparationFailure(ctx, "prepare_snapshot", err)
 	}
 	var extra [1]byte
 	if n, e := (contextReader{ctx, file}).Read(extra[:]); n != 0 || e != io.EOF {
-		return PublicImage{}, m.failure(ctx, "prepare_snapshot_size", canonicalPreparationError(ErrUnavailable))
+		if e == nil || e == io.EOF {
+			e = ErrUnavailable
+		}
+		return PublicImage{}, m.preparationFailure(ctx, "prepare_snapshot_size", fault("source_size", "snapshot_size_mismatch", e))
 	}
 	sourceHash := sha256.Sum256(snapshot)
 	if hex.EncodeToString(sourceHash[:]) != asset.SHA256 {
-		return PublicImage{}, m.failure(ctx, "prepare_source_integrity", canonicalPreparationError(ErrUnavailable))
+		return PublicImage{}, m.preparationFailure(ctx, "prepare_source_integrity", fault("source_integrity", "stored_hash_mismatch", ErrUnavailable))
 	}
 	profile, err := inspectPublicImage(ctx, snapshot, asset.MIME)
 	if err != nil {
+		if errors.Is(err, ErrInput) {
+			return PublicImage{}, inputFailure("file", "public_image_profile", "does not satisfy achrix-public-image-v1; use the documented PNG/JPEG color and metadata profile")
+		}
 		return PublicImage{}, err
 	}
 	if profile.width != asset.Width || profile.height != asset.Height {
-		return PublicImage{}, m.failure(ctx, "prepare_source_dimensions", canonicalPreparationError(ErrUnavailable))
+		return PublicImage{}, m.preparationFailure(ctx, "prepare_source_dimensions", fault("source_dimensions", "stored_dimensions_mismatch", ErrUnavailable))
 	}
 	width, height, size, outputHash, err := encodePublicImage(ctx, snapshot, profile, destination)
 	if err != nil {
-		return PublicImage{}, m.failure(ctx, "prepare_output", canonicalPreparationError(err))
+		return PublicImage{}, m.preparationFailure(ctx, "prepare_output", err)
 	}
 	return PublicImage{SourceAssetID: asset.ID, SourceRevision: asset.Revision, SourceSHA256: asset.SHA256, Profile: PublicImageProfile, ColorBasis: profile.colorBasis(), MIME: asset.MIME, Size: size, SHA256: outputHash, Width: width, Height: height}, nil
 }
@@ -370,12 +385,17 @@ func (w *publicImageWriter) Write(body []byte) (int, error) {
 	if n != len(body) && err == nil {
 		err = io.ErrShortWrite
 	}
-	return n, canonicalPreparationError(err)
+	return n, err
 }
 
-// Dependencies and trusted destinations can wrap errors with private configuration.
-// Rebuild only recognized safe category/cancellation identities, never their text
-// or unwrap chain. Apply before the existing failure classifier on preparation.
+// Preparation never mutates Media metadata. A destination's own unknown outcome
+// therefore cannot become a Media mutation result. Diagnose the original cause
+// first; rebuild only the supported public preparation identities afterward.
+func (m *Module) preparationFailure(ctx context.Context, operation string, cause error) error {
+	return m.failureResult(ctx, operation, cause, canonicalPreparationError(cause))
+}
+
+// Private destination/provider objects never become a public unwrap chain.
 func canonicalPreparationError(err error) error {
 	if err == nil {
 		return nil
