@@ -44,10 +44,24 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// ending at its deadline can still return a useful truthful timeout result.
 	deadline, _ := ctx.Deadline()
 	controller := http.NewResponseController(w)
-	_ = controller.SetReadDeadline(deadline)
-	_ = controller.SetWriteDeadline(deadline.Add(time.Second))
-	defer controller.SetReadDeadline(time.Time{})
-	defer controller.SetWriteDeadline(time.Time{})
+	readDeadlineErr := controller.SetReadDeadline(deadline)
+	writeDeadlineErr := controller.SetWriteDeadline(deadline.Add(time.Second))
+	if !e.streamHTTP {
+		defer controller.SetReadDeadline(time.Time{})
+		defer controller.SetWriteDeadline(time.Time{})
+	}
+	// The file profile must retain both deadlines through net/http's final
+	// buffered writes/framing and unread-body close after ServeHTTP returns.
+	// The server resets HTTP/1 connection deadlines before reuse and cleans
+	// HTTP/2 stream timers on close; clearing them here would unbound that tail.
+	if e.streamHTTP {
+		if err := errors.Join(readDeadlineErr, writeDeadlineErr); err != nil {
+			f := &Fault{Code: "transport_unavailable", Message: "This HTTP transport cannot enforce the required file-transfer deadlines.", Action: "Use a server and middleware that support bounded socket read and write deadlines. No operation was invoked.", Outcome: NotExecuted}
+			e.failHTTP(w, r, s, http.StatusServiceUnavailable, "transport", f, err)
+			return
+		}
+		s.stream = &streamResponse{target: w, header: make(http.Header), ctx: ctx, limit: e.config.Limits.ResponseBytes, length: -1}
+	}
 	if status, f := e.validateHTTP(r); f != nil {
 		e.failHTTP(w, r, s, status, "transport", f, errors.New(f.Message))
 		return
@@ -77,6 +91,14 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	response := &boundedResponse{header: make(http.Header), limit: e.config.Limits.ResponseBytes}
 	e.handler.ServeHTTP(response, r)
+	if s.stream != nil && s.stream.started {
+		if s.stream.abort {
+			// A partial attachment is never followed by a JSON problem or a
+			// second response. net/http closes HTTP/1 or resets the HTTP/2 stream.
+			panic(http.ErrAbortHandler)
+		}
+		return
+	}
 	if response.overflow {
 		f := &Fault{Code: "response_too_large", Message: "The operation response exceeded the endpoint's size limit.", Action: "Use the known outcome and reference to reconcile any write; reduce a read's requested result size before trying again.", Outcome: s.snapshot().Outcome}
 		e.report(ctx, s, "output", f.Code, errResponseLimit, false)

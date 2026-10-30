@@ -51,52 +51,15 @@ func JSONHandler[In, Out any](operation string, decode func(*http.Request) (In, 
 		return nil, errors.New("bridge: a bounded fixed operation name, decoder and invocation are required")
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		s := stateFromContext(ctx)
-		if s == nil || s.endpoint == nil || !s.endpoint.jsonHTTP || s.request.Caller.Principal == "" {
-			// This is a composition error, not an alternate authentication path.
-			// No decoder, gate or application callback is run outside the boundary.
-			http.Error(w, "A verified JSON HTTP endpoint is required.", http.StatusInternalServerError)
+		input, s := beginHTTPInvocation(operation, w, r, decode, false)
+		if s == nil {
 			return
 		}
-		e := s.endpoint
-		s.mu.Lock()
-		s.request.Operation = operation
-		caller := s.request.Caller
-		s.mu.Unlock()
-		if err := ctx.Err(); err != nil {
-			e.failHTTP(w, r, s, http.StatusServiceUnavailable, "input", timeoutFault(NotExecuted), err)
-			return
-		}
-		input, err := decode(r)
-		if err != nil {
-			f, phase, cause := jsonInputFault(err, s)
-			setInvocationFault(s, f, cause, phase)
-			e.failHTTP(w, r, s, httpStatus(f), phase, f, cause)
-			return
-		}
-		if err := ctx.Err(); err != nil {
-			e.failHTTP(w, r, s, http.StatusServiceUnavailable, "input", timeoutFault(NotExecuted), err)
-			return
-		}
-		if gate := e.config.Gate; gate != nil {
-			if err := gate(ctx, caller, operation); err != nil {
-				f := admissionFault(err)
-				setInvocationFault(s, f, err, "gate")
-				e.failHTTP(w, r, s, httpStatus(f), "gate", f, err)
-				return
-			}
-		}
-		if err := ctx.Err(); err != nil {
-			e.failHTTP(w, r, s, http.StatusServiceUnavailable, "gate", timeoutFault(NotExecuted), err)
-			return
-		}
-		s.mu.Lock()
-		s.dispatched, s.outcome = true, Unknown
-		s.mu.Unlock()
+		ctx, e := r.Context(), s.endpoint
 		output, err := invoke(ctx, input)
 		if err != nil {
 			f, cause := normalizeFault(err, s.snapshot().Outcome)
+			cause = httpInvocationCause(s, cause)
 			setInvocationFault(s, f, cause, "invoke")
 			e.failHTTP(w, r, s, httpStatus(f), "invoke", f, cause)
 			return
@@ -115,6 +78,54 @@ func JSONHandler[In, Out any](operation string, decode func(*http.Request) (In, 
 		_, _ = w.Write(data) // The endpoint owns bounded buffering and actual delivery.
 		e.report(ctx, s, "complete", "ok", nil, true)
 	}), nil
+}
+
+func beginHTTPInvocation[In any](operation string, w http.ResponseWriter, r *http.Request, decode func(*http.Request) (In, error), streaming bool) (In, *requestState) {
+	var zero In
+	ctx := r.Context()
+	s := stateFromContext(ctx)
+	if s == nil || s.endpoint == nil || !s.endpoint.jsonHTTP || s.request.Caller.Principal == "" || streaming && s.stream == nil {
+		// This is a composition error, not an alternate authentication path.
+		// No decoder, gate or application callback is run outside the boundary.
+		http.Error(w, "A verified compatible HTTP endpoint is required.", http.StatusInternalServerError)
+		return zero, nil
+	}
+	e := s.endpoint
+	s.mu.Lock()
+	s.request.Operation = operation
+	caller := s.request.Caller
+	s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		e.failHTTP(w, r, s, http.StatusServiceUnavailable, "input", timeoutFault(NotExecuted), err)
+		return zero, nil
+	}
+	input, err := decode(r)
+	if err != nil {
+		f, phase, cause := jsonInputFault(err, s)
+		setInvocationFault(s, f, cause, phase)
+		e.failHTTP(w, r, s, httpStatus(f), phase, f, cause)
+		return zero, nil
+	}
+	if err := ctx.Err(); err != nil {
+		e.failHTTP(w, r, s, http.StatusServiceUnavailable, "input", timeoutFault(NotExecuted), err)
+		return zero, nil
+	}
+	if gate := e.config.Gate; gate != nil {
+		if err := gate(ctx, caller, operation); err != nil {
+			f := admissionFault(err)
+			setInvocationFault(s, f, err, "gate")
+			e.failHTTP(w, r, s, httpStatus(f), "gate", f, err)
+			return zero, nil
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		e.failHTTP(w, r, s, http.StatusServiceUnavailable, "gate", timeoutFault(NotExecuted), err)
+		return zero, nil
+	}
+	s.mu.Lock()
+	s.dispatched, s.outcome = true, Unknown
+	s.mu.Unlock()
+	return input, s
 }
 
 func jsonInputFault(err error, s *requestState) (*Fault, string, error) {

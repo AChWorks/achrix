@@ -19,7 +19,7 @@ The document index, not a status report. Start from README/AGENTS and the releva
 | Deployment/runtime configuration versus durable Settings, diagnosis, bounded resources and cost | [Operations](operations/operability-performance.md) |
 | Semantic web, SEO, localization and machine content representations | [Web](web/seo-and-semantic-web.md), [file-based localization](web/localization.md) |
 | Go analysis tools, vulnerability triage and Foundation benchmarks | [Go quality](development/go-quality.md) |
-| Development Identity/Audit/Media contracts, web security, atomic events and retained-state/asset limits | [Identity](../identity/README.md), [Audit](../audit/README.md), [Media](../media/README.md) |
+| Development Identity/Audit/Media contracts, web security, atomic events and retained-state/asset limits | [Identity](../identity/README.md), [Audit](../audit/README.md), [Media](../media/README.md), [private Media HTTP/MCP workflow](../media/remote/README.md) |
 | Optional exact-authority resolution, authorized HTTP/MCP site reads and per-site activation planning | [Multi-Site](../multisite/README.md), [remote contracts](../multisite/remote/README.md), [consumer composition proof](../fixtures/notes/README.md#optional-multi-site-resolver-composition); products own isolation, persistence and actual activation. [Issue #4](https://github.com/AChWorks/achrix/issues/4) owns broader consumer-proof evidence rather than API semantics |
 | Development administration shell, Module-owned forms and browser proof | [Admin](../admin/README.md), [Identity Admin](../identity/admin/), [Media Admin](../media/admin/README.md), [consumer proof](../fixtures/notes/README.md#admin-browser-proving-composition) |
 | Outcome sequence | [Roadmap](development/roadmap.md) |
