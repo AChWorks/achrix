@@ -1,11 +1,11 @@
-github.com/AChWorks/achrix v0.5.1-0.20261030143139-7da287cf6a98 h1:o89JkwUje+Ls2s9dUlLLs8Q7XemMJM7ZYNjreA+w1UM=
-github.com/AChWorks/achrix v0.5.1-0.20261030143139-7da287cf6a98/go.mod h1:9Zj1xlOsqGJcF1FNrGVBl+4jUfQX2D5AkR96RpB6PB0=
+github.com/AChWorks/achrix v0.5.1-0.20261030144430-33b336f40be7 h1:Ch/BzaGXCUVanMuid4Httas7hSrxKy594Aj7DdYaGjM=
+github.com/AChWorks/achrix v0.5.1-0.20261030144430-33b336f40be7/go.mod h1:9Zj1xlOsqGJcF1FNrGVBl+4jUfQX2D5AkR96RpB6PB0=
 github.com/AChWorks/achrix/admin v0.2.1-0.20261030060024-21c529040722 h1:iemk1/JoFUTlP7+wNhgK1Z5fs+/T77xkugO/G7f5H/I=
 github.com/AChWorks/achrix/admin v0.2.1-0.20261030060024-21c529040722/go.mod h1:xVpT4ee9VT6B7GKazD9Hi57BXKQe2pEjwKERHrlqrEs=
 github.com/AChWorks/achrix/audit v0.1.1-0.20261030061705-d9abf8ad3dd9 h1:o9oezDrBU173JRBXUF+ijPXnpfW4vFHmGJePMgPucfM=
 github.com/AChWorks/achrix/audit v0.1.1-0.20261030061705-d9abf8ad3dd9/go.mod h1:/MdiQOnDm/KhuXO1znWIZBoTka+lFzUrwmJ6N5LQYWE=
-github.com/AChWorks/achrix/bridge v0.0.0-20261030143139-7da287cf6a98 h1:3ff6+6JwteUdAzubc02riTz1FO8yLl/p6TIwF/hGPPA=
-github.com/AChWorks/achrix/bridge v0.0.0-20261030143139-7da287cf6a98/go.mod h1:s2hC7PEgo/j5Ss3bHW9KEJ9inZu+jldL379726yS3LM=
+github.com/AChWorks/achrix/bridge v0.0.0-20261030144430-33b336f40be7 h1:IAv9YUKIhMgQ+FxeNq/IVdw7d0pNHQoRpit/v5KqZSI=
+github.com/AChWorks/achrix/bridge v0.0.0-20261030144430-33b336f40be7/go.mod h1:s2hC7PEgo/j5Ss3bHW9KEJ9inZu+jldL379726yS3LM=
 github.com/AChWorks/achrix/identity v0.2.1-0.20261030061736-b9d82bb6d85d h1:Pg0rQ31C5hOYHdxlsMOPHcmCglGOd0cutskhT4Rzdgk=
 github.com/AChWorks/achrix/identity v0.2.1-0.20261030061736-b9d82bb6d85d/go.mod h1:i/2k5H3cQTvAfhFjs72zv8SyZfigzmX+ACsi8KV0310=
 github.com/AChWorks/achrix/installation v0.1.1-0.20261030060024-21c529040722 h1:/VTOXlg8XEXC+uzroubHUjd+ZiKdMOvajAu/KZ9oY/Q=
