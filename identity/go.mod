@@ -3,9 +3,9 @@ module github.com/AChWorks/achrix/identity
 go 1.27.3
 
 require (
-	github.com/AChWorks/achrix v0.3.1-0.20261029085807-1a055ff695e4
-	github.com/AChWorks/achrix/admin v0.1.1-0.20261029233311-27633becbb42
-	github.com/AChWorks/achrix/audit v0.0.0-20261029085829-309131f543f5
+	github.com/AChWorks/achrix v0.4.1-0.20261030054013-9d755aa7281b
+	github.com/AChWorks/achrix/admin v0.2.1-0.20261030060024-21c529040722
+	github.com/AChWorks/achrix/audit v0.1.1-0.20261030060024-21c529040722
 	github.com/alexedwards/argon2id v1.0.0
 	github.com/jackc/pgx/v5 v5.11.0
 )
