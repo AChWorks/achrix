@@ -359,13 +359,11 @@ func (s *Service) Inventory(parent context.Context, actor achrix.Principal, curs
 	if err = s.app.Authorize(ctx, actor, InventoryRead, InventoryTarget); err != nil {
 		return InventoryPage{}, err
 	}
+	start := sort.Search(len(m.ids), func(i int) bool { return m.ids[i] > after })
 	page := InventoryPage{Sites: make([]SiteInfo, 0, limit)}
-	for _, id := range m.ids {
+	for _, id := range m.ids[start:] {
 		if err = ctx.Err(); err != nil {
 			return InventoryPage{}, err
-		}
-		if id <= after {
-			continue
 		}
 		err = s.app.Authorize(ctx, actor, InventoryRead, string(id))
 		if errors.Is(err, achrix.ErrDenied) {
