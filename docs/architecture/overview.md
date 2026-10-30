@@ -16,6 +16,8 @@ A product composes independently versioned Core, a compatible selection of reusa
 
 The optional installation tooling owns reusable requirement/evidence and re-entry planning outside the running Application. Products and supported platform adapters own real environment inspection, provisioning, migrations/bootstrap and activation. Optional Multi-Site management validates declared site inventory and replacement compositions; products persist and activate them while preserving per-site data and authorization. Neither boundary adds host administration or tenancy to Core.
 
+The optional [Bridge](../../bridge/README.md) is a bounded MCP presentation/resource-server adapter over those same application operations. Products supply current user/client verification and connection admission; channel restrictions can narrow ordinary product permissions. Protocol mechanics stay outside Core, while product OAuth onboarding and actual AI/Gateway compatibility remain separately evidenced integrations. Shared code does not require Gateway, an AI provider, a central issuer or idle connection workers.
+
 Use maintained Go/native/ecosystem functionality rather than build a general-purpose framework. [ADR-0003](../decisions/ADR-0003-postgresql-and-optional-infrastructure.md) owns concrete infrastructure choices; [Module model](module-model.md) owns composition/placement; [Consumption](consumption-and-packaging.md) owns the product dependency and packaging boundary.
 
 ## Extraction

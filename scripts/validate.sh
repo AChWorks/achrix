@@ -122,6 +122,7 @@ pg_ctl -D "$validation_root/database" -l "$validation_root/postgres.log" \
 export PGHOST="$validation_root/socket" PGPORT=5432 PGUSER
 PGUSER=$(id -un)
 createdb -T template0 achrix_test_notes
+createdb -T template0 achrix_test_bridge
 createdb -T template0 achrix_test_restore
 createdb -T template0 achrix_identity_test
 createdb -T template0 achrix_audit_test
@@ -173,6 +174,7 @@ fi
 "$quality_bin/govulncheck" -test -db https://vuln.go.dev -show version,verbose ./...
 go vet ./...
 export NOTES_TEST_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_test_notes sslmode=disable"
+export NOTES_BRIDGE_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_test_bridge sslmode=disable"
 export NOTES_TEST_LATIN1_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_test_latin1 sslmode=disable"
 export NOTES_TEST_SQL_ASCII_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_test_sqlascii sslmode=disable"
 export NOTES_IDENTITY_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_identity_consumer sslmode=disable"

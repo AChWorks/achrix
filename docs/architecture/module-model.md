@@ -149,7 +149,13 @@ Use maintained native/provider mechanisms rather than inventing a backup format.
 
 Identity, Admin, Media, Audit, Notifications, Search, Settings, Installation/update tooling, Backup & Recovery and optional Multi-Site are accepted reusable placements. The [Multi-Site public contract](../../multisite/README.md) owns exact resolution plus its optional normal-authorized inventory and per-site Module-selection/activation planning. The product owns state persistence, typed construction, draining and activation of replacement Applications, site-to-store bindings and all content/theme/publication semantics. Site selection, an inventory entry or an activation plan supplies no domain grant. A disabled feature retains its data; a running Core graph remains immutable. Single-site consumers may omit Multi-Site entirely. [Issue #4](https://github.com/AChWorks/achrix/issues/4) remains the stable broader consumer-proof reference without making its live state a technical contract. Accepted placement alone never requires an empty package.
 
-Content/taxonomy, commerce, payments, AI/provider behavior and Gateway Bridge remain case-by-case until their own evidence/decision establishes placement; a familiar feature name alone is not reuse evidence.
+### Application Bridge
+
+The optional [Bridge component](../../bridge/README.md) owns reusable MCP resource-server transport, trusted caller context, bounded typed bindings and safe diagnostic projection. Products register their ordinary application operations and supply verified user/client identity, current connection admission and any narrower channel restriction. Domain permissions, site/resource binding, operation semantics, durable outcome/reconciliation records and required Audit stay with the owning product/service.
+
+Bridge is an independently versioned presentation component in this repository under ADR-0006. It adds no protocol SDK, token issuer, provider/model dependency or universal operation registry to Core. Products mount its request handler in their own process; a configured idle connection does not require a separate worker/service. Product OAuth onboarding and real direct-client/Gateway interoperability require their own integration evidence under [Issue #5](https://github.com/AChWorks/achrix/issues/5).
+
+Content/taxonomy, commerce, payments and AI/provider behavior remain case-by-case until their own evidence/decision establishes placement; a familiar feature name alone is not reuse evidence.
 
 ## Shared infrastructure candidates
 

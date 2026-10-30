@@ -18,6 +18,18 @@ import (
 
 type requestKey struct{}
 
+// WithRequestID joins a verified transport's server-generated request identity
+// to Notes diagnostics. Callers must never supply a client header or payload ID.
+// The transport owns the identity's validity and bounds; an empty ID generates
+// the normal product-owned correlation instead.
+func WithRequestID(ctx context.Context, requestID string) context.Context {
+	if requestID == "" {
+		ctx, _ = Correlate(ctx)
+		return ctx
+	}
+	return context.WithValue(ctx, requestKey{}, requestID)
+}
+
 // Correlate keeps an existing product-owned identity through nested adapters.
 // Untrusted request headers never populate this private context key.
 func Correlate(ctx context.Context) (context.Context, string) {

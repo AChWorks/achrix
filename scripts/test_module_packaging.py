@@ -213,7 +213,7 @@ class CompiledIdentityTests(unittest.TestCase):
             root = Path(temporary)
             versions = {modules.MODULE_PATH: "v0.4.0"}
             versions.update({modules.MODULE_PATH + "/" + name: "v0.1." + str(i)
-                             for i, name in enumerate(("audit", "identity", "media", "multisite", "admin", "installation"))})
+                             for i, name in enumerate(("audit", "identity", "media", "multisite", "admin", "installation", "bridge"))})
             resolved = root / "resolved.json"
             resolved.write_text(json.dumps({path: {"Version": version} for path, version in versions.items()}))
             descriptors = [{"ID": "achrix." + name, "Version": versions[modules.MODULE_PATH + "/" + name],
