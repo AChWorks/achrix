@@ -303,6 +303,7 @@ func TestAdminBrowserFixture(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		t.Cleanup(shell.FlushDiagnostics)
 		mux := http.NewServeMux()
 		mux.Handle("/auth/", http.StripPrefix("/auth", web.Handler()))
 		mux.Handle("/admin", shell.Handler())
