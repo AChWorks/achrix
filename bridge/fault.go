@@ -74,6 +74,7 @@ type requestKey struct{}
 
 type requestState struct {
 	endpoint   *Endpoint
+	stream     *streamResponse
 	mu         sync.Mutex
 	ctx        context.Context
 	request    Request

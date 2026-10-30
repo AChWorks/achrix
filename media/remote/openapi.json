@@ -1,0 +1,1100 @@
+{
+  "openapi": "3.1.1",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "AChrix private Media HTTP API",
+    "version": "1.0.0",
+    "description": "Optional sibling HTTP/MCP bindings over the existing private Media Service. This version names the transport contract, not a component release. HTTP raw upload and authenticated original-byte download are the companion transfer profile; no native MCP attachment upload, resources/read, public image export or hosted-client compatibility is claimed. No automatic mutation retries."
+  },
+  "servers": [
+    {
+      "url": "https://product.example/api/media",
+      "description": "Example only; replace with the actual product HTTP ResourceURL and intended audience."
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/assets": {
+      "get": {
+        "operationId": "achrix.media.list",
+        "summary": "List ready whole-library metadata",
+        "description": "Requires List on library, not per-asset Read. Includes filenames; no ownership filtering or content grants are inferred. Unknown/repeated query and more than 512 encoded query bytes are rejected; every page reauthorizes. Empty assets is []. No request body.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 36,
+              "pattern": "^(?:[A-Za-z0-9_-]{36})?$",
+              "description": "Unchanged List continuation; omit or empty to restart. The owning Service validates the version and generated ID. Not a snapshot or permission."
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded ready metadata page.",
+            "headers": {
+              "X-Request-ID": {
+                "description": "Server-generated request correlation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "No-store for metadata/problems; private, no-store for original bytes.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "405": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "408": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "413": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "415": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      },
+      "post": {
+        "operationId": "achrix.media.create",
+        "summary": "Create one private attachment from original raw bytes",
+        "description": "Requires Create on library. Content-Type must be application/octet-stream with no parameters. Content-Disposition must contain attachment and exactly one filename or UTF-8 filename* parameter; duplicate/continuation parameters are rejected. No query, Content-Encoding or trailers. Service owns actual format/profile/filename validation. Known empty bodies and Content-Length above 10 MiB are rejected before dispatch; unknown-length input retains the owning +1 oversize probe. Defaults permit 10 MiB uploads; explicit lower product transport budgets remain effective. A late failure can retain durable intent and an asset reference even when the input was invalid.",
+        "parameters": [
+          {
+            "name": "Content-Disposition",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "example": "attachment; filename=\"example.png\""
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "One original supported file, 1 byte..10 MiB. The adapter does not buffer a full file or decode Content-Encoding.",
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Confirmed ready private asset with a companion HTTP reference. The reference conveys no Read permission.",
+            "headers": {
+              "X-Request-ID": {
+                "description": "Server-generated request correlation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "No-store for metadata/problems; private, no-store for original bytes.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "405": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "408": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "413": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "415": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    },
+    "/assets/{asset_id}": {
+      "get": {
+        "operationId": "achrix.media.status",
+        "summary": "Read durable asset status for reconciliation",
+        "description": "Fresh Read permission on exact ID precedes lookup. Returns pending, ready, deleting or deleted; deleted is a minimal tombstone. Only ready state includes a companion content reference. No query or request body.",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 26,
+              "maxLength": 26,
+              "pattern": "^[A-Z2-7]{26}$",
+              "description": "Exact generated asset identity; not a bearer credential or permission."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized durable status; exact revision is a decimal string.",
+            "headers": {
+              "X-Request-ID": {
+                "description": "Server-generated request correlation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "No-store for metadata/problems; private, no-store for original bytes.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "405": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "408": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "413": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "415": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    },
+    "/assets/{asset_id}/content": {
+      "get": {
+        "operationId": "achrix.media.read",
+        "summary": "Download verified private original bytes",
+        "description": "Fresh authentication/admission and exact Read permission are required on each fetch. Status metadata is checked, then Service.Read reauthorizes and verifies the complete stored size/hash before any bytes. Content-Type is the owning canonical MIME; attachment headers are delayed until verified bytes. Range/If-Range and request bodies are rejected; no partial-content support. A nonready state is409. Unsupported/corrupt source fails before bytes with a safe problem. A failure after headers aborts delivery without appended JSON; discard the incomplete file.",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 26,
+              "maxLength": 26,
+              "pattern": "^[A-Z2-7]{26}$",
+              "description": "Exact generated asset identity; not a bearer credential or permission."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complete original bytes, at most10MiB or the explicit lower configured response budget.",
+            "headers": {
+              "X-Request-ID": {
+                "description": "Server-generated request correlation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "No-store for metadata/problems; private, no-store for original bytes.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "image/png",
+                    "image/jpeg",
+                    "image/gif",
+                    "image/webp",
+                    "image/avif",
+                    "image/bmp",
+                    "image/tiff",
+                    "image/x-icon",
+                    "application/pdf",
+                    "application/msword",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "application/vnd.ms-excel",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "application/vnd.ms-powerpoint",
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    "application/vnd.oasis.opendocument.text",
+                    "application/vnd.oasis.opendocument.spreadsheet",
+                    "application/vnd.oasis.opendocument.presentation",
+                    "text/plain",
+                    "text/csv",
+                    "application/zip",
+                    "application/vnd.rar",
+                    "application/x-7z-compressed",
+                    "video/mp4",
+                    "video/quicktime",
+                    "video/webm",
+                    "video/matroska",
+                    "video/x-msvideo",
+                    "video/mpeg",
+                    "video/ogg",
+                    "audio/mpeg",
+                    "audio/mp4",
+                    "audio/ogg",
+                    "audio/wav",
+                    "audio/flac",
+                    "audio/aac",
+                    "image/svg+xml"
+                  ]
+                }
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "attachment with the owning safe filename; no inline rendering."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10485760
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string",
+                  "const": "nosniff"
+                }
+              }
+            },
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "405": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "408": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "413": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "415": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    },
+    "/assets/{asset_id}/delete": {
+      "post": {
+        "operationId": "achrix.media.delete",
+        "summary": "Conditionally delete one exact asset",
+        "description": "Requires Delete on exact ID and unchanged positive int64 decimal-string expected_revision. No If-Match mapping is implied:409 includes lifecycle/storage conflicts as well as stale revision. Acknowledged deleting intent can precede later failure; inspect Status and explicitly authorized Reconcile, retaining the original precondition. Never automatically substitute a newer revision or replay.",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 26,
+              "maxLength": 26,
+              "pattern": "^[A-Z2-7]{26}$",
+              "description": "Exact generated asset identity; not a bearer credential or permission."
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "One JSON object of at most4096 bytes. Unknown/duplicate fields and trailing values are rejected.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Confirmed deletion; this acknowledges the owning operation, not a fresh unrelated status read.",
+            "headers": {
+              "X-Request-ID": {
+                "description": "Server-generated request correlation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "No-store for metadata/problems; private, no-store for original bytes.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "405": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "408": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "413": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "415": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    },
+    "/reconcile": {
+      "post": {
+        "operationId": "achrix.media.reconcile",
+        "summary": "Run one bounded explicit library maintenance batch",
+        "description": "Separate Reconcile permission on library. Aborts pending uploads and finishes deletion; never publishes interrupted uploads. Busy locked work is counted and untouched. Omitted limit selects 10. A failure may follow partial effects; safe fields retain processed/busy counts. No automatic retries or background worker.",
+        "requestBody": {
+          "required": true,
+          "description": "One JSON object of at most4096 bytes. Unknown/duplicate fields and trailing values are rejected.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconcileInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Completed bounded batch. Counts describe this batch, not global remaining work or snapshot completeness.",
+            "headers": {
+              "X-Request-ID": {
+                "description": "Server-generated request correlation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "No-store for metadata/problems; private, no-store for original bytes.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconcileResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "405": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "408": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "413": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "415": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Product-verified token for this exact HTTP resource. MCP credentials have a separate audience. Current connection admission and ordinary Media policy both apply."
+      }
+    },
+    "schemas": {
+      "ListInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^(?:[A-Za-z0-9_-]{36})?$",
+            "description": "Unchanged List continuation; omit or empty to restart. The owning Service validates the version and generated ID. Not a snapshot or permission."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          }
+        }
+      },
+      "StatusInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "asset_id"
+        ],
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "minLength": 26,
+            "maxLength": 26,
+            "pattern": "^[A-Z2-7]{26}$",
+            "description": "Exact generated asset identity; not a bearer credential or permission."
+          }
+        }
+      },
+      "DeleteInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "asset_id",
+          "expected_revision"
+        ],
+        "properties": {
+          "expected_revision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 19,
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Exact canonical positive int64 decimal string, 1..9223372036854775807. JSON numbers, signs, leading zeros and overflow are rejected."
+          },
+          "asset_id": {
+            "type": "string",
+            "minLength": 26,
+            "maxLength": 26,
+            "pattern": "^[A-Z2-7]{26}$",
+            "description": "Exact generated asset identity; not a bearer credential or permission."
+          }
+        }
+      },
+      "DeleteBody": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expected_revision"
+        ],
+        "properties": {
+          "expected_revision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 19,
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Exact canonical positive int64 decimal string, 1..9223372036854775807. JSON numbers, signs, leading zeros and overflow are rejected."
+          }
+        }
+      },
+      "ReconcileInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 40,
+            "default": 10
+          }
+        }
+      },
+      "AssetInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "state",
+          "revision",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 26,
+            "maxLength": 26,
+            "pattern": "^[A-Z2-7]{26}$",
+            "description": "Exact generated asset identity; not a bearer credential or permission."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "ready",
+              "deleting",
+              "deleted"
+            ]
+          },
+          "revision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 19,
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Exact canonical positive int64 decimal string, 1..9223372036854775807. JSON numbers, signs, leading zeros and overflow are rejected."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC RFC3339 time at owning PostgreSQL microsecond precision."
+          },
+          "filename": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "description": "Retained safe filename, at most 256 UTF-8 bytes; omitted when cleared."
+          },
+          "mime": {
+            "type": "string",
+            "enum": [
+              "image/png",
+              "image/jpeg",
+              "image/gif",
+              "image/webp",
+              "image/avif",
+              "image/bmp",
+              "image/tiff",
+              "image/x-icon",
+              "application/pdf",
+              "application/msword",
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              "application/vnd.ms-excel",
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              "application/vnd.ms-powerpoint",
+              "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+              "application/vnd.oasis.opendocument.text",
+              "application/vnd.oasis.opendocument.spreadsheet",
+              "application/vnd.oasis.opendocument.presentation",
+              "text/plain",
+              "text/csv",
+              "application/zip",
+              "application/vnd.rar",
+              "application/x-7z-compressed",
+              "video/mp4",
+              "video/quicktime",
+              "video/webm",
+              "video/matroska",
+              "video/x-msvideo",
+              "video/mpeg",
+              "video/ogg",
+              "audio/mpeg",
+              "audio/mp4",
+              "audio/ogg",
+              "audio/wav",
+              "audio/flac",
+              "audio/aac",
+              "image/svg+xml"
+            ]
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10485760
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4096
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4096
+          },
+          "sha256": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "url",
+              "resource"
+            ],
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "maxLength": 2200,
+                "description": "Canonical authenticated HTTP content location; no token or ambient access is conveyed."
+              },
+              "resource": {
+                "type": "string",
+                "format": "uri",
+                "maxLength": 2048,
+                "description": "Intended HTTP credential resource. Every fetch verifies this resource and current exact-asset Read permission."
+              }
+            }
+          }
+        },
+        "description": "Status preserves every durable state. Only ready Status/Create carries a content reference; deleted output contains only id/state/revision/created_at. Cleared/zero metadata is omitted."
+      },
+      "Page": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "assets"
+        ],
+        "properties": {
+          "assets": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "state",
+                "revision",
+                "created_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 26,
+                  "maxLength": 26,
+                  "pattern": "^[A-Z2-7]{26}$",
+                  "description": "Exact generated asset identity; not a bearer credential or permission."
+                },
+                "state": {
+                  "type": "string",
+                  "const": "ready"
+                },
+                "revision": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 19,
+                  "pattern": "^[1-9][0-9]{0,18}$",
+                  "description": "Exact canonical positive int64 decimal string, 1..9223372036854775807. JSON numbers, signs, leading zeros and overflow are rejected."
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "UTC RFC3339 time at owning PostgreSQL microsecond precision."
+                },
+                "filename": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "description": "Retained safe filename, at most 256 UTF-8 bytes; omitted when cleared."
+                },
+                "mime": {
+                  "type": "string",
+                  "enum": [
+                    "image/png",
+                    "image/jpeg",
+                    "image/gif",
+                    "image/webp",
+                    "image/avif",
+                    "image/bmp",
+                    "image/tiff",
+                    "image/x-icon",
+                    "application/pdf",
+                    "application/msword",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "application/vnd.ms-excel",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "application/vnd.ms-powerpoint",
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    "application/vnd.oasis.opendocument.text",
+                    "application/vnd.oasis.opendocument.spreadsheet",
+                    "application/vnd.oasis.opendocument.presentation",
+                    "text/plain",
+                    "text/csv",
+                    "application/zip",
+                    "application/vnd.rar",
+                    "application/x-7z-compressed",
+                    "video/mp4",
+                    "video/quicktime",
+                    "video/webm",
+                    "video/matroska",
+                    "video/x-msvideo",
+                    "video/mpeg",
+                    "video/ogg",
+                    "audio/mpeg",
+                    "audio/mp4",
+                    "audio/ogg",
+                    "audio/wav",
+                    "audio/flac",
+                    "audio/aac",
+                    "image/svg+xml"
+                  ]
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10485760
+                },
+                "width": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4096
+                },
+                "height": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4096
+                },
+                "sha256": {
+                  "type": "string",
+                  "minLength": 64,
+                  "maxLength": 64,
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              },
+              "description": "Ready whole-library metadata under List permission. No content reference or per-asset Read grant is implied."
+            }
+          },
+          "next_cursor": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^(?:[A-Za-z0-9_-]{36})?$",
+            "description": "Absent at the end of this traversal. Every later page reauthorizes library List; pages do not form a consistent snapshot.",
+            "minLength": 36
+          }
+        }
+      },
+      "DeleteResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "asset_id",
+          "outcome"
+        ],
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "minLength": 26,
+            "maxLength": 26,
+            "pattern": "^[A-Z2-7]{26}$",
+            "description": "Exact generated asset identity; not a bearer credential or permission."
+          },
+          "outcome": {
+            "type": "string",
+            "const": "succeeded"
+          }
+        }
+      },
+      "ReconcileResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "processed",
+          "busy"
+        ],
+        "properties": {
+          "processed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 40
+          },
+          "busy": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 40
+          }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code",
+          "message",
+          "action",
+          "outcome",
+          "request_id"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "about:blank"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "action": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "fields": {
+            "type": "object",
+            "maxProperties": 16,
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "description": "Safe source-owned field/reason guidance. Failed Reconcile retains processed and busy counts as decimal strings."
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "not_executed",
+              "not_committed",
+              "succeeded",
+              "unknown"
+            ]
+          },
+          "reference": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Known generated asset ID for reconciliation; not a grant. Retained after late Create failure even for rejected input."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Server-generated correlation; caller headers cannot select it."
+          }
+        }
+      }
+    },
+    "responses": {
+      "Failure": {
+        "description": "Safe RFC9457 problem before binary headers. Preserve known outcome/reference and partial counts. If original-byte delivery fails after headers, the transport aborts without appending JSON. A timeout/503 is not permission to replay a mutation.",
+        "headers": {
+          "X-Request-ID": {
+            "description": "Server-generated request correlation.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "Cache-Control": {
+            "description": "No-store for metadata/problems; private, no-store for original bytes.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      }
+    }
+  }
+}

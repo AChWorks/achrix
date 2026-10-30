@@ -10,7 +10,7 @@ Use AChrix when you want shared application capabilities that you can consume an
 | --- | --- |
 | Core | Application composition, authorization and startup/shutdown lifecycle |
 | [Identity](identity/README.md) and [Audit](audit/README.md) | Accounts, passwords, sessions and accountable operations |
-| [Media](media/README.md) | Private attachments and clean PNG/JPEG preparation |
+| [Media](media/README.md) | Private attachments with an authorized HTTP/MCP workflow and clean PNG/JPEG preparation |
 | [Multi-Site](multisite/README.md) | Site resolution, authorized inventory with optional HTTP/MCP reads, and per-site Module selection planning |
 | [Admin](admin/README.md) | A composable administration shell with Identity and Media screens, including file-based English/Persian localization and RTL/LTR presentation |
 | [Installation](installation/README.md) | Installation requirement assessment and safe re-entry planning |

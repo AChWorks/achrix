@@ -2,8 +2,8 @@
 
 `github.com/AChWorks/achrix/bridge` is an optional independently versioned
 application adapter for authenticated MCP Streamable HTTP and explicit bounded
-JSON HTTP operations. The MCP profile uses the official Go SDK's protocol, typed
-tool schemas and validation. Both profiles reuse verified caller/admission,
+HTTP operations, including private file transfer. The MCP profile uses the official Go SDK's protocol, typed
+tool schemas and validation. The profiles reuse verified caller/admission,
 protected diagnostics and truthful outcomes. Importing Bridge is not required
 by Core or direct application-service consumers.
 
@@ -109,6 +109,48 @@ show a real optional component package with HTTP/MCP schemas and a normally
 pinned consumer; direct `multisite` imports do not compile the remote package or
 SDK, although the module manifest includes optional presentation dependencies.
 
+## Explicit private file transfer
+
+`NewStreamingHTTP(config, router)` reuses the same verified HTTP resource and
+operation gates. Mount existing `JSONHandler` routes for bounded metadata and
+mutation responses, and an explicit `StreamHandler[Input]` for an authorized
+binary result. The [Media remote profile](../media/remote/README.md) supplies the
+concrete upload/status/reference/download/delete/reconciliation workflow and
+its published HTTP/MCP contracts.
+
+`StreamHandler(operation, decode, invoke)` has a cheap typed decoder and an
+invocation `func(context.Context, Input, http.ResponseWriter) error`. The callback
+calls the owning Service with the verified principal. It must honor context,
+return destination errors and set only safe successful attachment headers after
+content verification. Headers remain private until a nonempty write; a zero-byte
+write does not commit them. The wrapper holds headers/counters, never a file
+buffer. It verifies configured total bytes and any declared Content-Length.
+Request correlation, private/no-store and nosniff remain boundary-owned.
+
+A failure before headers becomes bounded Problem Details. After headers, a
+failed or short transfer closes/resets the HTTP transfer without appending JSON
+or pretending a truncated file succeeded. The original writer cause and any
+confirmed operation outcome/reference remain in protected diagnostics. A
+callback may `Confirm` before delivery; later delivery failure never authorizes
+repeating its mutation. The writer exposes no Hijack, Unwrap or Flush escape.
+
+The streaming constructor requires actual socket read/write deadline support
+from the server/middleware; otherwise it fails before authentication or Service
+dispatch. It uses the same finite request/concurrency/response ceilings below.
+Media selects a default 10MiB+1 request budget so its owning oversize probe sees
+excess input, a 10MiB original-byte response budget and independently bounded
+metadata JSON. This is not the separate 40MiB public-image preparation profile.
+The server still owns TLS, header, idle and ingress policy, and application
+callbacks must cooperate with their deadlines.
+
+For raw uploads, a JSONHandler decoder can validate metadata and pass a bounded
+body reader to its ordinary Service. Body I/O then occurs **after dispatch** and
+may follow durable intent. The boundary preserves the owning error outcome,
+known reference and original body-read cause; it does not reuse a pre-dispatch
+input classification for that failure. It performs no whole-file buffering,
+URL fetching, multipart processing, range handling, SSE or automatic replay.
+The JSON-only and MCP constructors retain their prior bounded profiles.
+
 ## MCP request-only profile and shared limits
 
 The supported, tested protocol profiles are `2026-07-28` and `2025-11-25`.
@@ -133,14 +175,14 @@ use temporary SDK sessions that are closed when the HTTP request finishes.
 | Bound | Default | Accepted configuration |
 | --- | --- | --- |
 | Request body | 64 KiB | 256 B–16 MiB; includes chunked input |
-| Encoded HTTP response | 1 MiB | 4 KiB–16 MiB; includes failure responses |
+| Total HTTP response bytes | 1 MiB | 4 KiB–16 MiB; includes failure responses |
 | Concurrent requests | 16 | 1–1024; fail fast when full |
 | Application request deadline | 15 seconds | 1 millisecond–5 minutes |
 | Network response delivery | Request deadline plus 1 second | Fixed finite allowance for a truthful timeout response |
 
 The enclosing `http.Server` owns header, idle-connection and ingress limits.
 Read/write network deadlines are applied when its response writer supports
-them. Trusted in-process verifier, admission, gate, service and diagnostic
+them; the streaming constructor requires this support before dispatch. Trusted in-process verifier, admission, gate, service and diagnostic
 callbacks must honor context and be concurrency-safe; a context cannot forcibly
 terminate arbitrary Go code. Product services must bound their output objects
 and query sizes: the delivery byte limit does not prevent a handler from first

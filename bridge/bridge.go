@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // Package bridge adapts deliberately registered typed application operations to
-// bounded, authenticated MCP and JSON HTTP. Products supply credential
+// bounded, authenticated MCP, JSON HTTP and explicit private file transfer. Products supply credential
 // verification and current admission; their application services still own
 // domain authorization. Bridge does not issue credentials or implement OAuth
 // login, consent, refresh, revocation storage, or account linking.
@@ -74,6 +74,7 @@ type Limits struct {
 	RequestBytes int64
 	// ResponseBytes must be at least 4096, reserving enough encoded space for
 	// an exact maximum-length recovery reference and bounded failure guidance.
+	// It bounds buffered JSON or the total explicitly streamed response bytes.
 	ResponseBytes int64
 	Concurrent    int
 	Timeout       time.Duration
@@ -117,6 +118,7 @@ type Endpoint struct {
 	metadata    http.Handler
 	inputs      map[string]*inputDiagnostic
 	jsonHTTP    bool
+	streamHTTP  bool
 }
 
 // New validates configuration and completes fixed tool registration before
