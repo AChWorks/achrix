@@ -6,11 +6,11 @@ require (
 	github.com/AChWorks/achrix v0.5.1-0.20261030144430-33b336f40be7
 	github.com/AChWorks/achrix/admin v0.2.1-0.20261030060024-21c529040722
 	github.com/AChWorks/achrix/audit v0.1.1-0.20261030061705-d9abf8ad3dd9
-	github.com/AChWorks/achrix/bridge v0.0.0-20261030144430-33b336f40be7
+	github.com/AChWorks/achrix/bridge v0.0.0-20261030163855-832fa96ffa6e
 	github.com/AChWorks/achrix/identity v0.2.1-0.20261030061736-b9d82bb6d85d
 	github.com/AChWorks/achrix/installation v0.1.1-0.20261030060024-21c529040722
 	github.com/AChWorks/achrix/media v0.2.1-0.20261030061507-5f9288b3d4f7
-	github.com/AChWorks/achrix/multisite v0.1.1-0.20261030072610-81d488ef3ea8
+	github.com/AChWorks/achrix/multisite v0.1.2-0.20261030163915-c0df7f4bf362
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 )

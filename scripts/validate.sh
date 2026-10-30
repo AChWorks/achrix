@@ -162,6 +162,21 @@ cd "$validation_root/consumer"
 go mod download
 go mod verify
 python3 "$repository/scripts/verify_consumer.py" source "$repository" "$validation_root/modules.json"
+# Optional remote packages may add module-graph requirements, but direct Core
+# and Multi-Site imports must not compile the Bridge/MCP machinery. Inspect the
+# independently pinned cold consumer graph, not a local authoring workspace.
+python3 - <<'PYDIRECT'
+import subprocess
+packages = subprocess.check_output([
+    "go", "list", "-deps", "github.com/AChWorks/achrix",
+    "github.com/AChWorks/achrix/multisite"], text=True).splitlines()
+for package in packages:
+    if (package == "github.com/AChWorks/achrix/bridge"
+            or package.startswith("github.com/AChWorks/achrix/bridge/")
+            or package.startswith("github.com/modelcontextprotocol/")):
+        raise SystemExit("direct domain import acquired optional transport: " + package)
+print("Verified direct Core/Multi-Site imports omit Bridge/MCP packages")
+PYDIRECT
 python3 - "$validation_root/modules.json" "$validation_root/foundation.json" <<'PYCORE'
 import json,pathlib,sys
 modules=json.loads(pathlib.Path(sys.argv[1]).read_text())

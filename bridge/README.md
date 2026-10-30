@@ -1,11 +1,13 @@
 # Bridge
 
 `github.com/AChWorks/achrix/bridge` is an optional independently versioned
-application adapter for authenticated MCP Streamable HTTP. It uses the official
-Go SDK's protocol, typed tool schemas and validation. Importing Bridge is not
-required by Core, Identity or ordinary HTTP applications.
+application adapter for authenticated MCP Streamable HTTP and explicit bounded
+JSON HTTP operations. The MCP profile uses the official Go SDK's protocol, typed
+tool schemas and validation. Both profiles reuse verified caller/admission,
+protected diagnostics and truthful outcomes. Importing Bridge is not required
+by Core or direct application-service consumers.
 
-This first profile implements a **resource server integration boundary**, not a
+These profiles implement a **resource server integration boundary**, not a
 production OAuth authorization server. Products supply real credential
 verification, user/client binding, current admission and their ordinary typed
 application services. It does not implement login, consent, refresh, grant
@@ -14,7 +16,7 @@ proves the integration with fixture credentials; it is not a production issuer.
 
 ## Composition and authority
 
-Construct one `Endpoint` with `New(config, register)`. Inside the registration
+For MCP, construct one `Endpoint` with `New(config, register)`. Inside the registration
 callback, use `AddTool[Input, Output](registrar, tool, handler)` to bind deliberate
 typed operations. Registration closes when the constructor returns. The SDK
 infers schemas when no explicit schema is provided; explicit SDK schemas and
@@ -34,7 +36,7 @@ invent a verifier or freeze business rights in scopes.
 `Config.Admit` is required and runs on every authenticated request. The product
 checks its current administrator enablement and user/client connection status.
 `achrix.ErrDenied` is an explicit denial; an evaluation error is unavailable.
-An optional `Gate(ctx, caller, registeredName)` may further restrict the MCP
+An optional `Gate(ctx, caller, registeredName)` may further restrict the selected
 channel before invoking the service. Every service must still run its normal
 application authorization using the current product policy. UI, HTTP and MCP
 reuse that same service; there is no parallel AI role database. Revocation and
@@ -47,7 +49,7 @@ for the correct user. Its own login token or a matching email is not that proof.
 
 Configure `ResourceURL` and `AuthorizationServers` explicitly. HTTPS is required
 except for loopback development. Mount the endpoint at the configured resource
-path and `MetadataHandler()` at its RFC 9728 path, for example:
+path (or the JSON HTTP prefix below) and `MetadataHandler()` at its RFC 9728 path, for example:
 
 ```go
 mux.Handle("/mcp", endpoint)
@@ -62,11 +64,52 @@ the SDK's discovery CORS behavior. Credential challenges refer to configured
 metadata, not caller-controlled hosts.
 
 `AllowedOrigins` admits an Origin; it does not implement browser CORS preflight.
-The endpoint rejects OPTIONS. A real cross-origin browser product must compose
+The MCP endpoint rejects OPTIONS; JSON HTTP supports only its explicitly bound routes/methods. A real cross-origin browser product must compose
 its required CORS route deliberately; that onboarding profile is not proved by
 the server-side SDK or same-origin tests.
 
-## Request-only profile and limits
+## Explicit JSON HTTP operations
+
+`NewJSONHTTP(config, handler)` composes an explicitly routed HTTP handler using
+`JSONHandler[Input, Output](operation, decode, invoke)`. There is no operation
+registry, service discovery or method export. The decoder validates the route's
+method, parameters, content type and bounded body without effects or sensitive
+lookups. The typed invocation calls the ordinary owning Service. A handler used
+outside the verified JSON endpoint fails closed before either callback.
+
+The endpoint admits only canonical paths equal to or below `ResourceURL`'s
+prefix, rejects encoded/noncanonical paths, and bounds the raw query at 4096
+bytes. Individual bindings may impose smaller limits. It validates the same
+Host/origin/credential/current-admission boundary as MCP, then checks the fixed
+operation's current `Gate` before invocation. Route and method errors remain
+useful RFC 9457 responses; `Allow` comes from the explicit route. The binding owns
+query/body decoding, including rejecting unknown or duplicate fields rather than
+interpreting client actor/site claims as authority.
+
+Use separate canonical HTTP and MCP resource configurations. Each product
+verifier must authenticate its intended audience; different URL strings alone
+are not audience verification. `Request.Channel` is generated as `http` or `mcp`,
+and request/user/client/connection/operation context comes from that trusted
+boundary. Share product policy while allowing a grant/channel to narrow access.
+
+A decoder error is pre-dispatch. Invocation errors preserve the owning outcome;
+a successful typed result records `succeeded` before JSON serialization or
+bounded delivery. `Confirm` retains an authorized reference. `Fault.HTTPStatus`
+optionally selects a 400..599 HTTP status and is never serialized; MCP ignores
+it. Invalid statuses do not turn an error into a success. Without an explicit
+status, invocation denial is 403 and other failures are 503. Approved input
+faults default to 400. Decoder I/O limit, incomplete-body deadline and protected
+original errors remain distinguishable. Neither channel automatically replays.
+
+This profile buffers bounded JSON output; it does not claim efficient binary
+upload/download or streaming. It constructs no MCP server/session and performs
+no verification, polling or external request while idle. Bridge's module graph
+still includes its SDK requirements. The [Multi-Site bindings](../multisite/remote/README.md)
+show a real optional component package with HTTP/MCP schemas and a normally
+pinned consumer; direct `multisite` imports do not compile the remote package or
+SDK, although the module manifest includes optional presentation dependencies.
+
+## MCP request-only profile and shared limits
 
 The supported, tested protocol profiles are `2026-07-28` and `2025-11-25`.
 Transport responses use JSON. POST requests must still advertise both JSON and
@@ -82,8 +125,8 @@ so a request's outcome, reference and diagnostics belong to one invocation.
 No retained session, subscription/listen, resource subscription, keepalive,
 event store, sampling, roots, background task or automatic replay is enabled.
 GET and session identifiers are rejected. The SDK compatibility switch
-`MCPGODEBUG=allowsessionsinstateless=1` is incompatible and makes construction
-fail. Creating an endpoint or registering tools creates no dedicated idle
+`MCPGODEBUG=allowsessionsinstateless=1` is incompatible and makes MCP construction
+fail. It does not affect the JSON HTTP constructor. Creating an endpoint or registering tools creates no dedicated idle
 connection worker, timer, poller, socket or external request. Active requests
 use temporary SDK sessions that are closed when the HTTP request finishes.
 
@@ -187,7 +230,8 @@ recovery, and a later not-found read does not by itself prove a write never ran.
 
 From this module directory, run `go test ./...`, `go test -race ./...` and
 `go vet ./...`. Repository-root tests do not test nested modules. The external
-contract suite uses real HTTP plus the official SDK client for both profiles;
+contract suite uses real HTTP for both transports and the official SDK client
+for both supported MCP protocol versions;
 Notes owns the PostgreSQL-backed shared-policy and acknowledgement-loss proof.
 These tests are not a claim of production OAuth or live ChatGPT/Claude support.
 

@@ -34,6 +34,9 @@ type Fault struct {
 	Outcome   Outcome           `json:"outcome"`
 	Reference string            `json:"reference,omitempty"`
 	Cause     error             `json:"-"`
+	// HTTPStatus optionally selects a safe 400..599 JSON HTTP status. MCP tool
+	// failures ignore it and retain their ordinary isError representation.
+	HTTPStatus int `json:"-"`
 }
 
 func (f *Fault) Error() string {
@@ -44,7 +47,8 @@ func (f *Fault) Error() string {
 }
 
 // Request contains only Bridge-generated or verifier-bound attribution.
-// Operation is a registered tool name while its handler runs. Channel is "mcp".
+// Operation is a fixed binding name while its handler runs. Channel is "mcp"
+// or "http", selected by the endpoint rather than any client claim.
 type Request struct {
 	ID        string
 	Caller    Caller
@@ -69,6 +73,7 @@ type Diagnostic struct {
 type requestKey struct{}
 
 type requestState struct {
+	endpoint   *Endpoint
 	mu         sync.Mutex
 	ctx        context.Context
 	request    Request
@@ -171,6 +176,9 @@ func copyFields(fields map[string]string) map[string]string {
 }
 
 func validFault(f *Fault) bool {
+	if f != nil && f.HTTPStatus != 0 && (f.HTTPStatus < 400 || f.HTTPStatus > 599) {
+		return false
+	}
 	if f == nil || !safeCode(f.Code) || f.Message == "" || f.Action == "" || !boundedText(f.Message, 512) || !boundedText(f.Action, 512) || !boundedText(f.Reference, 256) || len(f.Fields) > 16 {
 		return false
 	}
@@ -233,6 +241,9 @@ func timeoutFault(outcome Outcome) *Fault {
 }
 
 func httpStatus(f *Fault) int {
+	if f.HTTPStatus >= 400 && f.HTTPStatus <= 599 {
+		return f.HTTPStatus
+	}
 	if f.Code == "denied" {
 		return 403
 	}

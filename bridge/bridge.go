@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // Package bridge adapts deliberately registered typed application operations to
-// bounded, authenticated, stateless MCP HTTP. Products supply credential
+// bounded, authenticated MCP and JSON HTTP. Products supply credential
 // verification and current admission; their application services still own
 // domain authorization. Bridge does not issue credentials or implement OAuth
 // login, consent, refresh, revocation storage, or account linking.
@@ -103,7 +103,7 @@ type Config struct {
 	Limits     Limits
 }
 
-// Endpoint is an immutable catalog and an HTTP handler. Construction and idle
+// Endpoint is an immutable resource-server HTTP handler. Construction and idle
 // registration start no background work. Mount MetadataHandler at the RFC 9728
 // well-known path derived from ResourceURL, for example
 // /.well-known/oauth-protected-resource/mcp for https://example.com/mcp.
@@ -116,6 +116,7 @@ type Endpoint struct {
 	handler     http.Handler
 	metadata    http.Handler
 	inputs      map[string]*inputDiagnostic
+	jsonHTTP    bool
 }
 
 // New validates configuration and completes fixed tool registration before
@@ -124,8 +125,39 @@ func New(config Config, register func(*Registrar) error) (*Endpoint, error) {
 	if sessionCompatibility {
 		return nil, errors.New("bridge: MCPGODEBUG allowsessionsinstateless=1 is incompatible with the request-only profile")
 	}
-	if config.Verify == nil || config.Admit == nil || config.Diagnostic == nil || register == nil {
-		return nil, errors.New("bridge: Verify, Admit, Diagnostic and registration are required")
+	if register == nil {
+		return nil, errors.New("bridge: tool registration is required")
+	}
+	e, err := newEndpoint(config)
+	if err != nil {
+		return nil, err
+	}
+	server := mcp.NewServer(&mcp.Implementation{Name: "achrix-bridge", Version: Version()}, &mcp.ServerOptions{
+		Capabilities:              &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{ListChanged: false}},
+		SupportedProtocolVersions: []string{"2026-07-28", "2025-11-25"},
+		SetCacheable:              func(_ context.Context, _ mcp.Request, c *mcp.Cacheable) { c.CacheScope = "private"; c.TTLMs = 0 },
+	})
+	registrar := &Registrar{server: server, endpoint: e, names: e.inputs, open: true}
+	err = register(registrar)
+	registrar.mu.Lock()
+	registrar.open = false
+	registrar.mu.Unlock()
+	if err != nil {
+		return nil, fmt.Errorf("bridge: register tools: %w", err)
+	}
+	server.AddReceivingMiddleware(e.receive)
+	transport := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{
+		Stateless: true, JSONResponse: true, MaxRequestBodyBytes: e.config.Limits.RequestBytes, PropagateRequestCancellation: true,
+	})
+	e.handler = e.protect(transport)
+	return e, nil
+}
+
+// newEndpoint owns transport-independent configuration and immutable metadata.
+// Protocol constructors select only their routing and invocation profile.
+func newEndpoint(config Config) (*Endpoint, error) {
+	if config.Verify == nil || config.Admit == nil || config.Diagnostic == nil {
+		return nil, errors.New("bridge: Verify, Admit and Diagnostic are required")
 	}
 	resource, err := canonicalURL(config.ResourceURL)
 	if err != nil {
@@ -166,32 +198,23 @@ func New(config Config, register func(*Registrar) error) (*Endpoint, error) {
 	}
 	meta.RawPath = ""
 	e := &Endpoint{config: config, resource: resource, metadataURL: meta.String(), origins: origins, active: make(chan struct{}, config.Limits.Concurrent), inputs: make(map[string]*inputDiagnostic)}
-	server := mcp.NewServer(&mcp.Implementation{Name: "achrix-bridge", Version: Version()}, &mcp.ServerOptions{
-		Capabilities:              &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{ListChanged: false}},
-		SupportedProtocolVersions: []string{"2026-07-28", "2025-11-25"},
-		SetCacheable:              func(_ context.Context, _ mcp.Request, c *mcp.Cacheable) { c.CacheScope = "private"; c.TTLMs = 0 },
+	e.metadata = auth.ProtectedResourceMetadataHandler(&oauthex.ProtectedResourceMetadata{
+		Resource: config.ResourceURL, AuthorizationServers: config.AuthorizationServers,
+		ScopesSupported: config.Scopes, BearerMethodsSupported: []string{"header"},
 	})
-	registrar := &Registrar{server: server, endpoint: e, names: e.inputs, open: true}
-	err = register(registrar)
-	registrar.mu.Lock()
-	registrar.open = false
-	registrar.mu.Unlock()
-	if err != nil {
-		return nil, fmt.Errorf("bridge: register tools: %w", err)
-	}
-	server.AddReceivingMiddleware(e.receive)
-	transport := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{
-		Stateless: true, JSONResponse: true, MaxRequestBodyBytes: config.Limits.RequestBytes, PropagateRequestCancellation: true,
-	})
-	e.handler = auth.RequireBearerToken(e.verify, &auth.RequireBearerTokenOptions{
-		ResourceMetadataURL: e.metadataURL, Scopes: config.Scopes,
+	return e, nil
+}
+
+func (e *Endpoint) protect(next http.Handler) http.Handler {
+	return auth.RequireBearerToken(e.verify, &auth.RequireBearerTokenOptions{
+		ResourceMetadataURL: e.metadataURL, Scopes: e.config.Scopes,
 	})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		state := stateFromContext(r.Context())
 		if err := r.Context().Err(); err != nil {
 			e.failHTTP(w, r, state, http.StatusServiceUnavailable, "admission", timeoutFault(NotExecuted), err)
 			return
 		}
-		if err := config.Admit(r.Context(), state.request.Caller); err != nil {
+		if err := e.config.Admit(r.Context(), state.request.Caller); err != nil {
 			fault := admissionFault(err)
 			e.failHTTP(w, r, state, httpStatus(fault), "admission", fault, err)
 			return
@@ -200,13 +223,8 @@ func New(config Config, register func(*Registrar) error) (*Endpoint, error) {
 			e.failHTTP(w, r, state, http.StatusServiceUnavailable, "admission", timeoutFault(NotExecuted), err)
 			return
 		}
-		transport.ServeHTTP(w, r)
+		next.ServeHTTP(w, r)
 	}))
-	e.metadata = auth.ProtectedResourceMetadataHandler(&oauthex.ProtectedResourceMetadata{
-		Resource: config.ResourceURL, AuthorizationServers: config.AuthorizationServers,
-		ScopesSupported: config.Scopes, BearerMethodsSupported: []string{"header"},
-	})
-	return e, nil
 }
 
 // MetadataHandler serves public, configured resource metadata. It performs no

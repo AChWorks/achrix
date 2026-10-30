@@ -11,10 +11,10 @@ Use AChrix when you want shared application capabilities that you can consume an
 | Core | Application composition, authorization and startup/shutdown lifecycle |
 | [Identity](identity/README.md) and [Audit](audit/README.md) | Accounts, passwords, sessions and accountable operations |
 | [Media](media/README.md) | Private attachments and clean PNG/JPEG preparation |
-| [Multi-Site](multisite/README.md) | Site resolution, authorized inventory and per-site Module selection planning |
+| [Multi-Site](multisite/README.md) | Site resolution, authorized inventory with optional HTTP/MCP reads, and per-site Module selection planning |
 | [Admin](admin/README.md) | A composable administration shell with Identity and Media screens, including file-based English/Persian localization and RTL/LTR presentation |
 | [Installation](installation/README.md) | Installation requirement assessment and safe re-entry planning |
-| [Bridge](bridge/README.md) | Optional MCP resource-server adapter for existing application operations and user permissions; products supply credential verification and connection admission |
+| [Bridge](bridge/README.md) | Optional MCP and JSON HTTP resource-server adapters for existing application operations and user permissions; products supply credential verification and connection admission |
 
 Components expose deliberate Go contracts and selected web/MCP adapters. HTTP API and MCP coverage for relevant internal and external consumers is part of [capability development](docs/architecture/contracts-and-interfaces.md#internal-and-external-programmatic-coverage); current coverage is documented by each component and its examples. This does not yet mean every component operation has a network endpoint or MCP binding.
 
