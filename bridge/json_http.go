@@ -70,7 +70,7 @@ func JSONHandler[In, Out any](operation string, decode func(*http.Request) (In, 
 		}
 		input, err := decode(r)
 		if err != nil {
-			f, cause, phase := jsonInputFault(err, s)
+			f, phase, cause := jsonInputFault(err, s)
 			setInvocationFault(s, f, cause, phase)
 			e.failHTTP(w, r, s, httpStatus(f), phase, f, cause)
 			return
@@ -117,7 +117,7 @@ func JSONHandler[In, Out any](operation string, decode func(*http.Request) (In, 
 	}), nil
 }
 
-func jsonInputFault(err error, s *requestState) (*Fault, error, string) {
+func jsonInputFault(err error, s *requestState) (*Fault, string, error) {
 	s.mu.Lock()
 	bodyCause := s.bodyCause
 	s.mu.Unlock()
@@ -127,17 +127,17 @@ func jsonInputFault(err error, s *requestState) (*Fault, error, string) {
 	}
 	var tooLarge *http.MaxBytesError
 	if errors.As(cause, &tooLarge) {
-		return &Fault{Code: "request_too_large", Message: "The request exceeds the endpoint's input limit.", Action: "Reduce the complete request body to the operation's published limit.", Outcome: NotExecuted, HTTPStatus: http.StatusRequestEntityTooLarge}, cause, "body_read"
+		return &Fault{Code: "request_too_large", Message: "The request exceeds the endpoint's input limit.", Action: "Reduce the complete request body to the operation's published limit.", Outcome: NotExecuted, HTTPStatus: http.StatusRequestEntityTooLarge}, "body_read", cause
 	}
 	if errors.Is(cause, context.Canceled) {
-		return &Fault{Code: "request_canceled", Message: "The request was canceled before its input could be accepted.", Action: "Start a new complete request when the caller is ready. No operation was invoked.", Outcome: NotExecuted, HTTPStatus: http.StatusServiceUnavailable}, cause, "input"
+		return &Fault{Code: "request_canceled", Message: "The request was canceled before its input could be accepted.", Action: "Start a new complete request when the caller is ready. No operation was invoked.", Outcome: NotExecuted, HTTPStatus: http.StatusServiceUnavailable}, "input", cause
 	}
 	var timeout net.Error
 	if errors.Is(cause, context.DeadlineExceeded) || errors.As(cause, &timeout) && timeout.Timeout() {
-		return &Fault{Code: "body_timeout", Message: "The request input did not arrive within its deadline.", Action: "Send the complete bounded request within the deadline. No operation was invoked.", Outcome: NotExecuted, HTTPStatus: http.StatusRequestTimeout}, cause, "body_read"
+		return &Fault{Code: "body_timeout", Message: "The request input did not arrive within its deadline.", Action: "Send the complete bounded request within the deadline. No operation was invoked.", Outcome: NotExecuted, HTTPStatus: http.StatusRequestTimeout}, "body_read", cause
 	}
 	if bodyCause != nil && !errors.Is(bodyCause, io.EOF) {
-		return &Fault{Code: "body_unavailable", Message: "The request body could not be read completely.", Action: "Check the connection and send the complete bounded request. No operation was invoked.", Outcome: NotExecuted, HTTPStatus: http.StatusBadRequest}, cause, "body_read"
+		return &Fault{Code: "body_unavailable", Message: "The request body could not be read completely.", Action: "Check the connection and send the complete bounded request. No operation was invoked.", Outcome: NotExecuted, HTTPStatus: http.StatusBadRequest}, "body_read", cause
 	}
 	var supplied *Fault
 	if errors.As(err, &supplied) && validFault(supplied) {
@@ -146,9 +146,9 @@ func jsonInputFault(err error, s *requestState) (*Fault, error, string) {
 		if f.HTTPStatus == 0 {
 			f.HTTPStatus = http.StatusBadRequest
 		}
-		return f, cause, "input"
+		return f, "input", cause
 	}
-	return &Fault{Code: "invalid_input", Message: "The request does not satisfy this operation's input contract.", Action: "Check the published path, parameters, body type and field constraints.", Outcome: NotExecuted, HTTPStatus: http.StatusBadRequest}, cause, "input"
+	return &Fault{Code: "invalid_input", Message: "The request does not satisfy this operation's input contract.", Action: "Check the published path, parameters, body type and field constraints.", Outcome: NotExecuted, HTTPStatus: http.StatusBadRequest}, "input", cause
 }
 
 func (e *Endpoint) validateJSONHTTP(r *http.Request) (int, *Fault) {
