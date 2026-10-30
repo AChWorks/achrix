@@ -2,7 +2,6 @@
 package audit
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -148,11 +147,12 @@ func TestDenialAndInvalidInputDoNotReachStorage(t *testing.T) {
 }
 
 func TestDiagnosticsAreBoundedAndSecretFree(t *testing.T) {
-	var log bytes.Buffer
+	var log diagnosticLog
 	m, err := NewPostgres("host=127.0.0.1 user=fixture dbname=fixture sslmode=disable", Config{}, slog.New(slog.NewJSONHandler(&log, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(m.flushDiagnostics)
 	for i := 0; i < 10000; i++ {
 		if err = m.failure(context.Background(), "query", errors.New("password=secret request payload")); !errors.Is(err, ErrUnavailable) {
 			t.Fatal(err)
@@ -165,7 +165,7 @@ func TestDiagnosticsAreBoundedAndSecretFree(t *testing.T) {
 		t.Fatal("unbounded/sensitive diagnostics")
 	}
 	before := m.FailureCount()
-	for _, err := range []error{context.Canceled, context.DeadlineExceeded, ErrLimited, ErrConflict, ErrInput} {
+	for _, err := range []error{ErrLimited, ErrConflict, ErrInput} {
 		_ = m.failure(context.Background(), "query", err)
 	}
 	if before != m.FailureCount() {

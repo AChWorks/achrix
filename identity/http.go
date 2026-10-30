@@ -140,9 +140,11 @@ func (w *Web) serve(writer http.ResponseWriter, r *http.Request) {
 			webError(writer, err)
 			return
 		}
-		_ = json.NewEncoder(writer).Encode(struct {
+		if err := json.NewEncoder(writer).Encode(struct {
 			CSRF string `json:"csrf"`
-		}{csrf})
+		}{csrf}); err != nil {
+			w.service.module.report(ctx, "csrf_response", "write_response", "committed", err)
+		}
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -162,7 +164,7 @@ func (w *Web) serve(writer http.ResponseWriter, r *http.Request) {
 			Login    string `json:"login"`
 			Password string `json:"password"`
 		}
-		if err := decodeWeb(writer, r, &body); err != nil {
+		if err := w.decodeWeb(writer, r, &body); err != nil {
 			webError(writer, err)
 			return
 		}
@@ -173,7 +175,9 @@ func (w *Web) serve(writer http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.setCookie(writer, session)
-		webSession(writer, session)
+		if err := webSession(writer, session); err != nil {
+			w.service.module.report(ctx, "session_response", "write_response", "committed", err)
+		}
 	case "/rotate", "/logout", "/password":
 		_, err := w.AuthenticateRequest(r, true)
 		if err != nil {
@@ -189,7 +193,9 @@ func (w *Web) serve(writer http.ResponseWriter, r *http.Request) {
 				return
 			}
 			w.setCookie(writer, session)
-			webSession(writer, session)
+			if err := webSession(writer, session); err != nil {
+				w.service.module.report(ctx, "session_response", "write_response", "committed", err)
+			}
 		case "/logout":
 			if err = w.service.Logout(ctx, value); err != nil {
 				webError(writer, err)
@@ -202,7 +208,7 @@ func (w *Web) serve(writer http.ResponseWriter, r *http.Request) {
 				Current string `json:"current"`
 				Next    string `json:"next"`
 			}
-			if err = decodeWeb(writer, r, &body); err != nil {
+			if err = w.decodeWeb(writer, r, &body); err != nil {
 				webError(writer, err)
 				return
 			}
@@ -217,7 +223,19 @@ func (w *Web) serve(writer http.ResponseWriter, r *http.Request) {
 		writer.WriteHeader(http.StatusNotFound)
 	}
 }
+
+// ErrBodyTimeout means body admission timed out before any Service mutation.
+var ErrBodyTimeout = errors.New("identity request body timeout")
+
+func (w *Web) decodeWeb(writer http.ResponseWriter, r *http.Request, target any) error {
+	return decodeWebDiagnostic(writer, r, target, func(phase string, cause error) {
+		w.service.module.report(r.Context(), "http_body", phase, "not_executed", cause)
+	})
+}
 func decodeWeb(writer http.ResponseWriter, r *http.Request, target any) error {
+	return decodeWebDiagnostic(writer, r, target, nil)
+}
+func decodeWebDiagnostic(writer http.ResponseWriter, r *http.Request, target any, report func(string, error)) error {
 	if len(r.Header.Values("Content-Type")) != 1 || r.Header.Get("Content-Type") != "application/json" {
 		return ErrInvalid
 	}
@@ -230,6 +248,9 @@ func decodeWeb(writer http.ResponseWriter, r *http.Request, target any) error {
 		readDeadline = deadline
 	}
 	if err := http.NewResponseController(writer).SetReadDeadline(readDeadline); err != nil {
+		if report != nil {
+			report("set_read_deadline", err)
+		}
 		return ErrUnavailable
 	}
 	r.Body = http.MaxBytesReader(writer, r.Body, 2048)
@@ -237,24 +258,32 @@ func decodeWeb(writer http.ResponseWriter, r *http.Request, target any) error {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
-		return decodeError(err)
+		result := decodeError(err)
+		if report != nil && errors.Is(result, ErrBodyTimeout) {
+			report("read", err)
+		}
+		return result
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
-		return decodeError(err)
+		result := decodeError(err)
+		if report != nil && errors.Is(result, ErrBodyTimeout) {
+			report("read", err)
+		}
+		return result
 	}
 	return nil
 }
 
 func decodeError(err error) error {
 	var network net.Error
-	if errors.As(err, &network) && network.Timeout() {
-		return ErrUnavailable
+	if errors.Is(err, context.DeadlineExceeded) || errors.As(err, &network) && network.Timeout() {
+		return errors.Join(ErrBodyTimeout, ErrUnavailable)
 	}
 	return ErrInvalid
 }
-func webSession(writer http.ResponseWriter, s Session) {
-	_ = json.NewEncoder(writer).Encode(struct {
+func webSession(writer http.ResponseWriter, s Session) error {
+	return json.NewEncoder(writer).Encode(struct {
 		Principal achrix.Principal `json:"principal"`
 		CSRF      string           `json:"csrf"`
 		ExpiresAt time.Time        `json:"expires_at"`
@@ -263,6 +292,8 @@ func webSession(writer http.ResponseWriter, s Session) {
 func webError(writer http.ResponseWriter, err error) {
 	code, status := "authentication_failed", http.StatusUnauthorized
 	switch {
+	case errors.Is(err, ErrBodyTimeout):
+		code, status = "body_timeout", http.StatusRequestTimeout
 	case errors.Is(err, achrix.ErrDenied):
 		code, status = "permission_denied", http.StatusForbidden
 	case errors.Is(err, ErrLimited):
@@ -275,9 +306,21 @@ func webError(writer http.ResponseWriter, err error) {
 		code, status = "authentication_conflict", http.StatusConflict
 	}
 	writer.WriteHeader(status)
+	outcome := ""
+	if errors.Is(err, ErrBodyTimeout) {
+		outcome = "not_executed"
+	}
+	field, reason := "", ""
+	var input *InputError
+	if errors.As(err, &input) {
+		field, reason = input.Field, input.Reason
+	}
 	_ = json.NewEncoder(writer).Encode(struct {
-		Code string `json:"code"`
-	}{code})
+		Code    string `json:"code"`
+		Outcome string `json:"outcome,omitempty"`
+		Field   string `json:"field,omitempty"`
+		Reason  string `json:"reason,omitempty"`
+	}{code, outcome, field, reason})
 }
 
 // Fixed-cardinality, no-queue public login budget: 60 total/minute and 10 per

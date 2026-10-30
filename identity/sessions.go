@@ -130,7 +130,7 @@ func (m *Module) revoke(parent context.Context, hash []byte) error {
 	defer finish()
 	_, err = p.Exec(ctx, "DELETE FROM identity.sessions WHERE token_hash=$1", hash)
 	if err != nil {
-		return m.failure(ctx, "session_revoke", err)
+		return m.failureAt(ctx, "session_revoke", "execute", "unknown", err)
 	}
 	return nil
 }

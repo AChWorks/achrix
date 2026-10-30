@@ -3,6 +3,7 @@ package identity
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"unicode/utf8"
 
@@ -32,13 +33,13 @@ type passwords struct {
 
 func newPasswords(p PasswordPolicy, concurrency int) (*passwords, error) {
 	if !p.valid() || concurrency < 1 || concurrency > 2 {
-		return nil, ErrConfiguration
+		return nil, configuration("password policy/hash concurrency", "must satisfy the documented bounded Argon2id profile")
 	}
 	h := &passwords{policy: p, slots: make(chan struct{}, concurrency)}
 	var err error
 	h.dummy, err = argon2id.CreateHash("unused-dummy-credential", p.params())
 	if err != nil {
-		return nil, ErrUnavailable
+		return nil, diagnosticFault("credential_hash_failed", "cannot initialize the bounded password verifier", errors.Join(ErrUnavailable, err))
 	}
 	return h, nil
 }
@@ -65,8 +66,11 @@ func validPassword(password string, setting bool) bool {
 	return n <= 256 && ((!setting && n > 0) || (setting && n >= 15))
 }
 func (h *passwords) hash(ctx context.Context, password string) (string, error) {
+	if !utf8.ValidString(password) {
+		return "", &InputError{"password", "invalid_utf8"}
+	}
 	if !validPassword(password, true) {
-		return "", ErrInvalid
+		return "", &InputError{"password", "outside_length_bounds"}
 	}
 	release, err := h.admit(ctx)
 	if err != nil {
@@ -75,7 +79,7 @@ func (h *passwords) hash(ctx context.Context, password string) (string, error) {
 	defer release()
 	encoded, err := argon2id.CreateHash(password, h.policy.params())
 	if err != nil {
-		return "", ErrUnavailable
+		return "", diagnosticFault("credential_hash_failed", "password hash generation failed", errors.Join(ErrUnavailable, err))
 	}
 	if err = ctx.Err(); err != nil {
 		return "", err
@@ -87,21 +91,27 @@ func (h *passwords) hash(ctx context.Context, password string) (string, error) {
 // version, cost, salt and key before allowing the library to allocate/hash.
 func decodePassword(encoded string) (*argon2id.Params, error) {
 	if len(encoded) > 256 {
-		return nil, ErrUnavailable
+		return nil, diagnosticFault("credential_record_oversized", "stored credential exceeds the 256-byte PHC limit", ErrUnavailable)
 	}
 	p, _, _, err := argon2id.DecodeHash(encoded)
-	if err != nil || p == nil {
-		return nil, ErrUnavailable
+	if err != nil {
+		// Preserve the actual library identity/offset at the private boundary.
+		// Its text may quote malformed credential data, so only the protected
+		// product sink may inspect it and must redact before retaining/exporting.
+		return nil, diagnosticFault("credential_record_malformed", "stored credential is not a supported Argon2id PHC record", errors.Join(ErrUnavailable, err))
+	}
+	if p == nil {
+		return nil, diagnosticFault("credential_record_malformed", "credential decoder returned no parameters", ErrUnavailable)
 	}
 	policy := PasswordPolicy{p.Memory, p.Iterations, p.Parallelism}
 	if !policy.valid() || p.SaltLength != 16 || p.KeyLength != 32 {
-		return nil, ErrUnavailable
+		return nil, diagnosticFault("credential_parameters_unsupported", "stored credential cost or salt/key lengths are outside the supported bounds", ErrUnavailable)
 	}
 	// Enforce one canonical encoding; the library decoder accepts numeric suffixes.
 	// Salt/hash are decoded by the library, while the metadata prefix is exact.
 	prefix := fmt.Sprintf("$argon2id$v=19$m=%d,t=%d,p=%d$", p.Memory, p.Iterations, p.Parallelism)
 	if len(encoded) < len(prefix) || encoded[:len(prefix)] != prefix {
-		return nil, ErrUnavailable
+		return nil, diagnosticFault("credential_record_noncanonical", "stored credential algorithm/version/cost metadata is not canonical", ErrUnavailable)
 	}
 	return p, nil
 }
@@ -120,7 +130,7 @@ func (h *passwords) verify(ctx context.Context, password, encoded string) (bool,
 	defer release()
 	ok, err := argon2id.ComparePasswordAndHash(password, encoded)
 	if err != nil {
-		return false, false, ErrUnavailable
+		return false, false, diagnosticFault("credential_verification_failed", "validated credential could not be verified", errors.Join(ErrUnavailable, err))
 	}
 	if err = ctx.Err(); err != nil {
 		return false, false, err

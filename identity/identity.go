@@ -28,6 +28,15 @@ var (
 	ErrConfiguration  = errors.New("invalid identity configuration")
 )
 
+// InputError identifies a safe malformed field without echoing its value.
+// Authentication attempts deliberately retain generic ErrAuthentication.
+type InputError struct{ Field, Reason string }
+
+func (e *InputError) Error() string {
+	return ErrInvalid.Error() + ": " + e.Field + " (" + e.Reason + ")"
+}
+func (e *InputError) Unwrap() error { return ErrInvalid }
+
 const (
 	AccountCreate     = "achrix.identity.account.create"
 	AccountRead       = "achrix.identity.account.read"
@@ -52,6 +61,13 @@ const ModuleVersion = "0.2.0-development"
 // Now controls security time decisions and must be trusted, monotonic in use and
 // concurrency-safe. Zero fields use explicit bounded defaults.
 type Config struct {
+	// Diagnostic receives the original cause only at this component's protected
+	// owner boundary. The product must redact provider secrets before retention
+	// or export, keep access restricted, and return promptly. It must not log
+	// the raw error to ordinary output. The original request context is retained.
+	// It sees every operational cause before ordinary-log suppression; the
+	// product owns its diagnostic sink's volume policy.
+	Diagnostic func(context.Context, string, string, error)
 	// MaxConns bounds this instance's pool. Zero uses four; negatives are invalid.
 	MaxConns int32
 	// MaxOperations bounds active owned leases, including nested database work.
@@ -64,8 +80,11 @@ type Config struct {
 }
 
 func (c Config) defaults() (Config, error) {
-	if c.MaxConns < 0 || c.MaxOperations < 0 || c.MaxOperations == 1 {
-		return c, ErrConfiguration
+	if c.MaxConns < 0 {
+		return c, configuration("MaxConns", "must be zero/default or positive")
+	}
+	if c.MaxOperations < 0 || c.MaxOperations == 1 {
+		return c, configuration("MaxOperations", "must be zero/default or at least two")
 	}
 	if c.MaxConns == 0 {
 		c.MaxConns = 4
@@ -85,8 +104,14 @@ func (c Config) defaults() (Config, error) {
 	if c.Now == nil {
 		c.Now = time.Now
 	}
-	if !c.Password.valid() || c.HashConcurrency < 1 || c.HashConcurrency > 2 || c.SessionLifetime < time.Minute || c.SessionLifetime > 24*time.Hour {
-		return c, ErrConfiguration
+	if !c.Password.valid() {
+		return c, configuration("Password", "must satisfy the documented bounded Argon2id profile")
+	}
+	if c.HashConcurrency < 1 || c.HashConcurrency > 2 {
+		return c, configuration("HashConcurrency", "must be one or two")
+	}
+	if c.SessionLifetime < time.Minute || c.SessionLifetime > 24*time.Hour {
+		return c, configuration("SessionLifetime", "must be between one minute and 24 hours")
 	}
 	return c, nil
 }
@@ -166,16 +191,16 @@ type Service struct {
 
 func NewService(app *achrix.Application, module *Module, accountability *audit.Service) (*Service, error) {
 	if app == nil || module == nil || accountability == nil {
-		return nil, ErrConfiguration
+		return nil, configuration("service", "requires Application, Identity Module and Audit Service")
 	}
 	if err := accountability.CheckDatabase(module.dbConfig.ConnConfig.ConnString()); err != nil {
-		return nil, ErrConfiguration
+		return nil, configuration("audit database", "must match the Identity database and connection security profile")
 	}
 	return &Service{app: app, module: module, audit: accountability}, nil
 }
 func (s *Service) authorize(ctx context.Context, p achrix.Principal, capability, id string) error {
 	if id != "" && !validID(id) {
-		return ErrInvalid
+		return &InputError{"id", "invalid_format"}
 	}
 	return s.app.Authorize(ctx, p, capability, id)
 }
@@ -192,7 +217,7 @@ func (s *Service) Account(parent context.Context, actor achrix.Principal, id str
 	ctx, cancel := context.WithTimeout(parent, time.Second)
 	defer cancel()
 	if !validID(id) {
-		return Account{}, ErrInvalid
+		return Account{}, &InputError{"id", "invalid_format"}
 	}
 	if err := s.authorize(ctx, actor, AccountRead, id); err != nil {
 		return Account{}, err
@@ -208,7 +233,7 @@ func (s *Service) LookupAccount(parent context.Context, actor achrix.Principal, 
 	ctx, cancel := context.WithTimeout(parent, time.Second)
 	defer cancel()
 	if !validLogin(login) {
-		return Account{}, ErrInvalid
+		return Account{}, &InputError{"login", "invalid_format"}
 	}
 	if err := s.app.Authorize(ctx, actor, AccountLookup, login); err != nil {
 		return Account{}, err
@@ -220,7 +245,7 @@ func (s *Service) CreateAccount(parent context.Context, actor achrix.Principal, 
 	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
 	if !validLogin(login) {
-		return Account{}, ErrInvalid
+		return Account{}, &InputError{"login", "invalid_format"}
 	}
 	if err := s.authorize(ctx, actor, AccountCreate, ""); err != nil {
 		return Account{}, err
@@ -237,7 +262,7 @@ func (s *Service) CreateAccount(parent context.Context, actor achrix.Principal, 
 	}
 	hash, err := s.module.passwords.hash(ctx, password)
 	if err != nil {
-		return Account{}, err
+		return Account{}, s.module.passwordFailure(ctx, "hash", err)
 	}
 	err = s.module.create(ctx, a, hash, s.module.now(), prepared)
 	if err != nil {
@@ -248,8 +273,11 @@ func (s *Service) CreateAccount(parent context.Context, actor achrix.Principal, 
 func (s *Service) SetPassword(parent context.Context, actor achrix.Principal, id string, expectedRevision int64, password string) error {
 	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
-	if expectedRevision < 1 || !validID(id) {
-		return ErrInvalid
+	if !validID(id) {
+		return &InputError{"id", "invalid_format"}
+	}
+	if expectedRevision < 1 {
+		return &InputError{"expected_revision", "must_be_positive"}
 	}
 	if err := s.authorize(ctx, actor, CredentialSet, id); err != nil {
 		return err
@@ -265,15 +293,18 @@ func (s *Service) SetPassword(parent context.Context, actor achrix.Principal, id
 	}
 	hash, err := s.module.passwords.hash(ctx, password)
 	if err != nil {
-		return err
+		return s.module.passwordFailure(ctx, "hash", err)
 	}
 	return s.module.setPassword(ctx, id, expectedRevision, hash, s.module.now(), prepared)
 }
 func (s *Service) SetEnabled(parent context.Context, actor achrix.Principal, id string, expectedRevision int64, enabled bool) error {
 	ctx, cancel := context.WithTimeout(parent, time.Second)
 	defer cancel()
-	if expectedRevision < 1 || !validID(id) {
-		return ErrInvalid
+	if !validID(id) {
+		return &InputError{"id", "invalid_format"}
+	}
+	if expectedRevision < 1 {
+		return &InputError{"expected_revision", "must_be_positive"}
 	}
 	if err := s.authorize(ctx, actor, AccountSetEnabled, id); err != nil {
 		return err
@@ -288,7 +319,7 @@ func (s *Service) RevokeAll(parent context.Context, actor achrix.Principal, id s
 	ctx, cancel := context.WithTimeout(parent, time.Second)
 	defer cancel()
 	if !validID(id) {
-		return ErrInvalid
+		return &InputError{"id", "invalid_format"}
 	}
 	if err := s.authorize(ctx, actor, SessionRevokeAll, id); err != nil {
 		return err
@@ -327,7 +358,7 @@ func (s *Service) Login(parent context.Context, login, password, previousToken s
 	}
 	ok, rehash, err := s.module.passwords.verify(ctx, password, encoded)
 	if err != nil {
-		return Session{}, err
+		return Session{}, s.module.passwordFailure(ctx, "verify", err)
 	}
 	if !ok || !c.Enabled {
 		return Session{}, ErrAuthentication
@@ -336,7 +367,7 @@ func (s *Service) Login(parent context.Context, login, password, previousToken s
 	if rehash {
 		replacement, err = s.module.passwords.hash(ctx, password)
 		if err != nil {
-			return Session{}, err
+			return Session{}, s.module.passwordFailure(ctx, "rehash", err)
 		}
 	}
 	result, record := newSession(c.ID, c.Revision, s.module.now().Add(s.module.config.SessionLifetime))
@@ -466,14 +497,14 @@ func (s *Service) ChangePassword(parent context.Context, value, current, next st
 	}
 	ok, _, err := s.module.passwords.verify(ctx, current, c.hash)
 	if err != nil {
-		return err
+		return s.module.passwordFailure(ctx, "verify", err)
 	}
 	if !ok {
 		return ErrAuthentication
 	}
 	hash, err := s.module.passwords.hash(ctx, next)
 	if err != nil {
-		return err
+		return s.module.passwordFailure(ctx, "hash", err)
 	}
 	return s.module.changePassword(ctx, value, p, c.Revision, hash, s.module.now(), prepared)
 }

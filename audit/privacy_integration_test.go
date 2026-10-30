@@ -2,7 +2,6 @@
 package audit
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -25,8 +24,8 @@ func TestPostgresAuditDependencyErrorsAreCanonical(t *testing.T) {
 		want       error
 		diagnostic bool
 	}{
-		{"deadline", context.DeadlineExceeded, context.DeadlineExceeded, false},
-		{"canceled", context.Canceled, context.Canceled, false},
+		{"deadline", context.DeadlineExceeded, context.DeadlineExceeded, true},
+		{"canceled", context.Canceled, context.Canceled, true},
 		{"provider", errors.New("provider unavailable"), ErrUnavailable, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -49,7 +48,7 @@ func TestPostgresAuditDependencyErrorsAreCanonical(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			var logs bytes.Buffer
+			var logs diagnosticLog
 			logger := slog.New(slog.NewJSONHandler(&logs, nil))
 			m, err := NewPostgres(dsn, Config{}, logger)
 			if err != nil {
@@ -100,6 +99,13 @@ func TestPostgresAuditDependencyErrorsAreCanonical(t *testing.T) {
 				t.Fatal("driver did not produce the expected private wrapped dependency error")
 			}
 
+			var protected error
+			m.config.Diagnostic = func(_ context.Context, operation, phase string, cause error) {
+				if operation != "query" || phase != "execute" {
+					t.Error("wrong dependency diagnostic owner")
+				}
+				protected = cause
+			}
 			before := m.FailureCount()
 			m.pool.Close()
 			m.mu.Lock()
@@ -110,6 +116,9 @@ func TestPostgresAuditDependencyErrorsAreCanonical(t *testing.T) {
 			var escaped *pgconn.ConnectError
 			if got != tc.want || errors.As(got, &escaped) || strings.Contains(got.Error(), private) || ctx.Err() != nil || len(page.Records) != 0 || page.NextCursor != "" {
 				t.Fatalf("Audit dependency failure was not canonical with a live caller: %v", got)
+			}
+			if protected == nil || !errors.Is(protected, tc.cause) || !errors.As(protected, &wrapped) {
+				t.Fatal("original dependency cause was lost before protected capture")
 			}
 			wantFailures := before
 			if tc.diagnostic {
