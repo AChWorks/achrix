@@ -14,6 +14,32 @@ from validation_diagnostics import LIMIT, capture
 
 
 class FailureEvidenceTests(unittest.TestCase):
+    def test_cli_retains_actionable_summary_without_exporting_private_causes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            source = parent / "source"
+            source.mkdir(mode=0o700)
+            (source / "fixture.log").write_text("fixture assertion failed PRIVATE_INPUT\n")
+            (source / "postgres.log").write_text("ERROR: PRIVATE_SQL permission failure\n")
+            command = Path(__file__).with_name("validation_diagnostics.py")
+            result = subprocess.run([sys.executable, str(command), str(source), "browser_fixture", "7", "103"],
+                                    env=dict(os.environ, TMPDIR=str(parent)), text=True,
+                                    capture_output=True, timeout=5, check=True)
+            self.assertIn("stage=browser_fixture line=103 exit=7", result.stdout)
+            summary = next(line.removeprefix("Support summary: ") for line in result.stdout.splitlines()
+                           if line.startswith("Support summary: "))
+            report = json.loads(summary)
+            self.assertEqual((report["stage"], report["exit_code"], report["line"]), ("browser_fixture", 7, 103))
+            self.assertEqual({log["file"] for log in report["logs"]}, {"fixture.log.private", "postgres.log.private"})
+            self.assertEqual(report["logs"][0]["severity_counts"]["ERROR"], 1)
+            for log in report["logs"]:
+                self.assertGreater(log["bytes_retained"], 0)
+                self.assertRegex(log["sha256"], r"^[0-9a-f]{64}$")
+            self.assertNotIn("PRIVATE_", result.stdout + result.stderr)
+            evidence = next(parent.glob("achrix-validation-evidence-*"))
+            self.assertIn("PRIVATE_INPUT", (evidence / "fixture.log.private").read_text())
+            self.assertIn("permission failure", (evidence / "postgres.log.private").read_text())
+
     def test_private_cause_and_safe_support_summary_survive_cleanup(self):
         with tempfile.TemporaryDirectory() as temporary:
             parent = Path(temporary)

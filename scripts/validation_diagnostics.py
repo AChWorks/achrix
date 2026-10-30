@@ -59,6 +59,9 @@ def main():
         raise SystemExit("usage: validation_diagnostics.py PRIVATE_ROOT STAGE EXIT LINE")
     target, report = capture(Path(sys.argv[1]), *sys.argv[2:])
     print("Validation failed: stage={stage} line={line} exit={exit_code}".format(**report))
+    # Keep useful bounded metadata in CI logs after an ephemeral runner exits.
+    # This report was constructed above; never serialize arbitrary log bodies.
+    print("Support summary: " + json.dumps(report, sort_keys=True))
     print("Bounded private evidence: " + str(target) + " (review/redact private logs before export; remove after diagnosis)")
 
 

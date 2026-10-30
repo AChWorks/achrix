@@ -25,11 +25,16 @@ jobs:
         shell: bash
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           if [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] && ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
             git fetch --no-tags --depth=1 origin "$BASE_SHA" || true
           fi
           python3 scripts/validation_scope.py "$BASE_SHA" | tee -a "$GITHUB_OUTPUT"
+          checkout_sha=$(git rev-parse HEAD)
+          checkout_tree=$(git rev-parse HEAD^{tree})
+          printf 'checkout_sha=%s\ncheckout_tree=%s\n' "$checkout_sha" "$checkout_tree" >> "$GITHUB_OUTPUT"
+          printf 'Validation identity: checkout=%s tree=%s PR/source-head=%s base=%s\n' "$checkout_sha" "$checkout_tree" "$PR_HEAD_SHA" "$BASE_SHA"
       - name: Validate changed routing and shell entry points
         if: steps.scope.outputs.routing_tests == 'true'
         run: |
@@ -68,10 +73,65 @@ jobs:
         if: steps.scope.outputs.scope == 'full' && steps.postgres-tools.outputs.cache-hit != 'true'
         run: scripts/setup-validation-postgres.sh "$RUNNER_TEMP/achrix-postgres"
       - name: Run the selected validation
+        id: backend
         if: steps.scope.outputs.scope != 'docs'
         env:
           ACHRIX_PG_BIN: ${{ runner.temp }}/achrix-postgres/install/bin
         run: scripts/validate.sh "${{ steps.scope.outputs.scope }}"
+      - name: Exact test-only Node
+        if: steps.scope.outputs.browser == 'true'
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        timeout-minutes: 3
+        with:
+          node-version: '24.21.0'
+          package-manager-cache: false
+      - name: Install locked browser tools
+        id: browser-tools
+        if: steps.scope.outputs.browser == 'true'
+        timeout-minutes: 5
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/achrix-browser-tools/browsers
+          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT: '60000'
+        run: |
+          test "$(node --version)" = v24.21.0
+          mkdir "$RUNNER_TEMP/achrix-browser-tools"
+          cp scripts/browser-tools/package.json scripts/browser-tools/package-lock.json "$RUNNER_TEMP/achrix-browser-tools/"
+          npm ci --prefix "$RUNNER_TEMP/achrix-browser-tools" --ignore-scripts --no-audit --no-fund --fetch-retries=2 --fetch-timeout=60000
+          node "$RUNNER_TEMP/achrix-browser-tools/node_modules/playwright/cli.js" install --with-deps chromium
+      - name: Run the existing HTTPS browser proof
+        id: browser
+        if: steps.scope.outputs.browser == 'true'
+        timeout-minutes: 8
+        env:
+          ACHRIX_PG_BIN: ${{ runner.temp }}/achrix-postgres/install/bin
+          ACHRIX_PLAYWRIGHT_MODULE: ${{ runner.temp }}/achrix-browser-tools/node_modules/playwright
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/achrix-browser-tools/browsers
+        run: |
+          browser_started=$SECONDS
+          trap 'result=$?; printf "duration_seconds=%s\n" "$((SECONDS-browser_started))" >> "$GITHUB_OUTPUT"; exit "$result"' EXIT
+          scripts/validate-admin-browser.sh
+      - name: Record selected validation evidence
+        if: always()
+        env:
+          SELECTED_SCOPE: ${{ steps.scope.outputs.scope }}
+          BROWSER_SELECTED: ${{ steps.scope.outputs.browser }}
+          CHECKOUT_SHA: ${{ steps.scope.outputs.checkout_sha }}
+          CHECKOUT_TREE: ${{ steps.scope.outputs.checkout_tree }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BACKEND_RESULT: ${{ steps.backend.outcome }}
+          BROWSER_SETUP_RESULT: ${{ steps.browser-tools.outcome }}
+          BROWSER_RESULT: ${{ steps.browser.outcome }}
+          BROWSER_SECONDS: ${{ steps.browser.outputs.duration_seconds }}
+        run: |
+          {
+            printf '## Validation evidence\n\n'
+            printf '| Fact | Value |\n| --- | --- |\n'
+            printf '| Checked-out commit | `%s` |\n| Checked-out tree | `%s` |\n| PR/source head | `%s` |\n' "$CHECKOUT_SHA" "$CHECKOUT_TREE" "$PR_HEAD_SHA"
+            printf '| Backend scope / result | %s / %s |\n' "$SELECTED_SCOPE" "$BACKEND_RESULT"
+            printf '| Browser selected / setup / result | %s / %s / %s |\n' "$BROWSER_SELECTED" "$BROWSER_SETUP_RESULT" "$BROWSER_RESULT"
+            printf '| HTTPS proof seconds | %s |\n' "$BROWSER_SECONDS"
+            printf '\nPR validation uses the effective merge checkout; its source head is recorded separately. Skipped steps claim no executed proof. Failure logs retain the safe stage/exit/support summary. Raw private fixture/database logs are not automatically exported and expire with the hosted runner; use the documented persistent-host command when protected cause inspection is needed.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
       # Publish only after successful full validation of trusted integrated main.
       # PRs can consume main's cache or build cold; they never publish it here.
       - name: Save verified PostgreSQL validation tools
