@@ -420,6 +420,7 @@ func checkFixtureAudit(t *testing.T, records []audit.Record, principal achrix.Pr
 	}
 	counts := map[string]int{}
 	ids := map[string]bool{}
+	attributed := 0
 	for _, record := range records {
 		actor := fixtureAdministrator
 		if record.Action == "identity.credential.change" {
@@ -430,6 +431,15 @@ func checkFixtureAudit(t *testing.T, records []audit.Record, principal achrix.Pr
 		}
 		ids[record.ID] = true
 		counts[record.Action]++
+		if record.Attribution != nil {
+			if record.Action != "identity.account.set-enabled" || *record.Attribution != fixtureRetainedAttribution() {
+				t.Fatal("retained trusted attribution differs after query/export or restore")
+			}
+			attributed++
+		}
+	}
+	if attributed != 1 {
+		t.Fatal("one attributed event and four explicitly unattributed direct events must survive restore", attributed)
 	}
 	if counts["identity.account.create"] != 1 || counts["identity.credential.change"] != 1 || counts["identity.account.set-enabled"] != 2 || counts["identity.session.revoke-all"] != 1 {
 		t.Fatal("accountable event classifications differ")
@@ -443,6 +453,12 @@ func checkFixtureAudit(t *testing.T, records []audit.Record, principal achrix.Pr
 			t.Fatal("credential/session/sensitive fixture material entered Audit")
 		}
 	}
+}
+
+// Nonsecret trusted composition metadata is captured with one existing event,
+// preserving the retained five-row dataset and native coherent restore proof.
+func fixtureRetainedAttribution() audit.Attribution {
+	return audit.Attribution{ClientID: "notes-retained-client", ConnectionID: "notes-retained-connection", Channel: "internal", RequestID: "notes-retained-request", Operation: identity.AccountSetEnabled}
 }
 
 func TestIdentityAuditPublicConsumer(t *testing.T) {
@@ -569,7 +585,11 @@ func TestIdentityAuditPublicConsumer(t *testing.T) {
 	if err != nil || managed.Revision != 2 {
 		t.Fatal("credential revision did not advance atomically")
 	}
-	if err := f.identity.SetEnabled(context.Background(), fixtureAdministrator, account.ID, managed.Revision, false); err != nil {
+	attributed, err := audit.WithAttribution(context.Background(), fixtureAdministrator, fixtureRetainedAttribution())
+	if err != nil {
+		t.Fatal("trusted retained fixture attribution failed", err)
+	}
+	if err := f.identity.SetEnabled(attributed, fixtureAdministrator, account.ID, managed.Revision, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.identity.Authenticate(context.Background(), retained.Value); !errors.Is(err, identity.ErrAuthentication) {

@@ -1,0 +1,499 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "AChrix selected Identity administration",
+    "version": "1.0.0",
+    "description": "Optional product-composed resource-server API. Replace the example server with the configured canonical HTTP resource and verify its intended audience. Production OAuth/onboarding remains product-owned."
+  },
+  "servers": [
+    {
+      "url": "https://product.example/api/identity/v1"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/accounts/{account_id}": {
+      "get": {
+        "operationId": "achrix.identity.account.read",
+        "summary": "Read authorized account metadata and exact revision",
+        "description": "The owning Service authorizes before lookup. An authorized absent account retains its conflict response. No listing, credential or session material is exposed.",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z2-7]{26}$",
+              "minLength": 26,
+              "maxLength": 26,
+              "description": "Exact generated account ID; knowing it grants no authority."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current authorized account metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts/{account_id}/enabled": {
+      "post": {
+        "operationId": "achrix.identity.account.set-enabled",
+        "summary": "Conditionally set enabled state with atomic accountability",
+        "description": "Requires current AccountSetEnabled and Audit append permissions on this exact account. Every success increments revision, revokes sessions and appends trusted Audit, even when enabled is unchanged. Non-idempotent. Maximum JSON body4096bytes, UTF-8 application/json, no content encoding. Unknown/duplicate fields and trailing values are rejected. No claimed actor/client/channel/request fields are accepted. No implicit AccountRead is required; use a separate authorized read to inspect state.",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z2-7]{26}$",
+              "minLength": 26,
+              "maxLength": 26,
+              "description": "Exact generated account ID; knowing it grants no authority."
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetEnabledBody"
+              },
+              "example": {
+                "expected_revision": "9007199254740993",
+                "enabled": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Owning status change, session revocation and Audit append acknowledged; no newer revision is fetched for the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetEnabledResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Safe correlated failure; inspect code, outcome and action. A timeout or 503 does not authorize mutation replay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Product-verified user/client credential for this exact HTTP resource; current connection and domain permissions still apply."
+      }
+    },
+    "schemas": {
+      "AccountInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "pattern": "^[A-Z2-7]{26}$",
+            "minLength": 26,
+            "maxLength": 26,
+            "description": "Exact generated account ID; knowing it grants no authority."
+          }
+        },
+        "required": [
+          "account_id"
+        ]
+      },
+      "SetEnabledInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "pattern": "^[A-Z2-7]{26}$",
+            "minLength": 26,
+            "maxLength": 26,
+            "description": "Exact generated account ID; knowing it grants no authority."
+          },
+          "expected_revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "minLength": 1,
+            "maxLength": 19,
+            "description": "Exact positive int64 decimal string, 1..9223372036854775807; never convert to a JSON number."
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "account_id",
+          "expected_revision",
+          "enabled"
+        ]
+      },
+      "SetEnabledBody": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "minLength": 1,
+            "maxLength": 19,
+            "description": "Exact positive int64 decimal string, 1..9223372036854775807; never convert to a JSON number."
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "enabled"
+        ]
+      },
+      "AccountInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Z2-7]{26}$",
+            "minLength": 26,
+            "maxLength": 26,
+            "description": "Exact generated account ID; knowing it grants no authority."
+          },
+          "login": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "minLength": 1,
+            "maxLength": 19,
+            "description": "Exact positive int64 decimal string, 1..9223372036854775807; never convert to a JSON number."
+          }
+        },
+        "required": [
+          "id",
+          "login",
+          "enabled",
+          "revision"
+        ]
+      },
+      "SetEnabledResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "pattern": "^[A-Z2-7]{26}$",
+            "minLength": 26,
+            "maxLength": 26,
+            "description": "Exact generated account ID; knowing it grants no authority."
+          },
+          "outcome": {
+            "type": "string",
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "account_id",
+          "outcome"
+        ]
+      },
+      "Problem": {
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code",
+          "message",
+          "action",
+          "outcome",
+          "request_id"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "about:blank"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "action": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "fields": {
+            "type": "object",
+            "maxProperties": 16,
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 256
+            }
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "not_executed",
+              "not_committed",
+              "succeeded",
+              "unknown"
+            ]
+          },
+          "reference": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "An authorized account recovery reference may accompany an unknown mutation outcome; it does not establish completion or account existence. Denial or ambiguous cancellation does not promote the requested account ID into a verified reference."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Server-generated correlation; request headers cannot choose it."
+          }
+        }
+      }
+    }
+  }
+}

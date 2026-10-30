@@ -158,6 +158,12 @@ Sensitive/admin/financial/security actions may require a durable audit trail. Th
 
 Audit should capture enough to answer who/what/when/target/outcome/authority without storing secrets or excessive sensitive payloads. Critical actions define whether the audit record must share commit semantics with domain state or how non-atomic outcomes are durably reconciled.
 
+The selected [Identity account workflow](../../identity/remote/README.md) commits an enabled-state change, revision increment, all-session revocation and one Audit record in the same transaction. It requires both the exact-account mutation permission and Audit append permission. An append denial or failure must leave the account, sessions and retained history unchanged; an uncertain public result still requires investigation of the owning transaction. A successful authentication or remote connection never supplies either grant by itself.
+
+Durable `audit.Attribution` records the verified client ID, optional nonsecret connection ID, endpoint-selected channel, server-generated request ID and fixed operation. `Record.Actor` remains the authenticated subject. Trusted composition uses `WithAttribution` to bind the value to that actor; `Prepare` rejects an actor mismatch and snapshots it for atomic append. The Identity adapter derives it only from trusted Bridge context, never public arguments, forwarded identity headers or MCP display metadata. These identifiers are provenance, not credentials or permission. Historical and direct records without supplied attribution remain explicitly absent; do not infer or backfill a client from other fields.
+
+[Audit Query and Export](../../audit/remote/README.md) require their own separate exact-target permissions on every page. A retained actor/client/request value grants no access, and an authorized empty page does not disclose whether a corresponding domain object exists. Append guards protect ordinary application integrity; they do not establish cryptographic tamper evidence or protection from a privileged database operator changing the schema or guards.
+
 Operational debug logs are not the audit source of truth. Repetitive invalid/denied traffic is not automatically an audit event; retain only the accountable/security evidence the product actually needs and bound attacker-controlled event volume.
 
 ## Dependencies

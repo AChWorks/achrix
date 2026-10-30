@@ -17,6 +17,7 @@ import (
 
 	"github.com/AChWorks/achrix"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // ModuleVersion is the unpublished source-line label, not the packaged build version.
@@ -73,6 +74,9 @@ type Record struct {
 	Authority  string
 	Outcome    string
 	OccurredAt time.Time
+	// Nil means no request provenance was retained; historical/direct records
+	// must not acquire a guessed channel, client or request identity.
+	Attribution *Attribution
 }
 
 type Page struct {
@@ -125,6 +129,10 @@ func (s *Service) Prepare(ctx context.Context, actor achrix.Principal, event Eve
 	if event.Outcome != "succeeded" {
 		return Prepared{}, &InputError{"outcome", "must_be_succeeded"}
 	}
+	attribution, err := attributionFor(ctx, actor)
+	if err != nil {
+		return Prepared{}, err
+	}
 	if err := s.app.Authorize(ctx, actor, Append, event.Target); err != nil {
 		return Prepared{}, err
 	}
@@ -135,7 +143,7 @@ func (s *Service) Prepare(ctx context.Context, actor achrix.Principal, event Eve
 	if now.Year() < 1 || now.Year() > 9999 {
 		return Prepared{}, ErrConfiguration
 	}
-	r := Record{ID: strings.ToLower(rand.Text()), Actor: actor, Action: event.Action, Target: event.Target, Authority: event.Authority, Outcome: event.Outcome, OccurredAt: now}
+	r := Record{ID: strings.ToLower(rand.Text()), Actor: actor, Action: event.Action, Target: event.Target, Authority: event.Authority, Outcome: event.Outcome, OccurredAt: now, Attribution: attribution}
 	return Prepared{&preparedState{module: s.module, context: ctx, record: r}}, nil
 }
 
@@ -198,7 +206,14 @@ func AppendInTx(parent context.Context, tx pgx.Tx, prepared Prepared) error {
 		return ErrConflict
 	}
 	r := p.record
-	_, err = tx.Exec(ctx, "INSERT INTO audit.records(id,actor,action,target,authority,outcome,occurred_at) VALUES($1,$2,$3,$4,$5,$6,$7)", r.ID, string(r.Actor), r.Action, r.Target, r.Authority, r.Outcome, r.OccurredAt)
+	var client, connection, channel, request, operation any
+	if a := r.Attribution; a != nil {
+		client, channel, request, operation = a.ClientID, a.Channel, a.RequestID, a.Operation
+		if a.ConnectionID != "" {
+			connection = a.ConnectionID
+		}
+	}
+	_, err = tx.Exec(ctx, "INSERT INTO audit.records(id,actor,action,target,authority,outcome,occurred_at,client_id,connection_id,channel,request_id,operation) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)", r.ID, string(r.Actor), r.Action, r.Target, r.Authority, r.Outcome, r.OccurredAt, client, connection, channel, request, operation)
 	if err != nil {
 		return p.module.failure(ctx, "append", err)
 	}
@@ -249,7 +264,7 @@ func (s *Service) page(parent context.Context, actor achrix.Principal, target, c
 		return Page{}, err
 	}
 	defer finish()
-	rows, err := pool.Query(ctx, "SELECT seq,id,actor,action,target,authority,outcome,occurred_at FROM audit.records WHERE target=$1 AND seq>$2 ORDER BY seq LIMIT $3", target, after, limit+1)
+	rows, err := pool.Query(ctx, "SELECT seq,id,actor,action,target,authority,outcome,occurred_at,client_id,connection_id,channel,request_id,operation FROM audit.records WHERE target=$1 AND seq>$2 ORDER BY seq LIMIT $3", target, after, limit+1)
 	if err != nil {
 		return Page{}, s.module.failure(ctx, "query", err)
 	}
@@ -259,12 +274,17 @@ func (s *Service) page(parent context.Context, actor achrix.Principal, target, c
 	for rows.Next() {
 		var seq int64
 		var r Record
-		if err = rows.Scan(&seq, &r.ID, &r.Actor, &r.Action, &r.Target, &r.Authority, &r.Outcome, &r.OccurredAt); err != nil {
+		var extra [5]pgtype.Text
+		if err = rows.Scan(&seq, &r.ID, &r.Actor, &r.Action, &r.Target, &r.Authority, &r.Outcome, &r.OccurredAt, &extra[0], &extra[1], &extra[2], &extra[3], &extra[4]); err != nil {
 			return Page{}, s.module.failure(ctx, "query", err)
 		}
 		if len(page.Records) == limit {
 			page.NextCursor = encodeCursor(target, last)
 			break
+		}
+		r.Attribution, err = retainedAttribution(extra)
+		if err != nil {
+			return Page{}, s.module.failure(ctx, "query", err)
 		}
 		r.OccurredAt = r.OccurredAt.UTC()
 		page.Records = append(page.Records, r)

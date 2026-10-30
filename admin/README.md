@@ -5,6 +5,19 @@
 A navigation grant is an explicit product choice, never an account-wide domain grant. `Request.CheckAllowed` is only a presentation hint: an explicit denial is `(false, nil)` while failed evaluation returns an error. `Request.Allowed` remains a compatible boolean hint and records failures; neither grants domain permission. Trusted compiled surfaces render an `html/template` definition named `content` through `Request.Render`; request/domain strings must stay template data. Rendering finishes into bounded 128 KiB buffers before writing. `Request.Render` returns a safe phase-bearing error after recording the original cause; `errors.Is(err, admin.ErrResponseDelivery)` means writing began and the surface must not append a fallback response. Module templates are trusted code, not user-installed templates. Surface IDs stay stable while `Text{Domain, Key}` identifies complete catalog messages. The shell uses semantic layout/navigation/forms, a skip link, keyboard focus feedback, logical responsive CSS and `lang`/`dir`; domain values are neither normalized nor translated.
 
 
+## Programmatic coverage boundary
+
+| Consumer / owned operation | HTTP | MCP |
+| --- | --- | --- |
+| Product composition registers compiled surfaces, navigation and localization | Existing same-origin `/admin` browser shell | Not a domain operation; no remote surface-registration or rendering tool |
+| A user performs an Identity or Media business operation | The owning component's Admin surface or deliberate HTTP adapter calls its public Service | The owning `identity/remote` or `media/remote` package calls that same Service |
+
+Admin owns presentation, not a second account/file application service. Machine
+consumers use the [owning component contracts](../docs/architecture/contracts-and-interfaces.md#internal-and-external-programmatic-coverage)
+without a browser shell, synthetic session or compulsory HTTP loopback. A new
+business capability must address coverage in its owning component; registering
+an Admin surface alone does not publish an API or MCP operation.
+
 ## Diagnostics and response certainty
 
 Pass the product's `Config.Logger` to join its structured local diagnostic output; nil uses `slog.Default`. Transport deadline setup, authentication providers, policy evaluation, localization, rendering and response delivery retain a source-owned operation/phase and typed cause category. Pass `Config.Diagnostic func(context.Context, string, string, error)` when authorized diagnosis requires the original cause. The synchronous callback sees every operational cause before ordinary-log suppression; the product owns bounded handling, provider-aware sensitive-field redaction before retention/export, access and retention. It is not an ordinary log field or a public error chain. `Request.Diagnose(operation, phase, cause)` lets compiled surfaces report their own adapter failures with the same context. Names must be compiled identifiers, not request/resource values. Correlation already in context is preserved; Admin does not create unrelated request IDs.

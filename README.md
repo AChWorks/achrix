@@ -9,7 +9,7 @@ Use AChrix when you want shared application capabilities that you can consume an
 | Component | What it provides |
 | --- | --- |
 | Core | Application composition, authorization and startup/shutdown lifecycle |
-| [Identity](identity/README.md) and [Audit](audit/README.md) | Accounts, passwords, sessions and accountable operations |
+| [Identity](identity/README.md) and [Audit](audit/README.md) | Accounts, passwords, sessions and atomic accountable operations, with optional HTTP/MCP account administration and bounded Audit reads |
 | [Media](media/README.md) | Private attachments with an authorized HTTP/MCP workflow and clean PNG/JPEG preparation |
 | [Multi-Site](multisite/README.md) | Site resolution, authorized inventory with optional HTTP/MCP reads, and per-site Module selection planning |
 | [Admin](admin/README.md) | A composable administration shell with Identity and Media screens, including file-based English/Persian localization and RTL/LTR presentation |
@@ -17,6 +17,8 @@ Use AChrix when you want shared application capabilities that you can consume an
 | [Bridge](bridge/README.md) | Optional MCP and JSON HTTP resource-server adapters for existing application operations and user permissions; products supply credential verification and connection admission |
 
 Components expose deliberate Go contracts and selected web/MCP adapters. HTTP API and MCP coverage for relevant internal and external consumers is part of [capability development](docs/architecture/contracts-and-interfaces.md#internal-and-external-programmatic-coverage); current coverage is documented by each component and its examples. This does not yet mean every component operation has a network endpoint or MCP binding.
+
+Core composition, authorization and lifecycle remain direct in-process contracts. Products expose their owning application operations through selected adapters; Core supplies no remote dispatcher. [Identity administration](identity/remote/README.md) and [Audit pages](audit/remote/README.md) document the selected account workflow, current permissions and durable request attribution.
 
 Supported failure paths preserve useful machine categories and corrective guidance. Runtime components provide structured local diagnostics, and products can compose a protected callback for the underlying operational cause; see [diagnosis and audit](docs/operations/operability-performance.md#diagnosis-and-audit) for access, correlation and retention responsibilities.
 

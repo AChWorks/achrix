@@ -4,6 +4,21 @@
 
 The product supplies actual requirements, trusted observations and explicitly selected adapters. This package supplies one deterministic assessment/planning boundary and conservative re-entry decisions. The [real disposable-resource example](example_test.go) demonstrates private-file inspection, a product-owned effect, retained attempt metadata, a lost acknowledgement and verification without replay. It does not establish a production installer, Rixa/panel support, generic updater or Recovery implementation.
 
+## Programmatic coverage boundary
+
+| Consumer / owned operation | Direct Go contract | HTTP / MCP |
+| --- | --- | --- |
+| Product installer or operator tooling assesses requirements and retained progress | `Assess` | Not published; a remote assessment needs a real product operator-authentication and observation profile |
+| Product executor checks a proposal against fresh evidence before an authorized effect | `Plan.Recheck` | Not published; the plan supplies no host, migration or activation authority |
+
+This deliberate exception permits installation before an Application or account
+exists. A product needing remote operator access must define its own trusted
+identity, exact target, observations and supported effects before selecting an
+adapter under the [coverage contract](../docs/architecture/contracts-and-interfaces.md#internal-and-external-programmatic-coverage).
+There is no generic unauthenticated bootstrap endpoint or automatic export of
+planning methods. Same-process tooling keeps direct access without a Bridge,
+network hop or model.
+
 ## Inputs and binding
 
 Public Go declarations own exact signatures.
