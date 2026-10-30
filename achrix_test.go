@@ -745,8 +745,10 @@ func TestRuntimeDiagnosticsOwnedByProduct(t *testing.T) {
 			if err := a.Authorize(ctx, "PRIVATE_PRINCIPAL", "notes.read", "PRIVATE_RESOURCE"); !errors.Is(err, achrix.ErrAuthorizationUnavailable) {
 				t.Fatal(err)
 			}
-			if level == slog.LevelInfo && logs.Len() != 0 {
-				t.Fatal("per-call diagnostic escaped production threshold", logs.String())
+			if level == slog.LevelInfo {
+				if strings.Count(logs.String(), "\n") != 1 || !strings.Contains(logs.String(), `"level":"ERROR"`) || !strings.Contains(logs.String(), `"phase":"policy"`) {
+					t.Fatal("operational policy cause must remain visible at the production threshold", logs.String())
+				}
 			}
 			if level == slog.LevelDebug {
 				for _, field := range []string{`"level":"DEBUG"`, `"operation":"authorize"`, `"operation":"ready"`, `"component":"notes"`, `"reason":"policy_denied"`, `"reason":"unknown_capability_or_principal"`, `"reason":"policy_evaluation_failed"`} {
