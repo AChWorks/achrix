@@ -27,10 +27,16 @@ import (
 var buildIdentity = "development"
 
 func main() { os.Exit(run()) }
-func run() int {
+func run() (result int) {
 	logger := diagnosis.New(os.Stderr)
+	defer diagnosis.Flush(logger)
 	mode := flag.String("mode", "serve", "serve, migrate, or identity")
 	flag.Parse()
+	if *mode != "identity" && *mode != "migrate" && *mode != "serve" {
+		logger.Error("unknown mode", "component", "notes.consumer", "operation", "configure", "phase", "mode", "next_action", "choose serve, migrate, or identity")
+		return 1
+	}
+
 	if *mode == "identity" {
 		build := buildIdentity
 		if build == "development" {
@@ -42,12 +48,15 @@ func run() int {
 				}
 			}
 		}
-		_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"foundation": achrix.Version(), "module": infrastructure.ModuleVersion, "build": build, "migrations": map[string]string{infrastructure.Migrations()[0].ID: infrastructure.Digest(infrastructure.Migrations()[0])}})
+		if err := json.NewEncoder(os.Stdout).Encode(map[string]any{"foundation": achrix.Version(), "module": infrastructure.ModuleVersion, "build": build, "migrations": map[string]string{infrastructure.Migrations()[0].ID: infrastructure.Digest(infrastructure.Migrations()[0])}}); err != nil {
+			logger.Error("identity output failed", "component", "notes.consumer", "operation", "identity", "phase", "write_stdout", "reason", diagnosis.IOReason(err))
+			return 1
+		}
 		return 0
 	}
 	cfg, err := config.Load(os.Getenv)
 	if err != nil {
-		logger.Error("configuration rejected", "component", "notes.consumer", "reason", "invalid_config")
+		logger.Error("configuration rejected", "component", "notes.consumer", "operation", "configure", "phase", "validate", "reason", "invalid_config", "detail", err.Error(), "next_action", "correct the named runtime setting before restarting")
 		return 1
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -55,6 +64,7 @@ func run() int {
 		defer cancel()
 		poolConfig, err := pgxpool.ParseConfig(cfg.DSN)
 		if err != nil {
+			logger.ErrorContext(ctx, "migration configuration rejected", "component", "notes.migrations", "operation", "migrate", "phase", "parse_dsn", "reason", "invalid_database_configuration")
 			return 1
 		}
 		poolConfig.MaxConns = 2
@@ -65,25 +75,22 @@ func run() int {
 			return 1
 		}
 		defer p.Close()
-		if err := infrastructure.Migrate(ctx, p, infrastructure.Migrations()); err != nil {
-			logger.ErrorContext(ctx, "migration failed", "component", "notes.migrations", "operation", "migrate", "reason", infrastructure.FailureReason(err))
+		if err := infrastructure.MigrateWithDiagnostics(ctx, p, infrastructure.Migrations(), logger, nil); err != nil {
 			return 1
 		}
+		logger.Info("migration complete", "component", "notes.migrations", "operation", "migrate", "outcome", "committed")
 		return 0
-	}
-	if *mode != "serve" {
-		cancel()
-		logger.Error("unknown mode", "component", "notes.consumer")
-		return 1
 	}
 	store, err := infrastructure.New(cfg.DSN, logger)
 	if err != nil {
 		cancel()
+		logger.Error("store configuration rejected", "component", "notes.consumer", "operation", "configure", "phase", "postgres", "detail", err.Error())
 		return 1
 	}
 	app, err := achrix.New(achrix.Config{StartupTimeout: 3 * time.Second, ShutdownTimeout: 2 * time.Second, Logger: logger}, achrix.PolicyFunc(application.Policy), store)
 	if err != nil {
 		cancel()
+		logger.Error("composition rejected", "component", "notes.consumer", "operation", "configure", "phase", "compose", "detail", err.Error())
 		return 1
 	}
 	if err := app.Start(ctx); err != nil {
@@ -95,11 +102,14 @@ func run() int {
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		_ = app.Shutdown(ctx)
+		if err := app.Shutdown(ctx); err != nil {
+			logger.ErrorContext(ctx, "application shutdown incomplete", "component", "notes.consumer", "operation", "shutdown", "phase", "application", "reason", infrastructure.FailureReason(err))
+			result = 1
+		}
 	}()
 	listener, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
-		logger.Error("listen failed", "component", "notes.consumer", "reason", "bind_failed")
+		logger.Error("listen failed", "component", "notes.consumer", "operation", "serve", "phase", "listen", "reason", diagnosis.IOReason(err), "listen", cfg.Listen, "next_action", "check the configured loopback address and port availability")
 		return 1
 	}
 	service := application.New(app, store, logger)
@@ -112,15 +122,18 @@ func run() int {
 	case <-stop.Done():
 	case err := <-done:
 		if !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("HTTP stopped", "component", "notes.http", "reason", "serve_failed")
+			logger.Error("HTTP stopped", "component", "notes.http", "operation", "serve", "phase", "accept", "reason", diagnosis.IOReason(err))
 			return 1
 		}
 	}
 	shutdown, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if err := server.Shutdown(shutdown); err != nil {
-		_ = server.Close()
-		logger.Warn("HTTP shutdown deadline", "component", "notes.http")
+		if closeErr := server.Close(); closeErr != nil {
+			logger.Error("HTTP forced close failed", "component", "notes.http", "operation", "shutdown", "phase", "force_close", "reason", diagnosis.IOReason(closeErr))
+		}
+		logger.Error("HTTP shutdown incomplete", "component", "notes.http", "operation", "shutdown", "phase", "drain", "reason", diagnosis.IOReason(err))
+		return 1
 	}
 	return 0
 }

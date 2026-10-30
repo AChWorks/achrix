@@ -10,11 +10,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
 	"example.com/achrix-notes/internal/application"
 	"example.com/achrix-notes/internal/config"
+	"example.com/achrix-notes/internal/diagnosis"
 	"example.com/achrix-notes/internal/domain"
 	"github.com/AChWorks/achrix"
 	"github.com/jackc/pgx/v5"
@@ -29,20 +31,37 @@ const ModuleVersion = "0.1.0-fixture"
 const migrationLock int64 = 61873542119
 
 type Store struct {
-	config *pgxpool.Config
-	logger *slog.Logger
-	mu     sync.RWMutex
-	pool   *pgxpool.Pool
+	config     *pgxpool.Config
+	logger     *slog.Logger
+	diagnostic func(context.Context, string, string, error)
+	mu         sync.RWMutex
+	pool       *pgxpool.Pool
 }
 
 // New validates bounded pool configuration. The supported fixture permits only a
 // local Unix/loopback database without TLS; a future remote profile must require TLS.
 func New(dsn string, logger *slog.Logger) (*Store, error) {
+	return NewWithDiagnostics(dsn, logger, nil)
+}
+
+// NewWithDiagnostics preserves original causes at a synchronous protected
+// product callback; the callback owns provider-aware redaction before export.
+func NewWithDiagnostics(dsn string, logger *slog.Logger, diagnostic func(context.Context, string, string, error)) (*Store, error) {
 	if err := config.ValidateDSN(dsn); err != nil {
+		if diagnostic != nil {
+			cause := err
+			if _, parseErr := pgxpool.ParseConfig(dsn); parseErr != nil {
+				cause = parseErr
+			}
+			diagnostic(context.Background(), "configure", "database_config", cause)
+		}
 		return nil, err
 	}
 	c, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
+		if diagnostic != nil {
+			diagnostic(context.Background(), "configure", "parse_dsn", err)
+		}
 		return nil, errors.New("invalid database configuration")
 	}
 	c.MaxConns = 4
@@ -50,32 +69,46 @@ func New(dsn string, logger *slog.Logger) (*Store, error) {
 	c.ConnConfig.ConnectTimeout = time.Second
 	c.MaxConnLifetime = time.Hour
 	c.MaxConnIdleTime = time.Minute
-	return &Store{config: c, logger: logger}, nil
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &Store{config: c, logger: logger, diagnostic: diagnostic}, nil
 }
 
 func (s *Store) Descriptor() achrix.Descriptor {
 	return achrix.Descriptor{ID: "example.notes", Version: ModuleVersion, Provides: []achrix.Capability{{ID: application.Create, Version: 1}, {ID: application.Read, Version: 1}}, Requires: []achrix.Capability{{ID: "achrix.authorization", Version: 2}}}
 }
-func (s *Store) Start(ctx context.Context) error {
+func (s *Store) Start(ctx context.Context) (result error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	phase := "initialize"
+	var cause error
+	defer func() {
+		s.mu.Unlock()
+		// A product diagnostic callback may inspect component state. Never invoke it
+		// while holding the resource lock.
+		if result != nil {
+			s.logFailure(ctx, phase, cause)
+		}
+	}()
 	p, err := pgxpool.NewWithConfig(ctx, s.config)
 	if err != nil {
-		s.logFailure(ctx, "initialize", err)
+		cause = err
 		return &diagnosticError{message: "database initialization failed", cause: err}
 	}
 	s.pool = p
+	phase = "connect"
 	if err := p.Ping(ctx); err != nil {
-		s.logFailure(ctx, "connect", err)
+		cause = err
 		return &diagnosticError{message: "database connection failed", cause: err}
 	}
+	phase = "check_environment"
 	if err := CheckEnvironment(ctx, p); err != nil {
-		s.logFailure(ctx, "check_environment", err)
+		cause = err
 		return err
 	}
-	// Installation is explicit, never raced by traffic/startup replicas.
+	phase = "check_schema"
 	if err := CheckSchema(ctx, p); err != nil {
-		s.logFailure(ctx, "check_schema", err)
+		cause = err
 		return err
 	}
 	return nil
@@ -83,12 +116,17 @@ func (s *Store) Start(ctx context.Context) error {
 
 func (s *Store) Ready(ctx context.Context) error {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
 	if s.pool == nil {
+		s.mu.RUnlock()
 		return domain.ErrUnavailable
 	}
-	if err := s.pool.Ping(ctx); err != nil {
-		s.logger.WarnContext(ctx, "database readiness degraded", "component", "notes.postgresql", "operation", "readiness", "reason", FailureReason(err))
+	err := s.pool.Ping(ctx)
+	s.mu.RUnlock()
+	if err != nil {
+		if s.diagnostic != nil {
+			s.diagnostic(ctx, "readiness", "ping", err)
+		}
+		s.logger.WarnContext(ctx, "database readiness degraded", "component", "notes.postgresql", "operation", "readiness", "phase", "ping", "reason", FailureReason(err))
 		return domain.ErrUnavailable
 	}
 	return nil
@@ -115,25 +153,28 @@ func (s *Store) Stop(ctx context.Context) error {
 
 func (s *Store) Save(ctx context.Context, n domain.Note) error {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
 	if s.pool == nil {
-		return domain.ErrUnavailable
+		s.mu.RUnlock()
+		return domain.ErrNotExecuted
 	}
 	_, err := s.pool.Exec(ctx, "INSERT INTO notes.entries(id,body,created_at) VALUES($1,$2,$3)", n.ID, n.Text, n.CreatedAt)
+	s.mu.RUnlock()
 	if err != nil {
 		s.logFailure(ctx, "insert", err)
-		return domain.ErrUnavailable
+		_, outward := writeOutcome(err)
+		return outward
 	}
 	return nil
 }
 func (s *Store) Find(ctx context.Context, id string) (domain.Note, error) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
 	if s.pool == nil {
+		s.mu.RUnlock()
 		return domain.Note{}, domain.ErrUnavailable
 	}
 	var n domain.Note
 	err := s.pool.QueryRow(ctx, "SELECT id,body,created_at FROM notes.entries WHERE id=$1", id).Scan(&n.ID, &n.Text, &n.CreatedAt)
+	s.mu.RUnlock()
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Note{}, domain.ErrNotFound
 	}
@@ -145,12 +186,27 @@ func (s *Store) Find(ctx context.Context, id string) (domain.Note, error) {
 	return n, nil
 }
 
+// PostgreSQL rejection confirms this single statement did not commit. A driver
+// pre-send guarantee proves non-execution; a generic deadline/transport failure
+// proves neither. This classification is not an automatic retry policy.
+func writeOutcome(err error) (string, error) {
+	if pgconn.SafeToRetry(err) {
+		return "not_executed", domain.ErrNotExecuted
+	}
+	var rejected *pgconn.PgError
+	if errors.As(err, &rejected) && rejected.Code != "40003" && !strings.HasPrefix(rejected.Code, "08") {
+		return "not_committed", domain.ErrNotCommitted
+	}
+	return "unknown", domain.ErrUnknownOutcome
+}
+
 // diagnosticError keeps existing safe error text while retaining an inspectable
 // cause or a finite consumer-owned semantic reason. It never formats the cause.
 type diagnosticError struct {
 	message string
 	reason  string
 	cause   error
+	details []slog.Attr
 }
 
 func (e *diagnosticError) Error() string { return e.message }
@@ -178,11 +234,35 @@ func FailureReason(err error) string {
 		}
 		return pgerr.Code
 	}
+	if reason := diagnosis.IOReason(err); reason != "io_failure" {
+		return reason
+	}
 	return "connection_failure"
 }
 
+func failureDetails(err error) []any {
+	var detail *diagnosticError
+	if !errors.As(err, &detail) {
+		return nil
+	}
+	attrs := make([]any, len(detail.details))
+	for i, field := range detail.details {
+		attrs[i] = field
+	}
+	return attrs
+}
+
 func (s *Store) logFailure(ctx context.Context, operation string, err error) {
-	s.logger.ErrorContext(ctx, "database operation failed", "component", "notes.postgresql", "operation", operation, "reason", FailureReason(err))
+	phase, outcome := operation, "not_applicable"
+	if operation == "insert" {
+		phase = "execute"
+		outcome, _ = writeOutcome(err)
+	}
+	if s.diagnostic != nil {
+		s.diagnostic(ctx, operation, phase, err)
+	}
+	args := []any{"component", "notes.postgresql", "operation", operation, "phase", phase, "reason", FailureReason(err), "cause_type", fmt.Sprintf("%T", err), "outcome", outcome}
+	s.logger.ErrorContext(ctx, "database operation failed", append(args, failureDetails(err)...)...)
 }
 
 type Migration struct{ ID, SQL string }
@@ -196,7 +276,7 @@ func CheckEnvironment(ctx context.Context, p *pgxpool.Pool) error {
 		return &diagnosticError{message: "database environment unavailable", cause: err}
 	}
 	if version < 180000 || version >= 190000 || encoding != "UTF8" {
-		return &diagnosticError{message: "unsupported database environment", reason: "unsupported_environment"}
+		return &diagnosticError{message: "unsupported database environment", reason: "unsupported_environment", details: []slog.Attr{slog.Int("server_version_num", version), slog.String("server_encoding", encoding), slog.String("expected_server", "PostgreSQL 18.x UTF8")}}
 	}
 	return nil
 }
@@ -214,12 +294,43 @@ func Digest(m Migration) string { v := sha256.Sum256([]byte(m.SQL)); return hex.
 // advisory lock. DDL and ledger entries commit atomically; cancellation/connection
 // loss rolls back both. No down/destructive migrations exist in this fixture.
 func Migrate(ctx context.Context, p *pgxpool.Pool, migrations []Migration) error {
+	return MigrateWithDiagnostics(ctx, p, migrations, slog.Default(), nil)
+}
+
+// MigrateWithDiagnostics retains operator phase/cause without changing the
+// immutable migration contents or the primary commit/rollback result.
+func MigrateWithDiagnostics(ctx context.Context, p *pgxpool.Pool, migrations []Migration, logger *slog.Logger, diagnostic func(context.Context, string, string, error)) (result error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	phase := "check_environment"
+	defer func() {
+		if result == nil {
+			return
+		}
+		if diagnostic != nil {
+			diagnostic(ctx, "migrate", phase, result)
+		}
+		outcome := "not_committed"
+		if phase == "check_environment" || phase == "begin" {
+			outcome = "not_executed"
+		}
+		if phase == "commit" {
+			outcome, _ = writeOutcome(result)
+			if outcome == "not_executed" || errors.Is(result, pgx.ErrTxCommitRollback) {
+				outcome = "not_committed"
+			}
+		}
+		args := []any{"component", "notes.migrations", "operation", "migrate", "phase", phase, "reason", FailureReason(result), "outcome", outcome}
+		logger.ErrorContext(ctx, "migration failed", append(args, failureDetails(result)...)...)
+	}()
 	if err := CheckEnvironment(ctx, p); err != nil {
 		return err
 	}
 	if len(migrations) == 0 {
 		return &diagnosticError{message: "migration set required", reason: "migration_set_required"}
 	}
+	phase = "begin"
 	tx, err := p.Begin(ctx)
 	if err != nil {
 		return err
@@ -227,14 +338,22 @@ func Migrate(ctx context.Context, p *pgxpool.Pool, migrations []Migration) error
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		defer cancel()
-		_ = tx.Rollback(cleanup)
+		if err := tx.Rollback(cleanup); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			if diagnostic != nil {
+				diagnostic(cleanup, "migrate", "rollback", err)
+			}
+			logger.ErrorContext(cleanup, "migration cleanup failed", "component", "notes.migrations", "operation", "migrate", "phase", "rollback", "reason", FailureReason(err))
+		}
 	}()
+	phase = "lock"
 	if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", migrationLock); err != nil {
 		return err
 	}
+	phase = "create_ledger"
 	if _, err = tx.Exec(ctx, `CREATE SCHEMA IF NOT EXISTS notes; CREATE TABLE IF NOT EXISTS notes.migrations (id text PRIMARY KEY, sha256 text NOT NULL CHECK(length(sha256)=64))`); err != nil {
 		return err
 	}
+	phase = "read_ledger"
 	rows, err := tx.Query(ctx, "SELECT id,sha256 FROM notes.migrations ORDER BY id")
 	if err != nil {
 		return err
@@ -252,6 +371,7 @@ func Migrate(ctx context.Context, p *pgxpool.Pool, migrations []Migration) error
 	if err := rows.Err(); err != nil {
 		return err
 	}
+	phase = "validate_ledger"
 	known := map[string]string{}
 	last := ""
 	for _, m := range migrations {
@@ -273,13 +393,16 @@ func Migrate(ctx context.Context, p *pgxpool.Pool, migrations []Migration) error
 		if _, ok := applied[m.ID]; ok {
 			continue
 		}
+		phase = "ddl"
 		if _, err := tx.Exec(ctx, m.SQL); err != nil {
 			return err
 		}
+		phase = "record_ledger"
 		if _, err := tx.Exec(ctx, "INSERT INTO notes.migrations(id,sha256) VALUES($1,$2)", m.ID, known[m.ID]); err != nil {
 			return err
 		}
 	}
+	phase = "commit"
 	return tx.Commit(ctx)
 }
 

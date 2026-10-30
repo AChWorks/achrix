@@ -19,15 +19,15 @@ func Load(get func(string) string) (Config, error) {
 	}
 	host, port, err := net.SplitHostPort(c.Listen)
 	if err != nil {
-		return Config{}, errors.New("invalid listen address")
+		return Config{}, errors.New("NOTES_LISTEN: use a loopback host:port address")
 	}
 	ip := net.ParseIP(host)
 	p, err := strconv.Atoi(port)
 	if ip == nil || !ip.IsLoopback() || err != nil || p < 1 || p > 65535 {
-		return Config{}, errors.New("loopback listener required")
+		return Config{}, errors.New("NOTES_LISTEN: a loopback IP and port 1..65535 are required")
 	}
 	if len(c.WriterToken) < 32 || len(c.WriterToken) > 128 || len(c.ReaderToken) < 32 || len(c.ReaderToken) > 128 || c.WriterToken == c.ReaderToken {
-		return Config{}, errors.New("distinct bounded runtime tokens required")
+		return Config{}, errors.New("NOTES_WRITER_TOKEN and NOTES_READER_TOKEN: distinct values of 32..128 bytes are required")
 	}
 	if err := ValidateDSN(c.DSN); err != nil {
 		return Config{}, err
@@ -39,21 +39,21 @@ func Load(get func(string) string) (Config, error) {
 // is deliberately not implied by the proving consumer.
 func ValidateDSN(dsn string) error {
 	if dsn == "" {
-		return errors.New("database configuration required")
+		return errors.New("NOTES_DATABASE_URL: database configuration is required")
 	}
 	c, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		return errors.New("invalid database configuration")
+		return errors.New("NOTES_DATABASE_URL: invalid connection syntax; check the configured DSN")
 	}
 	check := func(host string) bool {
 		return len(host) > 0 && host[0] == '/' || host == "localhost" || (net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback())
 	}
 	if !check(c.ConnConfig.Host) {
-		return errors.New("local database required")
+		return errors.New("NOTES_DATABASE_URL: only a local Unix socket or loopback database is supported")
 	}
 	for _, f := range c.ConnConfig.Fallbacks {
 		if !check(f.Host) {
-			return errors.New("local database fallback required")
+			return errors.New("NOTES_DATABASE_URL: every fallback must use a local Unix socket or loopback address")
 		}
 	}
 	return nil

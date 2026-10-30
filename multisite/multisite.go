@@ -7,6 +7,7 @@ package multisite
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/netip"
 	"strconv"
 	"strings"
@@ -62,21 +63,27 @@ type Module struct {
 // aliases for one site) are rejected. Validation and copying are linear in input.
 func New(config Config) (*Module, error) {
 	if len(config.Sites) == 0 {
-		return nil, ErrConfiguration
+		return nil, fmt.Errorf("%w: sites: declare at least one site", ErrConfiguration)
 	}
 	bindings := make(map[string]binding)
 	ids := make(map[SiteID]bool, len(config.Sites))
-	for _, site := range config.Sites {
-		if !validSiteID(site.ID) || ids[site.ID] || len(site.Authorities) == 0 {
-			return nil, ErrConfiguration
+	for i, site := range config.Sites {
+		if !validSiteID(site.ID) {
+			return nil, fmt.Errorf("%w: sites[%d].id: use 1..64 ASCII letters, digits, underscores or hyphens with an alphanumeric first character", ErrConfiguration, i)
+		}
+		if ids[site.ID] {
+			return nil, fmt.Errorf("%w: sites[%d].id: duplicate site identifier", ErrConfiguration, i)
+		}
+		if len(site.Authorities) == 0 {
+			return nil, fmt.Errorf("%w: sites[%d].authorities: declare at least one exact authority", ErrConfiguration, i)
 		}
 		ids[site.ID] = true
-		for _, authority := range site.Authorities {
+		for j, authority := range site.Authorities {
 			if !validAuthority(authority) {
-				return nil, ErrConfiguration
+				return nil, fmt.Errorf("%w: sites[%d].authorities[%d]: use a canonical host with an optional explicit port", ErrConfiguration, i, j)
 			}
 			if _, exists := bindings[authority]; exists {
-				return nil, ErrConfiguration
+				return nil, fmt.Errorf("%w: sites[%d].authorities[%d]: duplicate authority binding", ErrConfiguration, i, j)
 			}
 			bindings[authority] = binding{id: site.ID, disabled: site.Disabled}
 		}
@@ -136,7 +143,7 @@ func lifecycleContext(ctx context.Context) error {
 		return err
 	}
 	if _, ok := ctx.Deadline(); !ok {
-		return ErrConfiguration
+		return fmt.Errorf("%w: context: provide an operation deadline", ErrConfiguration)
 	}
 	return nil
 }
@@ -162,7 +169,7 @@ type Service struct {
 
 func NewService(app *achrix.Application, module *Module) (*Service, error) {
 	if app == nil || module == nil || len(module.bindings) == 0 {
-		return nil, ErrConfiguration
+		return nil, fmt.Errorf("%w: service: provide the composed Application and validated Module", ErrConfiguration)
 	}
 	return &Service{app: app, module: module}, nil
 }
@@ -180,7 +187,7 @@ func (s *Service) Resolve(parent context.Context, actor achrix.Principal, author
 		return "", err
 	}
 	if !validAuthority(authority) {
-		return "", ErrInput
+		return "", fmt.Errorf("%w: authority: use a canonical host with optional port; no paths, userinfo or normalization", ErrInput)
 	}
 	ctx, cancel := context.WithTimeout(parent, time.Second)
 	defer cancel()

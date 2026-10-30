@@ -38,6 +38,19 @@ Professional quality is a property of the code and behavior, not the presence of
 - Make code easy for humans and AI to recover: predictable module structure, stable semantic identifiers, small public surfaces and current nearby documentation. AI-first never justifies opaque generated code or an AI-only business path.
 - Prefer standard formatting/tooling and remove dead/obsolete paths rather than retaining compatibility shims with no supported consumer.
 
+## Actionable failures and retained diagnostic evidence
+
+Every supported failure must be understandable to its legitimate caller and diagnosable by an authorized operator. This is an acceptance requirement for new Modules and materially changed failure paths, not an optional logging enhancement.
+
+- Preserve a stable machine category, clear explanation and useful field/precondition/next action when the caller may know them. Wrong credentials, expired sessions, invalid fields, explicit denial and failed policy evaluation are different states. Localization changes human text, never machine identity.
+- Preserve the meaningful cause and failing phase **before** a component converts it to its public result. An outer logger cannot recover evidence already discarded. Operational diagnostics retain trusted correlation, useful technical context and outcome certainty; a finite code alone is insufficient when the actual fault still cannot be explained.
+- Protect credentials, keys, tokens, hashes and private payloads through targeted treatment and appropriate diagnostic access/storage/export/retention. Technical context is not inherently secret. Keep genuine authorization and anti-enumeration boundaries, while making their protected diagnostic route work.
+- Log at the meaningful owner. Another layer adds a record only for distinct transport, ownership or reconciliation evidence. Bound repetition and cardinality while retaining first distinct failures and interpretable suppression evidence even after traffic stops. Durable Audit has its own accountability requirements.
+- Distinguish proven non-execution, acknowledged success and uncertainty. A timeout or 503 is never blanket permission to replay a write. Unexpected cleanup or presentation failure must not replace the known primary outcome.
+- Tests must positively prove useful diagnosis and also protection of public outputs, public error chains, ordinary logs and support exports. Deleting all details cannot satisfy the test. Use real dependency faults where that boundary determines correctness.
+
+[Operations](../operations/operability-performance.md#diagnosis-and-audit) owns mechanisms, failure ownership and local operating guidance; [Contracts](../architecture/contracts-and-interfaces.md#errors-concurrency-and-effects) owns caller semantics. No mandatory collector, universal error framework or raw public exception exposure follows from this principle.
+
 ## Developer experience
 
 The supported way should also be the easiest way.

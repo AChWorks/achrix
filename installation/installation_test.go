@@ -255,7 +255,7 @@ func TestPublicErrorsAndOutputContainOnlyDeclaredMetadata(t *testing.T) {
 	if strings.Contains(string(b), "password") || strings.Contains(string(b), "DSN") {
 		t.Fatal(string(b))
 	}
-	if _, err := Assess(Profile{}, nil, nil, Progress{}); err.Error() != "invalid installation input" {
+	if _, err := Assess(Profile{}, nil, nil, Progress{}); !errors.Is(err, ErrInput) || !strings.Contains(err.Error(), "binding.profile_id") {
 		t.Fatal(err)
 	}
 }

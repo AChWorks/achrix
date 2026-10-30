@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MPL-2.0
-set -euo pipefail
+set -Eeuo pipefail
+umask 077
+stage=toolchain
+failure_line=0
+trap 'failure_line=$LINENO' ERR
 
 # Default remains the complete proof; focused development/CI may select Core.
 scope=${1:-full}
@@ -24,21 +28,42 @@ validation_root=$(mktemp -d /tmp/achrix-validation.XXXXXXXX)
 started=0
 cleanup() {
   result=$?
-  if [[ $started == 1 ]]; then pg_ctl -D "$validation_root/database" -m fast -w stop >/dev/null || result=1; fi
+  keep_resources=0
+  if [[ $started == 1 ]] && ! pg_ctl -D "$validation_root/database" -m fast -w stop >/dev/null; then
+    keep_resources=1
+    echo "Validation cleanup failed: PostgreSQL stop" >&2
+    if [[ $result == 0 ]]; then result=1; stage=postgres_stop; fi
+  fi
   # Go's module cache is intentionally read-only. Use Go's supported cleanup on
   # this exact task-owned cache rather than trying to remove protected files.
   if [[ -d $validation_root/module-cache ]]; then
-    GOMODCACHE="$validation_root/module-cache" go clean -modcache || result=1
+    if ! GOMODCACHE="$validation_root/module-cache" go clean -modcache; then
+      echo "Validation cleanup failed: module cache" >&2
+      if [[ $result == 0 ]]; then result=1; stage=module_cache_cleanup; fi
+    fi
+  fi
+  if [[ $result != 0 ]]; then
+    if ! python3 "$repository/scripts/validation_diagnostics.py" "$validation_root" "$stage" "$result" "$failure_line" >&2; then
+      echo "Failure evidence capture failed; retaining task directory: $validation_root" >&2
+      exit "$result"
+    fi
+  fi
+  if [[ $keep_resources == 1 ]]; then
+    echo "Task cluster stop is unverified; retained resources: $validation_root" >&2
+    exit "$result"
   fi
   rm -rf -- "$validation_root" || result=1
   exit "$result"
 }
 trap cleanup EXIT
+stage=format
 scripts/check-gofmt.sh
+stage=quality_tools
 scripts/setup-quality-tools.sh "$validation_root/quality-tools"
 quality_bin="$validation_root/quality-tools/bin"
 mapfile -t module_directories < <(python3 scripts/modules.py directories)
 if [[ $scope == full ]]; then python3 scripts/modules.py check; else module_directories=(.); fi
+stage=component_analysis
 for module_directory in "${module_directories[@]}"; do
   (
     cd "$repository/$module_directory"
@@ -55,6 +80,7 @@ if [[ $scope == core ]]; then
 fi
 go test -race -count=1 -timeout=30s .
 
+stage=postgres_prerequisites
 if [[ -n ${ACHRIX_PG_BIN:-} ]]; then export PATH="$ACHRIX_PG_BIN:$PATH"; fi
 for tool in initdb pg_ctl psql createdb pg_dump pg_restore; do
   command -v "$tool" >/dev/null
@@ -64,6 +90,7 @@ for tool in initdb pg_ctl psql createdb pg_dump pg_restore; do
 done
 if [[ $(id -u) == 0 ]]; then echo 'Run validation as a non-root user' >&2; exit 1; fi
 
+stage=postgres_start
 mkdir "$validation_root/socket"
 initdb -D "$validation_root/database" -A trust --no-locale -E UTF8 >/dev/null
 # A mode-0700 task-owned directory and Unix socket only; no host DB/service/port is used.
@@ -89,6 +116,7 @@ mkdir -m 0700 "$validation_root/media-module" "$validation_root/media-source" "$
 createdb -T template0 -E LATIN1 achrix_test_latin1
 createdb -T template0 -E SQL_ASCII achrix_test_sqlascii
 
+stage=component_tests
 # Module tests use distinct private databases: Go can run packages concurrently.
 # Full scope runs their unit and real persisted tests once with explicit DSNs.
 export ACHRIX_IDENTITY_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_identity_test sslmode=disable"
@@ -102,6 +130,7 @@ for module_directory in "${module_directories[@]}"; do
 done
 unset ACHRIX_IDENTITY_TEST_DSN ACHRIX_AUDIT_TEST_DSN ACHRIX_MEDIA_TEST_DSN ACHRIX_MEDIA_TEST_ROOT ACHRIX_ADMIN_TEST_DSN
 
+stage=isolated_consumer
 # Copy consumer-owned source only. Foundation source is downloaded as a pinned
 # normal Go module into a cold module cache; no replacement/workspace is used.
 cp -R fixtures/notes "$validation_root/consumer"
@@ -130,8 +159,10 @@ export NOTES_MEDIA_STORAGE_ROOT="$validation_root/media-source"
 export NOTES_MANAGEMENT_A_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_test_management_a sslmode=disable"
 export NOTES_MANAGEMENT_B_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_test_management_b sslmode=disable"
 export NOTES_INSTALL_DATABASE_URL="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_install_consumer sslmode=disable"
+stage=consumer_tests
 go test -race -count=1 -timeout=60s ./...
 
+stage=restore
 # Native trusted logical backup, no compression required. It covers this fixture's
 # database/schema/ledger/data only; tokens/config/files/external effects are excluded.
 pg_dump -Fc -Z0 --no-owner --no-acl -f "$validation_root/notes.dump" achrix_test_notes

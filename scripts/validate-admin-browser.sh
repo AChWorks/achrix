@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MPL-2.0
-set -euo pipefail
+set -Eeuo pipefail
+stage=browser_prerequisites
+failure_line=0
+trap 'failure_line=$LINENO' ERR
 umask 077
 if [[ $# != 0 ]]; then echo 'Usage: scripts/validate-admin-browser.sh' >&2; exit 2; fi
 repository=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -22,22 +25,43 @@ started=0
 fixture_pid=''
 cleanup() {
  result=$?
+ keep_resources=0
  if [[ -n $fixture_pid ]]; then
   if [[ ! -f $validation_root/done ]]; then printf 'FAIL\n' > "$validation_root/done"; fi
-  if ! wait "$fixture_pid"; then result=1; fi
-  cat "$validation_root/fixture.log"
+  if ! wait "$fixture_pid"; then
+   if [[ $result == 0 ]]; then result=1; stage=browser_fixture_exit; fi
+  fi
+  if [[ $result == 0 ]]; then cat "$validation_root/fixture.log"; fi
  fi
- if [[ $started == 1 ]]; then pg_ctl -D "$validation_root/database" -m fast -w stop >/dev/null || result=1; fi
- if [[ -d $validation_root/module-cache ]]; then GOMODCACHE="$validation_root/module-cache" go clean -modcache || result=1; fi
- rm -rf -- "$validation_root" || result=1
+ if [[ $started == 1 ]] && ! pg_ctl -D "$validation_root/database" -m fast -w stop >/dev/null; then
+  keep_resources=1
+  echo "Browser validation cleanup failed: PostgreSQL stop" >&2
+  if [[ $result == 0 ]]; then result=1; stage=postgres_stop; fi
+ fi
+ if [[ -d $validation_root/module-cache ]] && ! GOMODCACHE="$validation_root/module-cache" go clean -modcache; then
+  if [[ $result == 0 ]]; then result=1; stage=module_cache_cleanup; fi
+ fi
+ if [[ $result != 0 ]]; then
+  if ! python3 "$repository/scripts/validation_diagnostics.py" "$validation_root" "$stage" "$result" "$failure_line" >&2; then
+   echo "Failure evidence capture failed; retaining task directory: $validation_root" >&2
+   exit "$result"
+  fi
+ fi
+ if [[ $keep_resources == 1 ]]; then
+    echo "Task cluster stop is unverified; retained resources: $validation_root" >&2
+    exit "$result"
+  fi
+  rm -rf -- "$validation_root" || result=1
  exit "$result"
 }
 trap cleanup EXIT
+stage=postgres_start
 mkdir "$validation_root/socket"
 initdb -D "$validation_root/database" -A trust --no-locale -E UTF8 >/dev/null
 pg_ctl -D "$validation_root/database" -l "$validation_root/postgres.log" -o "-k $validation_root/socket -h ''" -w start >/dev/null
 started=1
 PGHOST="$validation_root/socket" PGPORT=5432 PGUSER=$(id -un) createdb -T template0 achrix_admin_test
+stage=isolated_consumer
 # Consumer-owned fixture source only: the complete SDK comes from Go resolution.
 cp -R fixtures/notes "$validation_root/consumer"
 export GOMODCACHE="$validation_root/module-cache"
@@ -48,14 +72,16 @@ python3 "$repository/scripts/verify_consumer.py" source "$repository" "$validati
 go vet .
 export NOTES_ADMIN_BROWSER=1 NOTES_ADMIN_BROWSER_ROOT="$validation_root"
 export NOTES_ADMIN_TEST_DSN="host=$validation_root/socket port=5432 user=$(id -un) dbname=achrix_admin_test sslmode=disable"
+stage=browser_fixture
 go test -race -count=1 -timeout=240s -run '^TestAdminBrowserFixture$' -v . > "$validation_root/fixture.log" 2>&1 &
 fixture_pid=$!
 for ((attempt=0; attempt<900; attempt++)); do
  if [[ -f $validation_root/fixture.json ]]; then break; fi
- if ! kill -0 "$fixture_pid" 2>/dev/null; then cat "$validation_root/fixture.log" >&2; exit 1; fi
+ if ! kill -0 "$fixture_pid" 2>/dev/null; then echo "Browser fixture exited before readiness; see retained private evidence" >&2; exit 1; fi
  sleep 0.1
 done
 if [[ ! -f $validation_root/fixture.json ]]; then echo 'Browser fixture startup deadline exceeded' >&2; exit 1; fi
+stage=https_browser
 NODE_EXTRA_CA_CERTS="$validation_root/fixture-ca.pem" "$node" "$repository/scripts/admin_browser.cjs" "$validation_root/fixture.json"
 printf 'PASS\n' > "$validation_root/done"
 wait "$fixture_pid"

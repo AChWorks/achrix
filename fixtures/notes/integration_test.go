@@ -369,7 +369,19 @@ func TestPostgresMigrationAndSharedBehavior(t *testing.T) {
 	t.Run("safe correlated failure attribution", func(t *testing.T) {
 		var output safeBuffer
 		logger := diagnosis.New(&output)
-		s, err := infrastructure.New(os.Getenv("NOTES_TEST_DATABASE_URL"), logger)
+		var protected safeBuffer
+		protectedLogger := diagnosis.New(&protected)
+		defer diagnosis.Flush(logger)
+		defer diagnosis.Flush(protectedLogger)
+		var original *pgconn.PgError
+		s, err := infrastructure.NewWithDiagnostics(os.Getenv("NOTES_TEST_DATABASE_URL"), logger, func(ctx context.Context, operation, phase string, cause error) {
+			if !errors.As(cause, &original) {
+				t.Fatal("original PostgreSQL cause lost", cause)
+			}
+			// This adapter exports only typed diagnostic facts; Message/Detail/SQL
+			// and credentials remain outside its normal support record.
+			protectedLogger.ErrorContext(ctx, "PostgreSQL relation lookup failed", "component", "notes.protected", "operation", operation, "phase", phase, "sqlstate", original.Code, "statement_position", original.Position)
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -404,6 +416,14 @@ func TestPostgresMigrationAndSharedBehavior(t *testing.T) {
 		id := w.Header().Get("X-Request-ID")
 		if id == "" {
 			t.Fatal("no correlation")
+		}
+		if original == nil || original.Code != "42P01" || !strings.Contains(protected.String(), id) || !strings.Contains(protected.String(), `"phase":"execute"`) || !strings.Contains(protected.String(), `"sqlstate":"42P01"`) {
+			t.Fatal("missing useful protected original cause/phase/correlation", protected.String())
+		}
+		for _, secret := range []string{token, "PRIVATE_FIXTURE_BODY", os.Getenv("NOTES_TEST_DATABASE_URL"), "INSERT INTO"} {
+			if strings.Contains(protected.String(), secret) {
+				t.Fatal("protected support projection exposed secret", secret)
+			}
 		}
 		logs := output.String()
 		for _, component := range []string{"notes.postgresql", "notes.http"} {

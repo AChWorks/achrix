@@ -1,5 +1,7 @@
 github.com/AChWorks/achrix v0.4.0 h1:nkd5aG3wmwadYzykZFFslsf6ivCL4kLOwl+GHLaq0fs=
 github.com/AChWorks/achrix v0.4.0/go.mod h1:9Zj1xlOsqGJcF1FNrGVBl+4jUfQX2D5AkR96RpB6PB0=
+github.com/AChWorks/achrix v0.4.1-0.20261030054013-9d755aa7281b h1:RHGAC+wsgKG1zDmER+/OsaS3QvlrIp0GbLc75hffqLQ=
+github.com/AChWorks/achrix v0.4.1-0.20261030054013-9d755aa7281b/go.mod h1:9Zj1xlOsqGJcF1FNrGVBl+4jUfQX2D5AkR96RpB6PB0=
 github.com/AChWorks/achrix/admin v0.1.1-0.20261029233311-27633becbb42 h1:yTO4MisbJDuCuUP6hjcQ/1qMhikCqNwMiN1gf3D9xpE=
 github.com/AChWorks/achrix/admin v0.1.1-0.20261029233311-27633becbb42/go.mod h1:PzJx499AJuSfvsjo35yZpFLmhnwBvAkLNrjJfS7JaaU=
 github.com/AChWorks/achrix/audit v0.1.0 h1:pRzPKdzzx+mxJesTzM9tWq4NrmC9JRD6x3MRCXPL6Vo=

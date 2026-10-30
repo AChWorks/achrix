@@ -3,7 +3,7 @@ module example.com/achrix-notes
 go 1.27.3
 
 require (
-	github.com/AChWorks/achrix v0.4.0
+	github.com/AChWorks/achrix v0.4.1-0.20261030054013-9d755aa7281b
 	github.com/AChWorks/achrix/admin v0.1.1-0.20261029233311-27633becbb42
 	github.com/AChWorks/achrix/audit v0.1.0
 	github.com/AChWorks/achrix/identity v0.1.1-0.20261029233330-ca7f37c520ce
