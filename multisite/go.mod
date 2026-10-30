@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	github.com/AChWorks/achrix v0.5.0
-	github.com/AChWorks/achrix/bridge v0.0.0-20261030163119-941c23d9a0f0
+	github.com/AChWorks/achrix/bridge v0.0.0-20261030163855-832fa96ffa6e
 	github.com/google/jsonschema-go v0.4.3
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 )

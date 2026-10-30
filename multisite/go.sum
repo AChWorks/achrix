@@ -1,7 +1,7 @@
 github.com/AChWorks/achrix v0.5.0 h1:a9C/Ge1nwOGCO51NNS0ph/jGTZzjiVjw4Bxl/hBqaAk=
 github.com/AChWorks/achrix v0.5.0/go.mod h1:9Zj1xlOsqGJcF1FNrGVBl+4jUfQX2D5AkR96RpB6PB0=
-github.com/AChWorks/achrix/bridge v0.0.0-20261030163119-941c23d9a0f0 h1:3TEpLMkzq5Eh72fZZ5ejn+wqblLsVWPwrD9FyYq51nA=
-github.com/AChWorks/achrix/bridge v0.0.0-20261030163119-941c23d9a0f0/go.mod h1:s2hC7PEgo/j5Ss3bHW9KEJ9inZu+jldL379726yS3LM=
+github.com/AChWorks/achrix/bridge v0.0.0-20261030163855-832fa96ffa6e h1:wX0W+eNvqFF9CG+M2c/mth5wPfMubrcSDh64568XuwU=
+github.com/AChWorks/achrix/bridge v0.0.0-20261030163855-832fa96ffa6e/go.mod h1:s2hC7PEgo/j5Ss3bHW9KEJ9inZu+jldL379726yS3LM=
 github.com/golang-jwt/jwt/v5 v5.3.1 h1:kYf81DTWFe7t+1VvL7eS+jKFVWaUnK9cB1qbwn63YCY=
 github.com/golang-jwt/jwt/v5 v5.3.1/go.mod h1:fxCRLWMO43lRc8nhHWY6LGqRcf+1gQWArsqaEUEa5bE=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
