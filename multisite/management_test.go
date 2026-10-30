@@ -3,12 +3,15 @@ package multisite_test
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/AChWorks/achrix"
 	"github.com/AChWorks/achrix/multisite"
@@ -109,9 +112,10 @@ func TestManagedInventoryAuthorizesExactSitesWithoutLeakingOtherSites(t *testing
 	base, settings := managedConfig()
 	base.Sites = append(base.Sites, multisite.Site{ID: "c", Authorities: []string{"c.private.example"}})
 	var targets []string
+	allowC := true
 	app, module, service := managedService(t, base, settings, achrix.PolicyFunc(func(_ context.Context, actor achrix.Principal, capability, target string) error {
 		targets = append(targets, target)
-		if actor == "reader" && capability == multisite.InventoryRead && (target == multisite.InventoryTarget || target == "a" || target == "c") {
+		if actor == "reader" && capability == multisite.InventoryRead && (target == multisite.InventoryTarget || target == "a" || target == "c" && allowC) {
 			return nil
 		}
 		return achrix.ErrDenied
@@ -135,36 +139,212 @@ func TestManagedInventoryAuthorizesExactSitesWithoutLeakingOtherSites(t *testing
 	if len(targets) == 0 || targets[0] != multisite.InventoryTarget {
 		t.Fatal("collection permission not checked first")
 	}
+	allowC = false
+	if revoked, err := service.Inventory(context.Background(), "reader", page.NextCursor, 1); err != nil || len(revoked.Sites) != 0 || revoked.NextCursor != "" {
+		t.Fatalf("cursor retained a revoked site grant: %+v %v", revoked, err)
+	}
 	for _, id := range []multisite.SiteID{"b", "disabled", "unknown"} {
 		if site, err := service.Site(context.Background(), "reader", id); site.ID != "" || !errors.Is(err, achrix.ErrDenied) {
 			t.Fatalf("unauthorized site %s: %+v %v", id, site, err)
 		}
 	}
-	if _, err := service.Inventory(context.Background(), "stranger", "", 100); !errors.Is(err, achrix.ErrDenied) {
-		t.Fatal(err)
+	for _, cursor := range []string{"", base64.RawURLEncoding.EncodeToString([]byte("z"))} {
+		targets = nil
+		page, err := service.Inventory(context.Background(), "stranger", cursor, 100)
+		if !errors.Is(err, achrix.ErrDenied) || len(page.Sites) != 0 || page.NextCursor != "" || !slices.Equal(targets, []string{multisite.InventoryTarget}) {
+			t.Fatalf("collection denial bypassed for cursor %q: %+v %v targets=%v", cursor, page, err, targets)
+		}
 	}
-	if _, err := service.Inventory(context.Background(), "reader", "not canonical!", 1); !errors.Is(err, multisite.ErrInput) {
-		t.Fatal(err)
+	targets = nil
+	if _, err := service.Inventory(context.Background(), "reader", "private-cursor!", 1); !errors.Is(err, multisite.ErrInput) || !strings.Contains(err.Error(), "cursor") || strings.Contains(err.Error(), "private-cursor") || len(targets) != 0 {
+		t.Fatalf("invalid cursor lacks safe field guidance or called policy: %v targets=%v", err, targets)
 	}
 	for _, limit := range []int{0, 101} {
-		if _, err := service.Inventory(context.Background(), "reader", "", limit); !errors.Is(err, multisite.ErrInput) {
-			t.Fatal(err)
+		if _, err := service.Inventory(context.Background(), "reader", "", limit); !errors.Is(err, multisite.ErrInput) || !strings.Contains(err.Error(), "limit: choose 1..100") || len(targets) != 0 {
+			t.Fatalf("invalid limit lacks actionable bounds or called policy: %v targets=%v", err, targets)
 		}
+	}
+}
+
+func TestManagedInventoryCursorBoundariesAndSparseGrants(t *testing.T) {
+	base := multisite.Config{}
+	// Deliberately unsorted, with case-sensitive ordering and a routing-disabled
+	// site that remains readable when inventory permission permits it.
+	for i, id := range []multisite.SiteID{"f", "a", "B", "e", "c", "d"} {
+		base.Sites = append(base.Sites, multisite.Site{ID: id, Authorities: []string{fmt.Sprintf("site-%d.private.example", i)}, Disabled: id == "e"})
+	}
+	for _, tt := range []struct {
+		name, after string
+		limit       int
+		allowed     []string // nil permits all; an empty non-nil slice permits none.
+		want        []string
+		cursor      string
+		targets     []string
+	}{
+		{name: "first", limit: 2, want: []string{"B", "a"}, cursor: "a", targets: []string{"", "B", "a", "c"}},
+		{name: "before first", after: "A", limit: 1, want: []string{"B"}, cursor: "B", targets: []string{"", "B", "a"}},
+		{name: "equal first", after: "B", limit: 2, want: []string{"a", "c"}, cursor: "c", targets: []string{"", "a", "c", "d"}},
+		{name: "unknown between IDs", after: "b", limit: 2, want: []string{"c", "d"}, cursor: "d", targets: []string{"", "c", "d", "e"}},
+		{name: "middle", after: "c", limit: 2, want: []string{"d", "e"}, cursor: "e", targets: []string{"", "d", "e", "f"}},
+		{name: "final", after: "e", limit: 1, want: []string{"f"}, targets: []string{"", "f"}},
+		{name: "exhausted equal final", after: "f", limit: 1, targets: []string{""}},
+		{name: "exhausted past final", after: "z", limit: 1, targets: []string{""}},
+		{name: "sparse lookahead", limit: 1, allowed: []string{"a", "e"}, want: []string{"a"}, cursor: "a", targets: []string{"", "B", "a", "c", "d", "e"}},
+		{name: "sparse unknown cursor", after: "b", limit: 1, allowed: []string{"a", "e"}, want: []string{"e"}, targets: []string{"", "c", "d", "e", "f"}},
+		{name: "denied suffix", after: "a", limit: 1, allowed: []string{"a", "c"}, want: []string{"c"}, targets: []string{"", "c", "d", "e", "f"}},
+		{name: "all denied", limit: 1, allowed: []string{}, targets: []string{"", "B", "a", "c", "d", "e", "f"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var targets []string
+			app, _, service := managedService(t, base, multisite.ManagementConfig{}, achrix.PolicyFunc(func(ctx context.Context, actor achrix.Principal, capability, target string) error {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				targets = append(targets, target)
+				if actor != "reader" || capability != multisite.InventoryRead {
+					return achrix.ErrDenied
+				}
+				if target == multisite.InventoryTarget || tt.allowed == nil || slices.Contains(tt.allowed, target) {
+					return nil
+				}
+				return achrix.ErrDenied
+			}))
+			start(t, app)
+			cursor := base64.RawURLEncoding.EncodeToString([]byte(tt.after))
+			page, err := service.Inventory(context.Background(), "reader", cursor, tt.limit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var ids []string
+			for _, site := range page.Sites {
+				ids = append(ids, string(site.ID))
+			}
+			if !slices.Equal(ids, tt.want) || !slices.Equal(targets, tt.targets) {
+				t.Fatalf("page=%v want=%v; policy targets=%v want=%v", ids, tt.want, targets, tt.targets)
+			}
+			decoded, err := base64.RawURLEncoding.DecodeString(page.NextCursor)
+			if err != nil || string(decoded) != tt.cursor {
+				t.Fatalf("cursor must contain only the last returned authorized ID: %q %v, want %q", decoded, err, tt.cursor)
+			}
+			if strings.Contains(fmt.Sprint(page), "private.example") {
+				t.Fatal("page disclosed authority bindings")
+			}
+		})
 	}
 }
 
 func TestManagedReadFailureReturnsNoPartialPage(t *testing.T) {
 	base, settings := managedConfig()
-	app, _, service := managedService(t, base, settings, achrix.PolicyFunc(func(_ context.Context, _ achrix.Principal, _ string, target string) error {
+	module, err := multisite.NewManaged(base, settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyErr := errors.New("private policy failure")
+	type correlationKey struct{}
+	ctx := context.WithValue(context.Background(), correlationKey{}, "inventory-operation")
+	var diagnosticCount int
+	cfg := appConfig()
+	cfg.Diagnostic = func(ctx context.Context, operation, phase string, cause error) {
+		diagnosticCount++
+		if operation != "authorize" || phase != "policy" || !errors.Is(cause, policyErr) || ctx.Value(correlationKey{}) != "inventory-operation" {
+			t.Errorf("protected diagnosis lost cause, phase or correlation: %s %s %v", operation, phase, cause)
+		}
+	}
+	app, err := achrix.New(cfg, achrix.PolicyFunc(func(_ context.Context, _ achrix.Principal, _ string, target string) error {
 		if target == "b" {
-			return errors.New("private policy failure")
+			return policyErr
+		}
+		return nil
+	}), module)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := app.Shutdown(bounded(t)); err != nil {
+			t.Error(err)
+		}
+	})
+	service, err := multisite.NewService(app, module)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start(t, app)
+	// Limit 1 fails during permitted lookahead after filling the page; limit
+	// 100 fails while collecting it. Neither may become denial or partial success.
+	for _, limit := range []int{1, 100} {
+		diagnosticCount = 0
+		page, err := service.Inventory(ctx, "actor", "", limit)
+		if !errors.Is(err, achrix.ErrAuthorizationUnavailable) || errors.Is(err, achrix.ErrDenied) || errors.Is(err, policyErr) || len(page.Sites) != 0 || page.NextCursor != "" || strings.Contains(err.Error(), "private") {
+			t.Fatalf("limit %d: partial or unsafe failure: %+v %v", limit, page, err)
+		}
+		if diagnosticCount != 1 {
+			t.Fatalf("limit %d: protected diagnostic count = %d, want 1", limit, diagnosticCount)
+		}
+	}
+}
+
+func TestManagedInventoryCancellationDuringDeniedSuffix(t *testing.T) {
+	base, settings := managedConfig()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var targets []string
+	app, _, service := managedService(t, base, settings, achrix.PolicyFunc(func(_ context.Context, _ achrix.Principal, _ string, target string) error {
+		targets = append(targets, target)
+		if target == "b" {
+			cancel()
+			return achrix.ErrDenied
 		}
 		return nil
 	}))
 	start(t, app)
-	page, err := service.Inventory(context.Background(), "actor", "", 100)
-	if !errors.Is(err, achrix.ErrAuthorizationUnavailable) || len(page.Sites) != 0 || page.NextCursor != "" || strings.Contains(err.Error(), "private") {
-		t.Fatalf("partial or unsafe failure: %+v %v", page, err)
+	page, err := service.Inventory(ctx, "actor", "", 1)
+	if !errors.Is(err, context.Canceled) || len(page.Sites) != 0 || page.NextCursor != "" || !slices.Equal(targets, []string{"", "a", "b"}) {
+		t.Fatalf("cancellation lost or partial page returned: %+v %v targets=%v", page, err, targets)
+	}
+}
+
+func TestManagedInventoryDeadlineIncludesLookahead(t *testing.T) {
+	for _, earlier := range []bool{false, true} {
+		name := "default one second"
+		if earlier {
+			name = "earlier caller deadline"
+		}
+		t.Run(name, func(t *testing.T) {
+			base, settings := managedConfig()
+			var callerDeadline, operationDeadline time.Time
+			var targets []string
+			app, _, service := managedService(t, base, settings, achrix.PolicyFunc(func(ctx context.Context, _ achrix.Principal, _ string, target string) error {
+				targets = append(targets, target)
+				deadline, ok := ctx.Deadline()
+				if !ok || time.Until(deadline) > time.Second {
+					t.Error("inventory did not bound policy work to one second")
+					return errors.New("unbounded inventory policy context")
+				}
+				if target == multisite.InventoryTarget {
+					operationDeadline = deadline
+				}
+				if !deadline.Equal(operationDeadline) || earlier && !deadline.Equal(callerDeadline) {
+					t.Error("inventory restarted its budget or extended the caller deadline")
+				}
+				if target == "b" {
+					<-ctx.Done()
+					return achrix.ErrDenied
+				}
+				return nil
+			}))
+			start(t, app)
+			ctx := context.Background()
+			if earlier {
+				callerDeadline = time.Now().Add(250 * time.Millisecond)
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithDeadline(ctx, callerDeadline)
+				defer cancel()
+			}
+			page, err := service.Inventory(ctx, "actor", "", 1)
+			if !errors.Is(err, context.DeadlineExceeded) || len(page.Sites) != 0 || page.NextCursor != "" || !slices.Equal(targets, []string{"", "a", "b"}) {
+				t.Fatalf("deadline lost or partial page returned: %+v %v targets=%v", page, err, targets)
+			}
+		})
 	}
 }
 
@@ -217,6 +397,14 @@ func TestManagedConfigurationPlansAreDefensiveAndTargetOnly(t *testing.T) {
 	current.Modules[0] = "changed"
 	if again, _ := service.Site(context.Background(), "actor", "a"); again.Modules[0] == "changed" {
 		t.Fatal("SiteInfo mutable")
+	}
+	page, err := service.Inventory(context.Background(), "actor", "", 1)
+	if err != nil || len(page.Sites) != 1 || len(page.Sites[0].Modules) == 0 {
+		t.Fatalf("inventory copy setup: %+v %v", page, err)
+	}
+	page.Sites[0].Modules[0] = "changed"
+	if again, _ := service.Site(context.Background(), "actor", "a"); again.Modules[0] == "changed" {
+		t.Fatal("inventory shared its Module selection")
 	}
 }
 
@@ -435,7 +623,7 @@ func TestManagedGenerationRejectsABAAndOverflow(t *testing.T) {
 }
 
 func TestManagedReadAndPlanningLinearizeWithStop(t *testing.T) {
-	for _, operation := range []string{"inventory", "plan"} {
+	for _, operation := range []string{"inventory", "exhausted inventory", "plan"} {
 		t.Run(operation, func(t *testing.T) {
 			base, settings := managedConfig()
 			entered := make(chan struct{})
@@ -461,9 +649,13 @@ func TestManagedReadAndPlanningLinearizeWithStop(t *testing.T) {
 			block.Store(true)
 			result := make(chan error, 1)
 			go func() {
-				if operation == "inventory" {
-					page, err := service.Inventory(context.Background(), "operator", "", 1)
-					if len(page.Sites) > 0 {
+				if operation != "plan" {
+					cursor := ""
+					if operation == "exhausted inventory" {
+						cursor = base64.RawURLEncoding.EncodeToString([]byte("disabled"))
+					}
+					page, err := service.Inventory(context.Background(), "operator", cursor, 1)
+					if len(page.Sites) > 0 || page.NextCursor != "" {
 						result <- errors.New("stopped inventory leaked result")
 						return
 					}

@@ -98,11 +98,16 @@ The opaque cursor encodes only the last returned authorized SiteID, never a hidd
 inventory index or denied site's identity. Unknown valid cursor identities are
 ordering input, not access grants. Exact denials are omitted; policy-evaluation
 failure aborts the whole page with no partial result. An empty result may simply
-mean no permitted sites. Each call has one cooperative maximum one-second context,
-including all policy calls and scanning; products own total configured inventory
-and policy cost. The scan is linear in the remaining configured inventory and is
-not a constant-time side-channel defense. Invalid syntax/limit/cursor fails before
-policy, without sensitive lookup.
+mean no permitted sites. After collection authorization, a binary search over the
+immutable sorted IDs starts strictly after the cursor; exact-site authorization
+continues through the remaining suffix until one additional permitted site or
+exhaustion establishes whether another page exists. Denied sites never supply the
+cursor. This avoids revisiting earlier IDs, not the policy checks needed for sparse
+grants or a denied suffix. Each call has one cooperative maximum one-second
+context, including all policy calls and scanning; products own total configured
+inventory and policy cost. The suffix scan is linear in the remaining configured
+inventory and is not a constant-time side-channel defense. Invalid
+syntax/limit/cursor fails before policy, without sensitive lookup.
 
 All management results recheck Module admission before returning, including Stop
 during policy. Callers still drain complete domain work before Core shutdown.
