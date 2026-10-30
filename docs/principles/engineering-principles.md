@@ -23,6 +23,16 @@ Compare fit, integration effort, authorization/data ownership, failure behavior,
 - Introduce infrastructure or service extraction for actual correctness, failure isolation, security, resource, ownership or operating needs. Benchmarks of an isolated runtime are insufficient.
 - Replace maintained functionality when recurring limitations, security/compatibility, maintenance cost or measured bottlenecks outweigh bounded adaptation.
 
+## Human and programmatic access
+
+Design useful application capabilities for their relevant human and programmatic consumers together. Internal services, automation, external applications and AI clients may use the same supported HTTP API and MCP operations; programmatic access is not an AI-only add-on.
+
+For a new or materially changed capability with credible internal or external programmatic use, complete the applicable HTTP API and MCP support in the same meaningful delivery. State a concrete security, interaction or operational reason when a channel is inappropriate. An accepted incremental delivery may track unfinished channel work explicitly, but must not claim that coverage is complete. Close existing gaps through coherent outcomes rather than making unrelated changes repair every old adapter.
+
+Share the owning application behavior, current authorization, data invariants and effect semantics. Keep adapters thin and protocol-specific. Same-process callers may call the service directly; do not require an HTTP/MCP loopback, Gateway, model, separate daemon or background worker merely to share behavior. Optional adapters stay optional to compose and activate.
+
+[Contracts](../architecture/contracts-and-interfaces.md#internal-and-external-programmatic-coverage) owns the small coverage record, channel mappings and proof. [Security](../security/security-and-authorization.md#machineai-access) owns trusted identity and admission. Deliberate coverage never means automatic exposure of every exported method, private store, credential flow or host operation.
+
 ## Implementation craftsmanship
 
 Professional quality is a property of the code and behavior, not the presence of a framework, scanner or code generator.

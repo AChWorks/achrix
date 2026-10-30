@@ -16,6 +16,8 @@ Use AChrix when you want shared application capabilities that you can consume an
 | [Installation](installation/README.md) | Installation requirement assessment and safe re-entry planning |
 | [Bridge](bridge/README.md) | Optional MCP resource-server adapter for existing application operations and user permissions; products supply credential verification and connection admission |
 
+Components expose deliberate Go contracts and selected web/MCP adapters. HTTP API and MCP coverage for relevant internal and external consumers is part of [capability development](docs/architecture/contracts-and-interfaces.md#internal-and-external-programmatic-coverage); current coverage is documented by each component and its examples. This does not yet mean every component operation has a network endpoint or MCP binding.
+
 Supported failure paths preserve useful machine categories and corrective guidance. Runtime components provide structured local diagnostics, and products can compose a protected callback for the underlying operational cause; see [diagnosis and audit](docs/operations/operability-performance.md#diagnosis-and-audit) for access, correlation and retention responsibilities.
 
 The first supported stack is Go with ordinary PostgreSQL for the components that need persistence. See the [supported environment](docs/operations/operability-performance.md#supported-environment) before installing.

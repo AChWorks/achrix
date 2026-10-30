@@ -11,7 +11,7 @@ The document index, not a status report. Start from README/AGENTS and the releva
 | Core/application shape | [Architecture](architecture/overview.md) |
 | Module ownership, composition, provider variation and trust, including Search/Settings/Backup & Recovery placement | [Module model](architecture/module-model.md) |
 | Independent component consumption, extension and packaging | [Consumption](architecture/consumption-and-packaging.md), [module inventory](../modules.json), [ADR-0006](decisions/ADR-0006-independent-components-and-lifecycle.md) |
-| Application/public extension contracts, AI schemas and safe mutations | [Contracts](architecture/contracts-and-interfaces.md) |
+| Application/public extension contracts, internal/external HTTP API and MCP coverage, schemas and safe mutations | [Contracts](architecture/contracts-and-interfaces.md), [coverage and completion](architecture/contracts-and-interfaces.md#internal-and-external-programmatic-coverage) |
 | Optional MCP resource-server integration, current user authority and supported transport profile | [Bridge](../bridge/README.md), [Notes consumer proof](../fixtures/notes/README.md#optional-mcp-bridge); [Issue #5](https://github.com/AChWorks/achrix/issues/5) owns remaining OAuth/client/product integration evidence |
 | Data, consistency, time/money and privacy | [Data](data/data-and-persistence.md) |
 | Authorization, product accounts/SSO, AI access, secrets, abuse and vulnerability reporting | [Security](security/security-and-authorization.md); GitHub entry: [SECURITY](../SECURITY.md) |
