@@ -10,6 +10,45 @@ The optional [Bridge](../../bridge/README.md) binds deliberate typed operations 
 
 Only intentionally published interfaces are compatibility contracts: APIs/MCP, webhooks, durable messages, import/export formats, extension contracts and automation-stable CLI behavior. Internal methods are not automatically public.
 
+## Internal and external programmatic coverage
+
+A capability intended for a credible internal or external programmatic consumer should have supported HTTP API and MCP access alongside its ordinary application behavior. Assess operations and user outcomes, not exported Go symbols, screens or tables. Existing partial coverage remains explicit work; a generated schema, Go method or Admin form alone does not establish network support.
+
+| Consumer | Supported route |
+| --- | --- |
+| Code in the same process, including jobs or another Module | Direct typed owning service with its normal principal, authorization and invariants |
+| Another internal service, script or ordinary external application | Explicit authenticated HTTP API, or MCP when its discovery/invocation model fits |
+| Direct AI client, Gateway-mediated AI or a Gateway human operation | Deliberate MCP/HTTP binding to the same owning operation; Gateway/model use is optional |
+| Product browser/UI | The product's presentation route to that service, including HTTP when useful |
+
+An internal network is not an authority boundary. Protected cross-process calls still need verified identity, resource/site binding and current policy. Public reads are public only under a deliberate product data/publication contract. [Security](../security/security-and-authorization.md#machineai-access) distinguishes user delegation from a genuine unattended workload.
+
+### Coverage and ownership
+
+For each new or materially changed eligible capability, the owning component contract/README and PR identify the intended consumer, typed operation, applicable HTTP method/path and MCP tool/resource mapping, and evidence for the supported paths. Use the existing documentation owner; a small operation table is enough when several paths need comparison. Do not add a global runtime registry or a second catalog of mutable implementation status.
+
+Applicable adapters normally ship with the capability. A channel may be deliberately inapplicable for a documented reason, such as a secure login ceremony, a local composition primitive or a maintenance action lacking an authorized remote operator profile. A bounded accepted delivery may defer a channel only with a concrete reason, owning follow-up and honest incomplete coverage. Historical gaps do not force every unrelated PR to expand scope. Demand-gated Modules still require their real consumer/fields/workflow before implementation.
+
+Reusable component operations and their adapters remain AChrix-owned; product-specific commands and policy stay product-owned. Keep the semantic owner distinct from packaging: choose optional adapter packages or an earned companion distribution so an MCP SDK does not become mandatory in Core or unrelated domain consumers. Do not create a Module per route/tool or a universal dispatcher to avoid a few explicit bindings.
+
+### Equivalent behavior, deliberate transport
+
+HTTP and MCP are normally sibling adapters calling the same typed service. A remote connector may adapt an existing HTTP service when the deployment boundary warrants it; an in-process MCP handler need not call its own HTTP server. Do not require UI calls to traverse MCP.
+
+Share useful component-owned input/result types, stable field meanings and compatible schema fragments. Publish an OpenAPI description for a supported programmatic HTTP surface and use the maintained MCP SDK's schemas/metadata for MCP. Select a schema/specification version supported by the actual validators and consumers. Generation is useful only when it reduces demonstrated drift; it does not replace explicit exposure, domain validation or authorization.
+
+Coverage means equivalent supported outcomes, not one tool per endpoint or identical wire payloads. Keep HTTP methods/statuses/headers, binary or multipart transfer and cache behavior in the HTTP adapter; keep MCP tool descriptions, effect hints and supported result forms in its adapter. For Media, a bounded upload/download path and an authorized reference may be more appropriate than large base64 tool payloads. References have an explicit access/lifetime contract and do not make private assets public. Do not claim MCP resources, subscriptions or transfer profiles that the composed adapter does not implement.
+
+Discovery reveals only intentionally publishable metadata and must preserve resource/user/site confidentiality. Recheck execution authority regardless of earlier discovery. Tool annotations and schemas are descriptive, never permission or replay guarantees. Business pagination and filtering remain the owning service's bounded contract, distinct from protocol catalog pagination.
+
+### Completion evidence
+
+Prove applicable paths use the same ordinary operation and current policy, including allowed/denied users and resources, changed permissions, narrower channel admission, equivalent invalid input and stale preconditions. Fix a missing or unsafe domain operation at its owning service rather than recreating it in a transport.
+
+Mutation coverage also proves known non-execution, confirmed effects, uncertainty after dispatch and authorized reconciliation where supported; preserve useful errors and protected causes through serialization/delivery failure. Keep trusted actor/client/channel/request/operation attribution available under [Operations](../operations/operability-performance.md#diagnosis-and-audit), and preserve it in required durable Audit rather than treating diagnostic logs as accountability evidence.
+
+Check schema/example consistency, bounded collection/input/output/concurrency behavior and idle composition cost. Record only executed profiles: unit/resource-server tests, an ordinary browser pass and real OAuth/client interoperability prove different things. Existing [errors and effects](#errors-concurrency-and-effects), [pagination](#collection-contracts-and-pagination) and [evolution](#evolution) rules apply to every supported channel.
+
 ## Identity, metadata and extension surface
 
 Use stable semantic capability IDs, for example `notifications.send` when behavior is provider-independent. Provider-specific semantics may have distinct IDs. Separate protocol/module identity from mutable display branding; qualify by an owning namespace when collisions matter. Third parties may publish their own identities and truthfully implement shared contracts. Do not hardcode branding into business rules or build a namespace registry before it is needed.
