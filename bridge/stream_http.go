@@ -16,8 +16,10 @@ import (
 // current admission, operation gates and owning Service authorization are the
 // same as NewJSONHTTP. Construction starts no sessions or background work.
 //
-// The server/middleware must support socket read/write deadlines and flushing;
-// otherwise requests fail before dispatch. Limits bound total body bytes,
+// The server/middleware must support actual socket read and write deadlines;
+// otherwise requests fail before dispatch. Flushing is also required for
+// successful file delivery; an unavailable or failed final flush preserves the
+// known invocation outcome and is reported as a delivery failure. Limits bound total body bytes,
 // response bytes, request duration and concurrency, not a whole-file buffer.
 // Products must choose limits suitable for their file profile. This constructor
 // adds no multipart parser, range support, public cache, SSE or URL fetcher.
