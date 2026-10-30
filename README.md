@@ -15,6 +15,8 @@ Use AChrix when you want shared application capabilities that you can consume an
 | [Admin](admin/README.md) | A composable administration shell with Identity and Media screens, including file-based English/Persian localization and RTL/LTR presentation |
 | [Installation](installation/README.md) | Installation requirement assessment and safe re-entry planning |
 
+Supported failure paths preserve useful machine categories and corrective guidance. Runtime components provide structured local diagnostics, and products can compose a protected callback for the underlying operational cause; see [diagnosis and audit](docs/operations/operability-performance.md#diagnosis-and-audit) for access, correlation and retention responsibilities.
+
 The first supported stack is Go with ordinary PostgreSQL for the components that need persistence. See the [supported environment](docs/operations/operability-performance.md#supported-environment) before installing.
 
 ## Get started
