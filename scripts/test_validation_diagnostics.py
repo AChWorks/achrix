@@ -10,10 +10,87 @@ import sys
 import tempfile
 import unittest
 
-from validation_diagnostics import LIMIT, capture
+from validation_diagnostics import FIXTURE_FAILURES, LIMIT, capture
 
 
 class FailureEvidenceTests(unittest.TestCase):
+    def test_distinct_owned_fixture_failures_remain_actionable_without_raw_log_injection(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            source = parent / "source"
+            source.mkdir(mode=0o700)
+            failures = [
+                {"test": "TestAdminBrowserFixture", "file": "admin_localization_test.go", "line": 121,
+                 "reason": "real surface did not use installed locale direction", "errno": 5,
+                 "error_type": "*fmt.wrapError"},
+                {"test": "TestAdminBrowserFixture", "file": "admin_localization_test.go", "line": 144,
+                 "reason": "safe browser catalog missing: identity", "sqlstate": "42501",
+                 "error_type": "*pgconn.PgError"},
+            ]
+            (source / "browser-failures.jsonl").write_text("".join(json.dumps(f) + "\n" for f in failures))
+            injected = dict(failures[0], reason="PRIVATE_RAW_INJECTION")
+            (source / "fixture.log").write_text(json.dumps(injected) + "\nPRIVATE_PASSWORD\n")
+            target, report = capture(source, "browser_fixture", 7, 103, parent / "evidence")
+            summary = (target / "support.json").read_text()
+            self.assertEqual(report["fixture_failures"], failures)
+            self.assertFalse(report["fixture_failures_truncated"])
+            self.assertEqual(report["fixture_failure_records_rejected"], 0)
+            self.assertNotIn("PRIVATE_", summary)
+            self.assertIn("PRIVATE_RAW_INJECTION", (target / "fixture.log.private").read_text())
+
+    def test_fixture_projection_is_bounded_and_rejects_malformed_partial_or_symlink_input(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            source = parent / "source"
+            source.mkdir(mode=0o700)
+            path = source / "browser-failures.jsonl"
+            good = {"test": "TestAdminBrowserFixture", "file": "admin_test.go", "line": 10, "reason": "fixture startup failed"}
+            malformed = [{}, dict(good, line=True), dict(good, sqlstate="PRIVATE_SQL"),
+                         dict(good, context="PRIVATE_CONTEXT"), dict(good, extra="PRIVATE_EXTRA")]
+            path.write_text("".join(json.dumps(f) + "\n" for f in malformed) + json.dumps(good) + "\n{" )
+            _, report = capture(source, "browser_fixture", 1, 1, parent / "partial")
+            self.assertEqual(report["fixture_failures"], [good])
+            self.assertEqual(report["fixture_failure_records_rejected"], len(malformed) + 1)
+            self.assertTrue(report["fixture_failures_truncated"])
+            path.write_text((json.dumps(good) + "\n") * (FIXTURE_FAILURES + 5))
+            _, report = capture(source, "browser_fixture", 1, 1, parent / "count")
+            self.assertEqual(len(report["fixture_failures"]), FIXTURE_FAILURES)
+            self.assertTrue(report["fixture_failures_truncated"])
+            path.write_bytes(b" " * (LIMIT + 1))
+            _, report = capture(source, "browser_fixture", 1, 1, parent / "bytes")
+            self.assertTrue(report["fixture_failures_truncated"])
+            self.assertEqual(report["fixture_failure_records_rejected"], 1)
+            path.unlink()
+            path.symlink_to(parent / "partial/support.json")
+            with self.assertRaises(OSError):
+                capture(source, "browser_fixture", 1, 1, parent / "symlink")
+
+    def test_cli_retains_actionable_summary_without_exporting_private_causes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            source = parent / "source"
+            source.mkdir(mode=0o700)
+            (source / "fixture.log").write_text("fixture assertion failed PRIVATE_INPUT\n")
+            (source / "postgres.log").write_text("ERROR: PRIVATE_SQL permission failure\n")
+            command = Path(__file__).with_name("validation_diagnostics.py")
+            result = subprocess.run([sys.executable, str(command), str(source), "browser_fixture", "7", "103"],
+                                    env=dict(os.environ, TMPDIR=str(parent)), text=True,
+                                    capture_output=True, timeout=5, check=True)
+            self.assertIn("stage=browser_fixture line=103 exit=7", result.stdout)
+            summary = next(line.removeprefix("Support summary: ") for line in result.stdout.splitlines()
+                           if line.startswith("Support summary: "))
+            report = json.loads(summary)
+            self.assertEqual((report["stage"], report["exit_code"], report["line"]), ("browser_fixture", 7, 103))
+            self.assertEqual({log["file"] for log in report["logs"]}, {"fixture.log.private", "postgres.log.private"})
+            self.assertEqual(report["logs"][0]["severity_counts"]["ERROR"], 1)
+            for log in report["logs"]:
+                self.assertGreater(log["bytes_retained"], 0)
+                self.assertRegex(log["sha256"], r"^[0-9a-f]{64}$")
+            self.assertNotIn("PRIVATE_", result.stdout + result.stderr)
+            evidence = next(parent.glob("achrix-validation-evidence-*"))
+            self.assertIn("PRIVATE_INPUT", (evidence / "fixture.log.private").read_text())
+            self.assertIn("permission failure", (evidence / "postgres.log.private").read_text())
+
     def test_private_cause_and_safe_support_summary_survive_cleanup(self):
         with tempfile.TemporaryDirectory() as temporary:
             parent = Path(temporary)

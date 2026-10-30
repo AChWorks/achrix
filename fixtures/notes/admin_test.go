@@ -177,12 +177,12 @@ func TestAdminBrowserFixture(t *testing.T) {
 	root := os.Getenv("NOTES_ADMIN_BROWSER_ROOT")
 	info, err := os.Lstat(root)
 	if err != nil || !filepath.IsAbs(root) || !info.IsDir() || info.Mode().Perm() != 0700 || info.Mode()&os.ModeSymlink != 0 {
-		t.Fatal("private browser fixture directory required")
+		browserFixtureFatal(t, "private browser fixture directory required")
 	}
 	dsn := os.Getenv("NOTES_ADMIN_TEST_DSN")
 	c, err := pgxpool.ParseConfig(dsn)
 	if err != nil || dsn == "" || c.ConnConfig.Database != "achrix_admin_test" || c.ConnConfig.Host != filepath.Join(root, "socket") || len(c.ConnConfig.Fallbacks) != 0 {
-		t.Fatal("owned Unix-socket achrix_admin_test database required")
+		browserFixtureFatal(t, "owned Unix-socket achrix_admin_test database required")
 	}
 	c.MaxConns = 2
 	c.ConnConfig.ConnectTimeout = time.Second
@@ -190,77 +190,78 @@ func TestAdminBrowserFixture(t *testing.T) {
 	defer cancel()
 	pool, err := pgxpool.NewWithConfig(ctx, c)
 	if err != nil {
-		t.Fatal("browser fixture database unavailable")
+		browserFixtureFatal(t, "browser fixture database unavailable", err)
 	}
 	defer pool.Close()
 	var actual, encoding string
 	if err = pool.QueryRow(ctx, "SELECT current_database(),current_setting('server_encoding')").Scan(&actual, &encoding); err != nil || actual != "achrix_admin_test" || encoding != "UTF8" {
-		t.Fatal("browser fixture database identity mismatch")
+		browserFixtureFatal(t, "browser fixture database identity mismatch", err)
 	}
 	if _, err = pool.Exec(ctx, "DROP SCHEMA IF EXISTS identity CASCADE; DROP SCHEMA IF EXISTS audit CASCADE; DROP SCHEMA IF EXISTS media CASCADE"); err != nil {
-		t.Fatal("owned fixture schema reset failed")
+		browserFixtureFatal(t, "owned fixture schema reset failed", err)
 	}
-	for _, migrate := range []func(context.Context, string) error{audit.Migrate, identity.Migrate, media.Migrate} {
+	for index, migrate := range []func(context.Context, string) error{audit.Migrate, identity.Migrate, media.Migrate} {
 		if err = migrate(ctx, dsn); err != nil {
-			t.Fatal(err)
+			browserFixtureFatal(t, []string{"Audit schema migration failed", "Identity schema migration failed", "Media schema migration failed"}[index], err)
 		}
 	}
 	assets := filepath.Join(root, "assets")
 	if err = os.Mkdir(assets, 0700); err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "create private asset directory failed", err)
 	}
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	am, err := audit.NewPostgres(dsn, audit.Config{}, logger)
 	if err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "construct Audit store failed", err)
 	}
 	im, err := identity.NewPostgres(dsn, identity.Config{}, logger)
 	if err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "construct Identity store failed", err)
 	}
 	mm, err := media.NewPostgres(dsn, media.Config{StorageRoot: assets, AllowedMIMEs: append(media.CommonMIMEs(), "image/svg+xml")}, logger)
 	if err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "construct Media store failed", err)
 	}
 	policy := &adminBrowserPolicy{}
 	policy.administrator.Store("")
 	policy.viewer.Store("")
 	app, err := achrix.New(achrix.Config{StartupTimeout: 5 * time.Second, ShutdownTimeout: 3 * time.Second, Logger: logger}, policy, im, am, mm)
 	if err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "compose fixture Application failed", err)
 	}
 	if err = app.Start(ctx); err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "start fixture Application failed", err)
 	}
 	t.Cleanup(func() {
 		if err := app.Shutdown(context.Background()); err != nil {
+			emitBrowserFixtureFailure(t, "shutdown fixture Application failed", 1, err)
 			t.Error(err)
 		}
 	})
 	as, err := audit.NewService(app, am)
 	if err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "construct Audit service failed", err)
 	}
 	ids, err := identity.NewService(app, im, as)
 	if err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "construct Identity service failed", err)
 	}
 	ms, err := media.NewService(app, mm)
 	if err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "construct Media service failed", err)
 	}
 	account, err := ids.CreateAccount(ctx, adminBrowserBootstrap, adminBrowserLogin, adminBrowserPassword)
 	if err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "create administrator account failed", err)
 	}
 	policy.administrator.Store(account.ID)
 	account, err = ids.CreateAccount(ctx, adminBrowserBootstrap, adminBrowserViewerLogin, adminBrowserPassword)
 	if err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "create viewer account failed", err)
 	}
 	policy.viewer.Store(account.ID)
 	if _, err = ids.CreateAccount(ctx, adminBrowserBootstrap, adminBrowserDeniedLogin, adminBrowserPassword); err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "create denied account failed", err)
 	}
 	metadata := adminBrowserMetadata{Login: adminBrowserLogin, Password: adminBrowserPassword, DeniedLogin: adminBrowserDeniedLogin, ViewerLogin: adminBrowserViewerLogin}
 	image := image.NewNRGBA(image.Rect(0, 0, 2, 1))
@@ -268,10 +269,10 @@ func TestAdminBrowserFixture(t *testing.T) {
 	image.SetNRGBA(1, 0, color.NRGBA{R: 194, G: 117, B: 23, A: 255})
 	var pngData, jpegData bytes.Buffer
 	if err = png.Encode(&pngData, image); err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "encode synthetic PNG failed", err)
 	}
 	if err = jpeg.Encode(&jpegData, image, &jpeg.Options{Quality: 80}); err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "encode synthetic JPEG failed", err)
 	}
 	metadata.Images = adminBrowserImages{base64.StdEncoding.EncodeToString(pngData.Bytes()), base64.StdEncoding.EncodeToString(jpegData.Bytes())}
 	metadata.Files = make(map[string]string)
@@ -285,23 +286,23 @@ func TestAdminBrowserFixture(t *testing.T) {
 		origin := "https://" + server.Listener.Addr().String()
 		web, err := identity.NewWeb(ids, origin)
 		if err != nil {
-			t.Fatal(err)
+			browserFixtureFatal(t, "construct Identity Web failed", err)
 		}
 		auth, err := identityadmin.Authenticator(web)
 		if err != nil {
-			t.Fatal(err)
+			browserFixtureFatal(t, "construct Identity authenticator failed", err)
 		}
 		is, err := identityadmin.New(ids)
 		if err != nil {
-			t.Fatal(err)
+			browserFixtureFatal(t, "construct Identity Admin surface failed", err)
 		}
 		mss, err := mediaadmin.New(ms)
 		if err != nil {
-			t.Fatal(err)
+			browserFixtureFatal(t, "construct Media Admin surface failed", err)
 		}
 		shell, err := admin.New(admin.Config{Origin: origin, AuthPath: "/auth", Language: language, Logger: logger}, auth, app, is, mss)
 		if err != nil {
-			t.Fatal(err)
+			browserFixtureFatal(t, "construct Admin shell failed", err)
 		}
 		t.Cleanup(shell.FlushDiagnostics)
 		mux := http.NewServeMux()
@@ -317,18 +318,18 @@ func TestAdminBrowserFixture(t *testing.T) {
 		metadata.Endpoints = append(metadata.Endpoints, adminBrowserEndpoint{language, server.URL, base64.StdEncoding.EncodeToString(fingerprint[:])})
 	}
 	if err = os.WriteFile(filepath.Join(root, "fixture-ca.pem"), certificates, 0600); err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "write fixture certificate failed", err)
 	}
 	data, err := json.Marshal(metadata)
 	if err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "encode fixture control metadata failed", err)
 	}
 	path := filepath.Join(root, "fixture.json")
 	if err = os.WriteFile(path+".pending", data, 0600); err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "write fixture control metadata failed", err)
 	}
 	if err = os.Rename(path+".pending", path); err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "publish fixture control metadata failed", err)
 	}
 	timer := time.NewTimer(180 * time.Second)
 	defer timer.Stop()
@@ -338,33 +339,33 @@ func TestAdminBrowserFixture(t *testing.T) {
 	for {
 		select {
 		case <-timer.C:
-			t.Fatal("browser fixture deadline exceeded")
+			browserFixtureFatal(t, "browser fixture deadline exceeded")
 		case <-ticker.C:
 			if command, err := os.ReadFile(filepath.Join(root, "probe.json")); err == nil {
 				var request struct {
 					ID int `json:"id"`
 				}
 				if err = json.Unmarshal(command, &request); err != nil || request.ID < 1 || request.ID > 100 {
-					t.Fatal("invalid private probe command")
+					browserFixtureFatal(t, "invalid private probe command")
 				}
 				if request.ID > lastProbe {
 					if _, err = adminBrowserSnapshot(pool, root, assets, request.ID); err != nil {
-						t.Fatal("private durable-state probe failed", err)
+						browserFixtureFatal(t, "private durable-state probe failed", err)
 					}
 					lastProbe = request.ID
 				}
 			} else if !os.IsNotExist(err) {
-				t.Fatal(err)
+				browserFixtureFatal(t, "read private probe command failed", err)
 			}
 			result, err := os.ReadFile(filepath.Join(root, "done"))
 			if os.IsNotExist(err) {
 				continue
 			}
 			if err != nil {
-				t.Fatal(err)
+				browserFixtureFatal(t, "read browser completion result failed", err)
 			}
 			if strings.TrimSpace(string(result)) != "PASS" {
-				t.Fatal("browser proof did not pass")
+				browserFixtureFatal(t, "browser proof did not pass")
 			}
 			t.Log("real HTTPS Identity/Media/Admin browser fixture completed")
 			return

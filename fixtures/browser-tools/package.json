@@ -1,0 +1,9 @@
+{
+  "name": "achrix-browser-validation",
+  "private": true,
+  "license": "MPL-2.0",
+  "description": "Test-only tools for the existing isolated HTTPS browser proof",
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}

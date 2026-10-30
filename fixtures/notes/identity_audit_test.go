@@ -259,7 +259,7 @@ func identityRequest(t *testing.T, server *httptest.Server, method, path, origin
 	t.Helper()
 	r, err := http.NewRequest(method, server.URL+path, strings.NewReader(body))
 	if err != nil {
-		t.Fatal("fixture request construction failed")
+		browserFixtureFatal(t, "fixture request construction failed", err)
 	}
 	r.Header.Set("Origin", origin)
 	r.Header.Set("X-Identity-Request", "1")
@@ -274,12 +274,12 @@ func identityRequest(t *testing.T, server *httptest.Server, method, path, origin
 	client.Timeout = 6 * time.Second
 	response, err := client.Do(r)
 	if err != nil {
-		t.Fatal("fixture HTTPS request failed")
+		browserFixtureFatal(t, "fixture HTTPS request failed", err)
 	}
 	defer response.Body.Close()
 	b, err := io.ReadAll(io.LimitReader(response.Body, 4097))
 	if err != nil || len(b) > 4096 {
-		t.Fatal("fixture response bound failed")
+		browserFixtureFatal(t, "fixture response bound failed", err)
 	}
 	return identityHTTPResult{response.StatusCode, response.Header.Clone(), response.Cookies(), b}
 }
@@ -330,18 +330,18 @@ func fixtureIncompleteLoginDeadline(t *testing.T, server *httptest.Server, origi
 func fixtureSession(t *testing.T, result identityHTTPResult, principal achrix.Principal) (*http.Cookie, string) {
 	t.Helper()
 	if result.status != http.StatusOK || result.headers.Get("Cache-Control") != "no-store" || result.headers.Get("X-Content-Type-Options") != "nosniff" {
-		t.Fatal("unexpected authenticated session response", result.status)
+		browserFixtureFatal(t, fmt.Sprintf("unexpected authenticated session response (HTTP %d)", result.status))
 	}
 	if len(result.cookies) != 1 {
-		t.Fatal("expected one session cookie")
+		browserFixtureFatal(t, "expected one session cookie")
 	}
 	cookie := result.cookies[0]
 	if cookie.Name != identity.CookieName || cookie.Path != "/" || cookie.Domain != "" || !cookie.Secure || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode || cookie.MaxAge != 0 || !cookie.Expires.IsZero() || len(cookie.Value) != 43 {
-		t.Fatal("session cookie scope differs from the explicit browser contract")
+		browserFixtureFatal(t, "session cookie scope differs from the explicit browser contract")
 	}
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(result.body, &fields) != nil || len(fields) != 3 {
-		t.Fatal("session JSON contract differs")
+		browserFixtureFatal(t, "session JSON contract differs")
 	}
 	var got struct {
 		Principal achrix.Principal `json:"principal"`
@@ -349,15 +349,15 @@ func fixtureSession(t *testing.T, result identityHTTPResult, principal achrix.Pr
 		ExpiresAt time.Time        `json:"expires_at"`
 	}
 	if json.Unmarshal(result.body, &got) != nil || got.Principal != principal || len(got.CSRF) != 43 || !got.ExpiresAt.After(time.Now()) || got.ExpiresAt.After(time.Now().Add(24*time.Hour)) {
-		t.Fatal("invalid public session fields")
+		browserFixtureFatal(t, "invalid public session fields")
 	}
 	for _, required := range []string{"principal", "csrf", "expires_at"} {
 		if _, ok := fields[required]; !ok {
-			t.Fatal("missing public session field")
+			browserFixtureFatal(t, "missing public session field")
 		}
 	}
 	if strings.Contains(string(result.body), cookie.Value) {
-		t.Fatal("session bearer entered JSON")
+		browserFixtureFatal(t, "session bearer entered JSON")
 	}
 	return cookie, got.CSRF
 }
