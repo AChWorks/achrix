@@ -95,7 +95,7 @@ jobs:
         run: |
           test "$(node --version)" = v24.21.0
           mkdir "$RUNNER_TEMP/achrix-browser-tools"
-          cp scripts/browser-tools/package.json scripts/browser-tools/package-lock.json "$RUNNER_TEMP/achrix-browser-tools/"
+          cp fixtures/browser-tools/package.json fixtures/browser-tools/package-lock.json "$RUNNER_TEMP/achrix-browser-tools/"
           npm ci --prefix "$RUNNER_TEMP/achrix-browser-tools" --ignore-scripts --no-audit --no-fund --fetch-retries=2 --fetch-timeout=60000
           node "$RUNNER_TEMP/achrix-browser-tools/node_modules/playwright/cli.js" install --with-deps chromium
       - name: Run the existing HTTPS browser proof
@@ -130,7 +130,7 @@ jobs:
             printf '| Backend scope / result | %s / %s |\n' "$SELECTED_SCOPE" "$BACKEND_RESULT"
             printf '| Browser selected / setup / result | %s / %s / %s |\n' "$BROWSER_SELECTED" "$BROWSER_SETUP_RESULT" "$BROWSER_RESULT"
             printf '| HTTPS proof seconds | %s |\n' "$BROWSER_SECONDS"
-            printf '\nPR validation uses the effective merge checkout; its source head is recorded separately. Skipped steps claim no executed proof. Failure logs retain the safe stage/exit/support summary. Raw private fixture/database logs are not automatically exported and expire with the hosted runner; use the documented persistent-host command when protected cause inspection is needed.\n'
+            printf '\nPR validation uses the effective merge checkout; its source head is recorded separately. Skipped steps claim no executed proof. Failure logs retain the safe stage/exit/support summary, including source-owned fixture test/location/reason and typed cause fields. Raw private fixture/database logs are not automatically exported and expire with the hosted runner; use the documented persistent-host command when protected cause inspection is needed.\n'
           } >> "$GITHUB_STEP_SUMMARY"
       # Publish only after successful full validation of trusted integrated main.
       # PRs can consume main's cache or build cold; they never publish it here.

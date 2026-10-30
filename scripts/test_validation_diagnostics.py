@@ -10,10 +10,61 @@ import sys
 import tempfile
 import unittest
 
-from validation_diagnostics import LIMIT, capture
+from validation_diagnostics import FIXTURE_FAILURES, LIMIT, capture
 
 
 class FailureEvidenceTests(unittest.TestCase):
+    def test_distinct_owned_fixture_failures_remain_actionable_without_raw_log_injection(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            source = parent / "source"
+            source.mkdir(mode=0o700)
+            failures = [
+                {"test": "TestAdminBrowserFixture", "file": "admin_localization_test.go", "line": 121,
+                 "reason": "real surface did not use installed locale direction", "errno": 5,
+                 "error_type": "*fmt.wrapError"},
+                {"test": "TestAdminBrowserFixture", "file": "admin_localization_test.go", "line": 144,
+                 "reason": "safe browser catalog missing: identity", "sqlstate": "42501",
+                 "error_type": "*pgconn.PgError"},
+            ]
+            (source / "browser-failures.jsonl").write_text("".join(json.dumps(f) + "\n" for f in failures))
+            injected = dict(failures[0], reason="PRIVATE_RAW_INJECTION")
+            (source / "fixture.log").write_text(json.dumps(injected) + "\nPRIVATE_PASSWORD\n")
+            target, report = capture(source, "browser_fixture", 7, 103, parent / "evidence")
+            summary = (target / "support.json").read_text()
+            self.assertEqual(report["fixture_failures"], failures)
+            self.assertFalse(report["fixture_failures_truncated"])
+            self.assertEqual(report["fixture_failure_records_rejected"], 0)
+            self.assertNotIn("PRIVATE_", summary)
+            self.assertIn("PRIVATE_RAW_INJECTION", (target / "fixture.log.private").read_text())
+
+    def test_fixture_projection_is_bounded_and_rejects_malformed_partial_or_symlink_input(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            source = parent / "source"
+            source.mkdir(mode=0o700)
+            path = source / "browser-failures.jsonl"
+            good = {"test": "TestAdminBrowserFixture", "file": "admin_test.go", "line": 10, "reason": "fixture startup failed"}
+            malformed = [{}, dict(good, line=True), dict(good, sqlstate="PRIVATE_SQL"),
+                         dict(good, context="PRIVATE_CONTEXT"), dict(good, extra="PRIVATE_EXTRA")]
+            path.write_text("".join(json.dumps(f) + "\n" for f in malformed) + json.dumps(good) + "\n{" )
+            _, report = capture(source, "browser_fixture", 1, 1, parent / "partial")
+            self.assertEqual(report["fixture_failures"], [good])
+            self.assertEqual(report["fixture_failure_records_rejected"], len(malformed) + 1)
+            self.assertTrue(report["fixture_failures_truncated"])
+            path.write_text((json.dumps(good) + "\n") * (FIXTURE_FAILURES + 5))
+            _, report = capture(source, "browser_fixture", 1, 1, parent / "count")
+            self.assertEqual(len(report["fixture_failures"]), FIXTURE_FAILURES)
+            self.assertTrue(report["fixture_failures_truncated"])
+            path.write_bytes(b" " * (LIMIT + 1))
+            _, report = capture(source, "browser_fixture", 1, 1, parent / "bytes")
+            self.assertTrue(report["fixture_failures_truncated"])
+            self.assertEqual(report["fixture_failure_records_rejected"], 1)
+            path.unlink()
+            path.symlink_to(parent / "partial/support.json")
+            with self.assertRaises(OSError):
+                capture(source, "browser_fixture", 1, 1, parent / "symlink")
+
     def test_cli_retains_actionable_summary_without_exporting_private_causes(self):
         with tempfile.TemporaryDirectory() as temporary:
             parent = Path(temporary)

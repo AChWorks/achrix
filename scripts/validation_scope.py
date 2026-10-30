@@ -19,8 +19,8 @@ ROUTING = {
     "scripts/setup-validation-postgres.sh", "scripts/setup-quality-tools.sh",
     "scripts/check-gofmt.sh", "scripts/test_go_quality.py",
     "scripts/modules.py", "scripts/verify_consumer.py", "scripts/test_module_packaging.py",
-    "scripts/admin_browser.cjs", "scripts/browser-tools/package.json",
-    "scripts/browser-tools/package-lock.json",
+    "scripts/admin_browser.cjs", "fixtures/browser-tools/package.json",
+    "fixtures/browser-tools/package-lock.json",
     "modules.json",
 }
 # These existing sources do not participate in the browser composition. Keep

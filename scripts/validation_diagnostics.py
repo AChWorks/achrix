@@ -17,6 +17,53 @@ import tempfile
 
 LIMIT = 65536
 LOGS = ("postgres.log", "fixture.log")
+FIXTURE_FAILURES = 32
+
+
+def fixture_failures(root):
+    """Read only the fixture-owned safe channel, never records inside raw logs."""
+    source = root / "browser-failures.jsonl"
+    if not source.exists():
+        return [], False, 0
+    fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, "rb") as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError("regular fixture failure projection required")
+        data = stream.read(LIMIT)
+    records, rejected = [], 0
+    truncated = info.st_size > LIMIT or (bool(data) and not data.endswith(b"\n"))
+    for line in data.splitlines():
+        if len(records) >= FIXTURE_FAILURES:
+            truncated = True
+            break
+        try:
+            value = json.loads(line)
+            if not isinstance(value, dict) or set(value) - {
+                "test", "file", "line", "reason", "error_type", "sqlstate", "errno", "context"
+            }:
+                raise ValueError("unexpected fixture field")
+            if not re.fullmatch(r"Test[A-Za-z0-9_/-]{1,127}", value.get("test", "")):
+                raise ValueError("invalid fixture test")
+            if not re.fullmatch(r"[a-z0-9_]{1,100}_test\.go", value.get("file", "")):
+                raise ValueError("invalid fixture source")
+            if type(value.get("line")) is not int or not 1 <= value["line"] <= 1000000:
+                raise ValueError("invalid fixture line")
+            reason = value.get("reason")
+            if not isinstance(reason, str) or not 1 <= len(reason) <= 256 or any(ord(c) < 32 for c in reason):
+                raise ValueError("invalid source-owned reason")
+            if "error_type" in value and not re.fullmatch(r"[A-Za-z0-9_.*\[\]/]{1,128}", value["error_type"]):
+                raise ValueError("invalid fixture error type")
+            if "sqlstate" in value and not re.fullmatch(r"[A-Z0-9]{5}", value["sqlstate"]):
+                raise ValueError("invalid fixture SQLSTATE")
+            if "errno" in value and (type(value["errno"]) is not int or not 1 <= value["errno"] <= 4095):
+                raise ValueError("invalid fixture errno")
+            if "context" in value and value["context"] not in {"deadline_exceeded", "cancelled"}:
+                raise ValueError("invalid fixture context result")
+            records.append(value)
+        except (ValueError, TypeError):
+            rejected += 1
+    return records, truncated, rejected
 
 
 def capture(root, stage, exit_code, line, destination=None):
@@ -30,6 +77,10 @@ def capture(root, stage, exit_code, line, destination=None):
         target.mkdir(mode=0o700)
     os.chmod(target, 0o700)
     report = {"stage": stage, "exit_code": int(exit_code), "line": int(line), "logs": []}
+    failures, truncated, rejected = fixture_failures(root)
+    if failures or truncated or rejected:
+        report.update(fixture_failures=failures, fixture_failures_truncated=truncated,
+                      fixture_failure_records_rejected=rejected)
     for name in LOGS:
         source = root / name
         if not source.exists():

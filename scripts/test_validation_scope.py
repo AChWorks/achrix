@@ -239,7 +239,7 @@ class ValidationScopeTests(unittest.TestCase):
 
     def test_browser_tool_inputs_select_browser_and_routing_checks(self):
         for path in ("scripts/admin_browser.cjs", "scripts/validate-admin-browser.sh",
-                     "scripts/browser-tools/package.json", "scripts/browser-tools/package-lock.json"):
+                     "fixtures/browser-tools/package.json", "fixtures/browser-tools/package-lock.json"):
             with self.subTest(path=path):
                 base = self.git("rev-parse", "HEAD").strip()
                 self.write(path)

@@ -251,13 +251,13 @@ func mediaDocumentBytes(t testing.TB) map[string][]byte {
 	archive := zip.NewWriter(&bundle)
 	file, err := archive.CreateHeader(&zip.FileHeader{Name: "fixture.txt", Method: zip.Store})
 	if err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "create synthetic ZIP entry failed", err)
 	}
 	if _, err := file.Write([]byte("AChrix owned media fixture\n")); err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "write synthetic ZIP payload failed", err)
 	}
 	if err := archive.Close(); err != nil {
-		t.Fatal(err)
+		browserFixtureFatal(t, "close synthetic ZIP failed", err)
 	}
 	return map[string][]byte{"document.pdf": pdf.Bytes(), "bundle.zip": bundle.Bytes(), "drawing.svg": []byte(`<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="untrusted"><title>نمونه &amp; original</title><g/></svg>
