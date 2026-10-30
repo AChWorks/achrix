@@ -162,7 +162,7 @@ The runner requires supported Go/PostgreSQL tools, normal checksums and cold com
 
 ## Licensing
 
-First-party files, including this fixture and its public Foundation contracts, are MPL-2.0. No Apache SDK exists. Preserve [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md) with distributed executables and provide matching covered source for the identified build and Core/component dependency set. Dependencies retain their own compatible terms. Normal dependency use neither creates an official badge nor changes product data ownership.
+First-party files, including this fixture and its public Foundation contracts, are MPL-2.0. No AChrix Apache-licensed SDK is designated. Preserve [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md) with distributed executables and provide matching covered source for the identified build and Core/component dependency set. Dependencies retain their own compatible terms. Normal dependency use neither creates an official badge nor changes product data ownership.
 
 ## Resource capacity observation
 

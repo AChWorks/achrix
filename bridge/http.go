@@ -48,6 +48,15 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		e.failHTTP(w, r, s, status, "transport", f, errors.New(f.Message))
 		return
 	}
+	if r.Header.Get("Mcp-Protocol-Version") == "" {
+		// The SDK otherwise defaults to 2025-03-26, which still permits batch
+		// arrays. This adapter has one invocation state per POST. Select the
+		// supported legacy profile so SDK rejects batches before dispatch,
+		// while retaining headerless legacy initialization. Clone the headers
+		// rather than mutating the surrounding HTTP middleware's request.
+		r = r.Clone(ctx)
+		r.Header.Set("Mcp-Protocol-Version", "2025-11-25")
+	}
 	select {
 	case e.active <- struct{}{}:
 		defer func() { <-e.active }()
@@ -280,25 +289,35 @@ func (e *Endpoint) failHTTP(w http.ResponseWriter, r *http.Request, s *requestSt
 }
 
 func (e *Endpoint) writeProblem(w http.ResponseWriter, r *http.Request, s *requestState, status int, f *Fault) {
+	p := project(f, s)
+	data := encodeProblem(status, p)
+	if int64(len(data)) > e.config.Limits.ResponseBytes {
+		e.report(r.Context(), s, "output", "response_too_large", fmt.Errorf("public problem %s encoded to %d bytes with limit %d: %w", p.Code, len(data), e.config.Limits.ResponseBytes, errResponseLimit), false)
+		status = http.StatusInternalServerError
+		p = publicFault{
+			Code:    "response_too_large",
+			Message: "The response exceeded the configured size limit.",
+			Action:  "Use the known outcome and complete reference to reconcile any write; contact an operator with the request ID.",
+			Outcome: p.Outcome, Reference: p.Reference, RequestID: p.RequestID,
+		}
+		// A 256-byte valid reference needs at most 1536 JSON-escaped bytes.
+		// Fixed metadata, all outcome names and the generated correlation ID
+		// consume less than 1 KiB. The 4096-byte minimum therefore fits this
+		// fallback without shortening a reference or removing its evidence.
+		data = encodeProblem(status, p)
+		w.Header().Del("WWW-Authenticate")
+		w.Header().Del("Allow")
+	}
 	if status == http.StatusMethodNotAllowed {
 		w.Header().Set("Allow", http.MethodPost)
 	}
-	if status == http.StatusUnauthorized || status == http.StatusForbidden && f.Code == "insufficient_scope" {
+	if status == http.StatusUnauthorized || status == http.StatusForbidden && p.Code == "insufficient_scope" {
 		challenge := fmt.Sprintf("Bearer resource_metadata=%q", e.metadataURL)
 		if len(e.config.Scopes) > 0 {
 			challenge += fmt.Sprintf(", scope=%q", strings.Join(e.config.Scopes, " "))
 		}
 		w.Header().Set("WWW-Authenticate", challenge)
 	}
-	p := project(f, s)
-	body := struct {
-		Type   string `json:"type"`
-		Title  string `json:"title"`
-		Status int    `json:"status"`
-		Detail string `json:"detail"`
-		publicFault
-	}{Type: "about:blank", Title: http.StatusText(status), Status: status, Detail: f.Message, publicFault: p}
-	data, _ := json.Marshal(body)
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.Header().Set("X-Request-ID", p.RequestID)
 	w.Header().Set("Cache-Control", "no-store")
@@ -306,6 +325,18 @@ func (e *Endpoint) writeProblem(w http.ResponseWriter, r *http.Request, s *reque
 	if err := writeAll(w, data); err != nil {
 		e.report(r.Context(), s, "delivery", "response_delivery_failed", err, false)
 	}
+}
+
+func encodeProblem(status int, projection publicFault) []byte {
+	body := struct {
+		Type   string `json:"type"`
+		Title  string `json:"title"`
+		Status int    `json:"status"`
+		Detail string `json:"detail"`
+		publicFault
+	}{Type: "about:blank", Title: http.StatusText(status), Status: status, Detail: projection.Message, publicFault: projection}
+	data, _ := json.Marshal(body)
+	return data
 }
 
 func writeAll(w io.Writer, data []byte) error {
@@ -383,7 +414,7 @@ func sdkHTTPFault(status int) *Fault {
 	case http.StatusUnsupportedMediaType:
 		return &Fault{Code: "unsupported_content_type", Message: "The request must contain JSON.", Action: "Set Content-Type to application/json.", Outcome: NotExecuted}
 	default:
-		return &Fault{Code: "invalid_request", Message: "The request does not satisfy the MCP HTTP contract.", Action: "Check the protocol version, Accept headers and consistency of MCP control headers with the JSON request.", Outcome: NotExecuted}
+		return &Fault{Code: "invalid_request", Message: "The request does not satisfy the single-request MCP HTTP contract.", Action: "Send one JSON-RPC object per POST; check the supported protocol version, Accept headers and matching MCP control headers.", Outcome: NotExecuted}
 	}
 }
 

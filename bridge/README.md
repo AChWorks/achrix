@@ -73,7 +73,11 @@ Transport responses use JSON. POST requests must still advertise both JSON and
 event-stream in `Accept` as required by the SDK's Streamable HTTP contract.
 Current-profile `_meta` and HTTP control headers must agree; the SDK performs
 that consistency checking. Legacy initialization negotiates supported versions
-using the SDK's ordinary handshake.
+using the SDK's ordinary handshake. When `Mcp-Protocol-Version` is absent,
+Bridge uses the supported legacy `2025-11-25` profile on a cloned request;
+headerless legacy initialization remains supported. Each POST contains one
+JSON-RPC object. The SDK rejects batch arrays before any operation is invoked,
+so a request's outcome, reference and diagnostics belong to one invocation.
 
 No retained session, subscription/listen, resource subscription, keepalive,
 event store, sampling, roots, background task or automatic replay is enabled.
@@ -86,7 +90,7 @@ use temporary SDK sessions that are closed when the HTTP request finishes.
 | Bound | Default | Accepted configuration |
 | --- | --- | --- |
 | Request body | 64 KiB | 256 B–16 MiB; includes chunked input |
-| Encoded HTTP response | 1 MiB | 1 KiB–16 MiB |
+| Encoded HTTP response | 1 MiB | 4 KiB–16 MiB; includes failure responses |
 | Concurrent requests | 16 | 1–1024; fail fast when full |
 | Application request deadline | 15 seconds | 1 millisecond–5 minutes |
 | Network response delivery | Request deadline plus 1 second | Fixed finite allowance for a truthful timeout response |
@@ -98,6 +102,15 @@ callbacks must honor context and be concurrency-safe; a context cannot forcibly
 terminate arbitrary Go code. Product services must bound their output objects
 and query sizes: the delivery byte limit does not prevent a handler from first
 allocating an excessively large object. There are no automatic retries.
+
+The 4 KiB response minimum reserves space for a useful failure with the complete
+256-byte recovery reference even at maximum JSON escaping. Every HTTP problem
+is checked after encoding. If its full projection cannot fit the configured
+capacity, Bridge returns a bounded HTTP 500 `response_too_large` problem with
+the exact known outcome, complete reference and trusted request ID, plus
+reconciliation guidance. The original failure and response-limit cause remain
+in protected diagnostics. Ordinary field details remain present when they fit;
+references and correlation are never truncated to make the response smaller.
 
 ## Useful failures and truthful results
 

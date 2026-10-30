@@ -71,7 +71,9 @@ type VerifyToken func(context.Context, string) (Credential, error)
 // must also bound produced objects and honor cancellation; Go cannot forcibly
 // stop an uncooperative in-process callback.
 type Limits struct {
-	RequestBytes  int64
+	RequestBytes int64
+	// ResponseBytes must be at least 4096, reserving enough encoded space for
+	// an exact maximum-length recovery reference and bounded failure guidance.
 	ResponseBytes int64
 	Concurrent    int
 	Timeout       time.Duration
@@ -248,8 +250,8 @@ func normalizeLimits(l *Limits) error {
 	if l.Timeout == 0 {
 		l.Timeout = 15 * time.Second
 	}
-	if l.RequestBytes < 256 || l.RequestBytes > 16<<20 || l.ResponseBytes < 1024 || l.ResponseBytes > 16<<20 || l.Concurrent < 1 || l.Concurrent > 1024 || l.Timeout < time.Millisecond || l.Timeout > 5*time.Minute {
-		return errors.New("bridge: limits must be positive and bounded (input 256 B–16 MiB, output 1 KiB–16 MiB, concurrency 1–1024, timeout 1 ms–5 min)")
+	if l.RequestBytes < 256 || l.RequestBytes > 16<<20 || l.ResponseBytes < 4096 || l.ResponseBytes > 16<<20 || l.Concurrent < 1 || l.Concurrent > 1024 || l.Timeout < time.Millisecond || l.Timeout > 5*time.Minute {
+		return errors.New("bridge: limits must be positive and bounded (input 256 B–16 MiB, output 4 KiB–16 MiB, concurrency 1–1024, timeout 1 ms–5 min)")
 	}
 	return nil
 }

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -44,6 +46,8 @@ func TestConfigurationRejectsUnsafeOrUnboundedComposition(t *testing.T) {
 		{"scope injection", func(c *Config) { c.Scopes = []string{"read\r\nHeader: injected"} }},
 		{"wildcard origin", func(c *Config) { c.AllowedOrigins = []string{"*"} }},
 		{"negative input bound", func(c *Config) { c.Limits.RequestBytes = -1 }},
+		{"insufficient response bound", func(c *Config) { c.Limits.ResponseBytes = 4095 }},
+		{"old response minimum", func(c *Config) { c.Limits.ResponseBytes = 1024 }},
 		{"negative concurrency", func(c *Config) { c.Limits.Concurrent = -1 }},
 		{"unbounded deadline", func(c *Config) { c.Limits.Timeout = time.Hour }},
 	}
@@ -170,5 +174,98 @@ func TestInvalidPublicFaultStillRetainsProtectedCause(t *testing.T) {
 	f, cause := normalizeFault(&Fault{Code: "invalid\ncode", Message: "bad", Action: "fix", Outcome: Unknown, Cause: private}, Unknown)
 	if cause != private || f.Code != "operation_unavailable" {
 		t.Fatalf("invalid projection lost cause or escaped validation: %v %v", f, cause)
+	}
+}
+
+func TestProblemResponseCapacityPreservesExactOutcomeAndReference(t *testing.T) {
+	for _, outcome := range []Outcome{NotExecuted, NotCommitted, Succeeded, Unknown} {
+		for _, test := range []struct {
+			name     string
+			capacity int64
+			large    bool
+			fallback bool
+		}{
+			{"bounded-fallback", 4096, true, true},
+			{"ordinary-details-fit", 4096, false, false},
+			{"larger-capacity-keeps-details", 64 << 10, true, false},
+		} {
+			t.Run(string(outcome)+"/"+test.name, func(t *testing.T) {
+				private := errors.New("synthetic-private-operation-cause")
+				var events []Diagnostic
+				config := unitConfig()
+				config.Limits.ResponseBytes = test.capacity
+				config.Diagnostic = func(_ context.Context, event Diagnostic) { events = append(events, event) }
+				endpoint, err := New(config, func(*Registrar) error { return nil })
+				if err != nil {
+					t.Fatal(err)
+				}
+				reference := strings.Repeat("<", 256)
+				state := &requestState{
+					request:    Request{ID: strings.Repeat("R", 26), Channel: "mcp", Operation: "notes.create"},
+					dispatched: outcome != NotExecuted, outcome: outcome, reference: reference,
+				}
+				ctx := context.WithValue(context.Background(), requestKey{}, state)
+				state.ctx = ctx
+				request := httptest.NewRequest(http.MethodPost, config.ResourceURL, nil).WithContext(ctx)
+				fault := &Fault{Code: "write_result_unavailable", Message: "The operation result could not be delivered.", Action: "Use the authorized reference to reconcile before repeating a write.", Outcome: outcome, Reference: reference, Fields: map[string]string{"note_id": "Use the complete authorized reference."}, Cause: private}
+				if test.large {
+					fault.Message = strings.Repeat("<", 512)
+					fault.Action = strings.Repeat(">", 512)
+					fault.Fields = make(map[string]string)
+					for i := 0; i < 16; i++ {
+						fault.Fields[fmt.Sprintf("field_%02d", i)] = strings.Repeat("&", 256)
+					}
+				}
+				if !validFault(fault) {
+					t.Fatal("capacity test must use a valid bounded product projection")
+				}
+				response := httptest.NewRecorder()
+				endpoint.failHTTP(response, request, state, http.StatusServiceUnavailable, "invoke", fault, private)
+				if int64(response.Body.Len()) > test.capacity {
+					t.Fatalf("Problem Details bypassed the configured delivery bound: got %d bytes, capacity %d", response.Body.Len(), test.capacity)
+				}
+				var body struct {
+					Status int `json:"status"`
+					publicFault
+				}
+				if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+					t.Fatal(err)
+				}
+				if body.Outcome != outcome || body.Reference != reference || body.RequestID != state.request.ID || response.Header().Get("X-Request-ID") != state.request.ID {
+					t.Fatalf("capacity handling erased exact recovery evidence: outcome=%q reference=%q request=%q", body.Outcome, body.Reference, body.RequestID)
+				}
+				if body.Action == "" || body.Message == "" || body.Status != response.Code {
+					t.Fatal("problem response lost useful guidance or has inconsistent status")
+				}
+				if test.fallback {
+					if body.Code != "response_too_large" || response.Code != http.StatusInternalServerError {
+						t.Fatalf("capacity fallback must have deterministic meaning/status: code=%q status=%d", body.Code, response.Code)
+					}
+				} else if body.Code != fault.Code || response.Code != http.StatusServiceUnavailable || len(body.Fields) != len(fault.Fields) {
+					t.Fatalf("useful ordinary failure details were removed despite sufficient capacity: code=%q fields=%d", body.Code, len(body.Fields))
+				}
+				if !test.fallback {
+					for name, value := range fault.Fields {
+						if body.Fields[name] != value {
+							t.Fatalf("field %q was changed despite sufficient response capacity", name)
+						}
+					}
+				}
+				if strings.Contains(response.Body.String(), private.Error()) {
+					t.Fatal("protected operation cause escaped in capacity response")
+				}
+				foundCause, foundOverflow := false, false
+				for _, event := range events {
+					if event.Request.ID != state.request.ID || event.Outcome != outcome || event.Reference != reference {
+						t.Fatalf("diagnostic evidence disagrees with actual result: %+v", event)
+					}
+					foundCause = foundCause || errors.Is(event.Cause, private)
+					foundOverflow = foundOverflow || errors.Is(event.Cause, errResponseLimit)
+				}
+				if !foundCause || test.fallback && !foundOverflow {
+					t.Fatal("capacity projection discarded original failure or omitted the response-limit cause")
+				}
+			})
+		}
 	}
 }

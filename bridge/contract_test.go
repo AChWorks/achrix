@@ -705,7 +705,7 @@ func TestContractConfirmedWriteSurvivesSDKOutputFailure(t *testing.T) {
 	for _, test := range []string{"schema", "serialization", "response-bound"} {
 		t.Run(test, func(t *testing.T) {
 			var writes atomic.Int32
-			f := newContractFixture(t, func(c *bridge.Config) { c.Limits.ResponseBytes = 2048 }, func(r *bridge.Registrar) error {
+			f := newContractFixture(t, func(c *bridge.Config) { c.Limits.ResponseBytes = 4096 }, func(r *bridge.Registrar) error {
 				tool := contractTool("contract.write")
 				tool.Annotations.ReadOnlyHint = false
 				if test == "serialization" {
@@ -999,6 +999,121 @@ func TestContractInvocationDeadlineInBothProtocolEras(t *testing.T) {
 			event := contractCause(t, f, failure.RequestID, context.DeadlineExceeded, true, bridge.Unknown, "")
 			if !strings.Contains(event.Cause.Error(), "PRIVATE_TIMEOUT_PROVIDER") {
 				t.Fatal("protected timeout evidence lost the original application's wrapped cause")
+			}
+		})
+	}
+}
+
+func TestContractHeaderlessLegacyRejectsBatchBeforeInvocation(t *testing.T) {
+	var writes atomic.Int32
+	f := newContractFixture(t, nil, func(r *bridge.Registrar) error {
+		first := contractTool("contract.first_write")
+		first.Annotations.ReadOnlyHint = false
+		if err := bridge.AddTool(r, first, func(ctx context.Context, _ contractInput) (contractOutput, error) {
+			writes.Add(1)
+			bridge.Confirm(ctx, "first-confirmed-reference")
+			return contractOutput{Text: "first confirmed"}, nil
+		}); err != nil {
+			return err
+		}
+		second := contractTool("contract.second_write")
+		second.Annotations.ReadOnlyHint = false
+		return bridge.AddTool(r, second, func(context.Context, contractInput) (contractOutput, error) {
+			writes.Add(1)
+			return contractOutput{}, &bridge.Fault{Code: "unknown_write", Message: "Acknowledgement was lost.", Action: "Reconcile the authorized reference before repeating the write.", Outcome: bridge.Unknown, Reference: "second-unknown-reference", Cause: errors.New("synthetic second write acknowledgement loss")}
+		})
+	})
+	batch, err := json.Marshal([]map[string]any{
+		{"jsonrpc": "2.0", "id": "first", "method": "tools/call", "params": map[string]any{"name": "contract.first_write", "arguments": map[string]any{"text": "first"}}},
+		{"jsonrpc": "2.0", "id": "second", "method": "tools/call", "params": map[string]any{"name": "contract.second_write", "arguments": map[string]any{"text": "second"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := f.request("2025-11-25", "tools/call", "contract.first_write", contractToken, nil)
+	request.Header.Del("Mcp-Protocol-Version")
+	request.Body = io.NopCloser(bytes.NewReader(batch))
+	request.ContentLength = int64(len(batch))
+	response := f.send(t, request)
+	if writes.Load() != 0 {
+		t.Fatalf("headerless JSON-RPC batch invoked %d operations under one request state: status=%d body=%s", writes.Load(), response.Status, response.Body)
+	}
+	failure := contractHTTPFailure(t, response, http.StatusBadRequest)
+	if failure.Outcome != bridge.NotExecuted || failure.Reference != "" {
+		t.Fatalf("rejected batch lost truthful non-execution: %+v", failure)
+	}
+	guidance := strings.ToLower(failure.Action)
+	if !strings.Contains(guidance, "one") && !strings.Contains(guidance, "single") {
+		t.Fatalf("batch rejection lacks single-request corrective guidance: %q", failure.Action)
+	}
+	for _, captured := range f.capture.snapshot() {
+		if captured.Event.Dispatched || captured.Event.Outcome != bridge.NotExecuted || captured.Event.Reference != "" {
+			t.Fatalf("batch contaminated operation evidence despite rejection: %+v", captured.Event)
+		}
+	}
+}
+
+func TestContractHeaderlessLegacyInitializationRemainsSupported(t *testing.T) {
+	var calls atomic.Int32
+	f := newContractFixture(t, nil, func(r *bridge.Registrar) error {
+		return bridge.AddTool(r, contractTool("contract.echo"), contractEcho(&calls))
+	})
+	request := f.request("2025-11-25", "initialize", "", contractToken, nil)
+	request.Header.Del("Mcp-Protocol-Version")
+	wire := contractRPC(t, f.send(t, request))
+	if wire.Error != nil || wire.Result.ProtocolVersion != "2025-11-25" || calls.Load() != 0 {
+		t.Fatalf("headerless supported legacy initialization failed: %+v", wire)
+	}
+	// Endpoint normalization must not mutate a request shared with surrounding
+	// trusted HTTP middleware; network transport alone would hide that mutation.
+	request = f.request("2025-11-25", "initialize", "", contractToken, nil)
+	request.Header.Del("Mcp-Protocol-Version")
+	response := httptest.NewRecorder()
+	f.endpoint.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || request.Header.Get("Mcp-Protocol-Version") != "" {
+		t.Fatal("legacy default either failed initialization or mutated the caller's request headers")
+	}
+}
+
+func TestContractEscapedRecoveryReferenceFitsResponseBound(t *testing.T) {
+	// Use the smallest supported capacity and a maximum-length reference whose
+	// JSON representation expands to six bytes for every original byte.
+	const capacity = 4096
+	for _, outcome := range []bridge.Outcome{bridge.Succeeded, bridge.Unknown} {
+		t.Run(string(outcome), func(t *testing.T) {
+			var writes atomic.Int32
+			reference := strings.Repeat("<", 256)
+			private := errors.New("synthetic-private-acknowledgement-cause")
+			f := newContractFixture(t, func(c *bridge.Config) { c.Limits.ResponseBytes = capacity }, func(r *bridge.Registrar) error {
+				tool := contractTool("contract.escaped_reference")
+				tool.Annotations.ReadOnlyHint = false
+				return bridge.AddTool(r, tool, func(ctx context.Context, _ contractInput) (contractOutput, error) {
+					writes.Add(1)
+					if outcome == bridge.Succeeded {
+						bridge.Confirm(ctx, reference)
+						return contractOutput{Text: strings.Repeat("large-success-payload-", 1024)}, nil
+					}
+					fields := make(map[string]string)
+					for i := 0; i < 16; i++ {
+						fields[fmt.Sprintf("field_%02d", i)] = strings.Repeat("&", 256)
+					}
+					return contractOutput{}, &bridge.Fault{Code: "unknown_write", Message: "Write acknowledgement was lost.", Action: "Read the authorized reference to reconcile before retrying.", Fields: fields, Outcome: bridge.Unknown, Reference: reference, Cause: private}
+				})
+			})
+			response := f.send(t, f.request("2026-07-28", "tools/call", "contract.escaped_reference", contractToken, map[string]any{"text": "invoke once"}))
+			failure := contractHTTPFailure(t, response, http.StatusInternalServerError)
+			if len(response.Body) > capacity {
+				t.Fatalf("overflow fallback exceeded response capacity: got %d bytes, limit %d", len(response.Body), capacity)
+			}
+			if writes.Load() != 1 || failure.Outcome != outcome || failure.Reference != reference || failure.RequestID == "" {
+				t.Fatalf("response bound lost actual effect/reference or replayed: outcome=%q ref=%q writes=%d", failure.Outcome, failure.Reference, writes.Load())
+			}
+			if failure.Code != "response_too_large" || failure.Action == "" {
+				t.Fatal("bounded fallback lost actionable machine meaning")
+			}
+			contractNoPrivate(t, response, private.Error())
+			if outcome == bridge.Unknown {
+				contractCause(t, f, failure.RequestID, private, true, outcome, reference)
 			}
 		})
 	}
