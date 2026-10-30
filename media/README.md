@@ -165,6 +165,16 @@ The independent Notes composition must prove this bounded quiesced native databa
 
 Set `ACHRIX_MEDIA_TEST_DSN` to the disposable task-owned PostgreSQL test database (its name must start with `achrix_media_`), then run `(cd media && GOWORK=off go test -race -count=1 .)`. The tests reset only the Media schema in that explicitly selected database and use private temporary storage. Without that variable, real PostgreSQL tests report a skip rather than successful database proof. Repository full validation owns the normal pinned independent consumer, TLS boundary, retained restore and exact CI gate.
 
+The four targets in `parser_fuzz_test.go` exercise owned PNG/JPEG framing, finite Exif interpretation and SVG structure. Their synthetic accepted/rejected seeds run with ordinary tests. PNG includes a small CRC-recomputed metadata path; none of these targets performs arbitrary full image decoding. Mutation inputs are capped at 64 KiB before copying or file creation, while existing deterministic tests retain the larger production byte/count/depth/pixel boundary checks. SVG remains private original-byte admission, not sanitization.
+
+For a finite campaign on the supported Go toolchain, run one target at a time from `media`, replacing the target name for `FuzzPublicJPEGFraming`, `FuzzPublicExif` and `FuzzSVGStructure`:
+
+```bash
+GOWORK=off GOMAXPROCS=2 go test -run '^$' -fuzz '^FuzzPublicPNGFraming$' -fuzztime=60s -fuzzminimizetime=5s -parallel=1 -timeout=2m .
+```
+
+Use an isolated task with a bounded process lifetime. Record source/toolchain identity, command, actual duration and outcome in the Issue/PR; preserve a useful minimized failure as a deterministic regression and fix it at its owner before acceptance. Do not log every rejection or commit the evolving fuzz cache. A successful campaign establishes only the exercised invariants, not universal format conformance, fidelity, worst-case memory or absence of vulnerabilities.
+
 On 2026-10-02, Go 1.27.1/Linux amd64 on AMD EPYC 7763 development hardware with `GOMAXPROCS=2` measured three runs of three operations:
 
 - A maximum 4096×2048 RGBA64 PNG full decode: 150–160 ms and approximately 67.24 million bytes (64.1 MiB) allocated per operation, 24 allocations. Two concurrently admitted decodes can therefore allocate roughly 128 MiB of pixel buffers plus decoder/runtime/other Module overhead; this is not product total RSS or a hard heap ceiling.
