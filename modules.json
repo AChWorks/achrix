@@ -35,6 +35,11 @@
       "name": "installation",
       "directory": "installation",
       "path": "github.com/AChWorks/achrix/installation"
+    },
+    {
+      "name": "bridge",
+      "directory": "bridge",
+      "path": "github.com/AChWorks/achrix/bridge"
     }
   ]
 }
