@@ -302,10 +302,18 @@ func TestPostgresMigrationAndSharedBehavior(t *testing.T) {
 		for _, v := range []struct {
 			token, body string
 			status      int
-		}{{reader, `{"text":"denied"}`, 403}, {"", `{"text":"no authentication"}`, 401}, {writer, `{"text":"ok","principal":"writer"}`, 400}, {writer, `{"text":"ok"} {}`, 400}, {writer, `{"text":"` + strings.Repeat("x", 1100) + `"}`, 400}} {
+		}{{reader, `{"text":"denied"}`, 403}, {"", `{"text":"no authentication"}`, 401}, {writer, `{"text":"ok","principal":"writer"}`, 400}, {writer, `{"text":"ok"} {}`, 400}, {writer, `{"text":"` + strings.Repeat("x", 201) + `"}`, 400}} {
 			if w := request("POST", "/notes", v.token, v.body); w.Code != v.status {
 				t.Fatal(w.Code, v.status)
 			}
+		}
+		oversized := request("POST", "/notes", writer, `{"text":"`+strings.Repeat("PRIVATE_OVERSIZE_", 80)+`"}`)
+		var sizeFailure map[string]string
+		if err := json.Unmarshal(oversized.Body.Bytes(), &sizeFailure); err != nil || oversized.Code != 413 || sizeFailure["error"] != "input_too_large" || sizeFailure["outcome"] != "not_executed" || !strings.Contains(sizeFailure["detail"], "1024") || oversized.Header().Get("X-Request-ID") == "" {
+			t.Fatal("body size rejection lost its correction, code, outcome or correlation", oversized.Code, sizeFailure)
+		}
+		if strings.Contains(oversized.Body.String(), "PRIVATE_OVERSIZE_") {
+			t.Fatal("body size rejection echoed private input")
 		}
 		var count int
 		if err := p.QueryRow(ctx, "SELECT count(*) FROM notes.entries").Scan(&count); err != nil || count != 2 {
