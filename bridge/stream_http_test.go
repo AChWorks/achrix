@@ -298,6 +298,67 @@ func TestStreamHTTPDestinationCauseKeepsConfirmedOutcome(t *testing.T) {
 	jsonCause(t, f, w.Header().Get("X-Request-ID"), io.ErrClosedPipe, true, bridge.Succeeded, "already-confirmed")
 }
 
+type streamFinalWriter struct {
+	*httptest.ResponseRecorder
+	readDeadline, writeDeadline time.Time
+	flushes                     int
+	cause                       error
+}
+
+func (w *streamFinalWriter) SetReadDeadline(deadline time.Time) error {
+	w.readDeadline = deadline
+	return nil
+}
+func (w *streamFinalWriter) SetWriteDeadline(deadline time.Time) error {
+	w.writeDeadline = deadline
+	return nil
+}
+func (w *streamFinalWriter) FlushError() error {
+	w.flushes++
+	if w.readDeadline.IsZero() || w.writeDeadline.IsZero() {
+		return errors.New("final file flush has no transport deadline")
+	}
+	w.ResponseRecorder.Flush()
+	return w.cause
+}
+
+func TestStreamHTTPFinalFlushKeepsDeadlineCauseAndConfirmedOutcome(t *testing.T) {
+	private := errors.New("PRIVATE_FINAL_BUFFERED_WRITE")
+	for _, failed := range []bool{false, true} {
+		t.Run(strconv.FormatBool(failed), func(t *testing.T) {
+			var calls atomic.Int32
+			f := newStreamFixture(t, nil, streamRoute(t, func(ctx context.Context, _ struct{}, w http.ResponseWriter) error {
+				calls.Add(1)
+				// A small final write may remain in the real server's buffer;
+				// no Content-Length also exercises server-owned final framing.
+				if _, err := w.Write([]byte("tail")); err != nil {
+					return err
+				}
+				bridge.Confirm(ctx, "confirmed-tail")
+				return nil
+			}))
+			w := &streamFinalWriter{ResponseRecorder: httptest.NewRecorder()}
+			if failed {
+				w.cause = private
+			}
+			var recovered any
+			func() { defer func() { recovered = recover() }(); f.endpoint.ServeHTTP(w, streamRequest(f)) }()
+			if failed && recovered != http.ErrAbortHandler || !failed && recovered != nil {
+				t.Fatalf("unexpected final flush abort: %v", recovered)
+			}
+			if calls.Load() != 1 || w.flushes != 1 || w.Body.String() != "tail" {
+				t.Fatal("final delivery was not flushed once or was replayed/concatenated")
+			}
+			if w.readDeadline.IsZero() || w.writeDeadline.IsZero() || !w.writeDeadline.After(w.readDeadline) {
+				t.Fatal("handler return cleared deadlines before server finalization")
+			}
+			if failed {
+				jsonCause(t, f, w.Header().Get("X-Request-ID"), private, true, bridge.Succeeded, "confirmed-tail")
+			}
+		})
+	}
+}
+
 func TestStreamHTTPRawUploadFailureKeepsPostDispatchOutcomeAndBodyCause(t *testing.T) {
 	for _, slow := range []bool{false, true} {
 		t.Run(strconv.FormatBool(slow), func(t *testing.T) {

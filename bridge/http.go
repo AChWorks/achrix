@@ -46,8 +46,14 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	controller := http.NewResponseController(w)
 	readDeadlineErr := controller.SetReadDeadline(deadline)
 	writeDeadlineErr := controller.SetWriteDeadline(deadline.Add(time.Second))
-	defer controller.SetReadDeadline(time.Time{})
-	defer controller.SetWriteDeadline(time.Time{})
+	if !e.streamHTTP {
+		defer controller.SetReadDeadline(time.Time{})
+		defer controller.SetWriteDeadline(time.Time{})
+	}
+	// The file profile must retain both deadlines through net/http's final
+	// buffered writes/framing and unread-body close after ServeHTTP returns.
+	// The server resets HTTP/1 connection deadlines before reuse and cleans
+	// HTTP/2 stream timers on close; clearing them here would unbound that tail.
 	if e.streamHTTP {
 		if err := errors.Join(readDeadlineErr, writeDeadlineErr); err != nil {
 			f := &Fault{Code: "transport_unavailable", Message: "This HTTP transport cannot enforce the required file-transfer deadlines.", Action: "Use a server and middleware that support bounded socket read and write deadlines. No operation was invoked.", Outcome: NotExecuted}

@@ -111,6 +111,8 @@ SDK, although the module manifest includes optional presentation dependencies.
 
 ## Explicit private file transfer
 
+The HTTP server and middleware must support socket deadlines and response flushing. The boundary flushes final file bytes while the deadline is active and retains both deadlines through the server's final framing and request-body cleanup. A final buffered-write error retains the confirmed outcome/reference and its protected original cause.
+
 `NewStreamingHTTP(config, router)` reuses the same verified HTTP resource and
 operation gates. Mount existing `JSONHandler` routes for bounded metadata and
 mutation responses, and an explicit `StreamHandler[Input]` for an authorized
