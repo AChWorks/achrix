@@ -2,8 +2,9 @@
 package diagnosis
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -11,75 +12,122 @@ import (
 	"time"
 )
 
-func TestRuntimeBudgetCorrelationAndCardinality(t *testing.T) {
-	var output strings.Builder
-	now := time.Unix(100, 0)
-	b := &budget{now: func() time.Time { return now }}
-	logger := slog.New(handler{inner: slog.NewJSONHandler(&output, &slog.HandlerOptions{Level: slog.LevelDebug}), budget: b})
+type lockedOutput struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *lockedOutput) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.Write(p)
+}
+func (b *lockedOutput) String() string { b.mu.Lock(); defer b.mu.Unlock(); return b.b.String() }
+
+func TestDistinctFailuresCorrelateAndFlushWithoutFurtherTraffic(t *testing.T) {
+	var output lockedOutput
+	logger := New(&output)
+	defer Flush(logger)
 	ctx, id := Correlate(context.Background())
-	for _, level := range []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError} {
-		for range 10000 {
-			// Every request gets different trusted correlation; the budget still
-			// retains exactly four windows and no request/principal/IP map.
-			request, _ := Correlate(ctx)
-			logger.Log(request, level, "failure", "component", "notes.http", "operation", "request", "reason", "permission_denied")
-		}
+	again, same := Correlate(ctx)
+	if same != id || again != ctx {
+		t.Fatal("nested boundary replaced trusted correlation")
 	}
-	if got := strings.Count(output.String(), "\n"); got != 4 {
-		t.Fatalf("emitted %d records in a single window", got)
+	logger.ErrorContext(ctx, "failed", "component", "db", "operation", "insert", "phase", "execute", "reason", "permission", "outcome", "not_executed")
+	logger.ErrorContext(ctx, "failed", "component", "db", "operation", "insert", "phase", "commit", "reason", "connection_lost", "outcome", "unknown")
+	for range 1000 {
+		logger.ErrorContext(ctx, "failed", "component", "db", "operation", "insert", "phase", "execute", "reason", "permission", "outcome", "not_executed")
 	}
-	// Lifecycle failures remain visible while request traffic consumes every budget.
-	logger.Error("startup failed", "component", "notes.consumer", "operation", "start", "reason", "module_failed")
-	if got := strings.Count(output.String(), "\n"); got != 5 {
-		t.Fatalf("lifecycle diagnostic was suppressed: %d", got)
+	if got := strings.Count(output.String(), "\n"); got != 2 {
+		t.Fatalf("distinct causes lost or repetition unbounded: %d", got)
 	}
-	now = now.Add(time.Second)
-	logger.InfoContext(ctx, "request failed", "component", "notes.http", "operation", "request", "reason", "unauthenticated")
+	deadline := time.Now().Add(2 * time.Second)
+	for !strings.Contains(output.String(), `"suppressed_records":1000`) && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
 	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
-	var record map[string]any
-	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &record); err != nil {
-		t.Fatal(err)
+	if len(lines) != 3 || !strings.Contains(lines[0], id) || !strings.Contains(lines[1], `"outcome":"unknown"`) {
+		t.Fatal(output.String())
 	}
-	if record["request_id"] != id || record["suppressed_records"] != float64(9999) || record["reason"] != "unauthenticated" {
-		t.Fatal("missing current correlation/category or aggregate count", record)
+	if !strings.Contains(lines[2], `"diagnostic_summary":true`) || strings.Contains(lines[2], "request_id") {
+		t.Fatal("summary lost or borrowed request identity", lines[2])
+	}
+}
+
+func TestBudgetFixedCapacityAndUnknownOutcomeReservation(t *testing.T) {
+	var output lockedOutput
+	inner := slog.NewJSONHandler(&output, nil)
+	b := &budget{now: time.Now, inner: inner}
+	logger := slog.New(handler{inner: inner, budget: b})
+	ctx, _ := Correlate(context.Background())
+	for i := range 1000 {
+		logger.ErrorContext(ctx, "failure", "operation", "readiness", "reason", fmt.Sprintf("reason_%d", i))
+	}
+	logger.ErrorContext(ctx, "failure", "operation", "insert", "phase", "commit", "reason", "connection_lost", "outcome", "unknown")
+	if got := strings.Count(output.String(), "\n"); got != 33 {
+		t.Fatalf("capacity changed or unknown hidden: %d", got)
+	}
+	Flush(logger)
+	if !strings.Contains(output.String(), `"distinct_capacity_exceeded":true`) || !strings.Contains(output.String(), `"suppressed_records":968`) {
+		t.Fatal("overflow evidence missing", output.String())
 	}
 }
 
 func TestBudgetSharedAcrossDerivedLoggersAndConcurrentRequests(t *testing.T) {
-	var output strings.Builder // Only one concurrent call reaches the JSON handler.
-	b := &budget{now: func() time.Time { return time.Unix(100, 0) }}
-	logger := slog.New(handler{inner: slog.NewJSONHandler(&output, nil), budget: b})
-	derived := logger.With("component", "notes.postgresql", "operation", "readiness").WithGroup("detail")
+	var output lockedOutput
+	inner := slog.NewJSONHandler(&output, nil)
+	b := &budget{now: time.Now, inner: inner}
+	logger := slog.New(handler{inner: inner, budget: b})
+	derived := logger.With("component", "db", "operation", "readiness").WithGroup("detail")
 	var workers sync.WaitGroup
 	for range 1000 {
-		workers.Go(func() {
-			derived.Warn("dependency degraded", "reason", "connection_failure")
-			ctx, _ := Correlate(context.Background())
-			logger.WarnContext(ctx, "request failed", "reason", "unavailable")
-		})
+		workers.Go(func() { derived.Warn("failure", "reason", "connection_failure") })
 	}
 	workers.Wait()
-	if got := strings.Count(output.String(), "\n"); got != 1 || b.windows[2].suppressed != 1999 {
-		t.Fatalf("derived/concurrent loggers escaped shared budget: records=%d suppressed=%d", got, b.windows[2].suppressed)
+	Flush(logger)
+	if got := strings.Count(output.String(), "\n"); got != 2 {
+		t.Fatalf("derived concurrency budget: %d", got)
 	}
-	b.windows[2].suppressed = ^uint64(0)
-	logger.WarnContext(context.WithValue(context.Background(), requestKey{}, "trusted"), "failure")
-	if b.windows[2].suppressed != ^uint64(0) {
-		t.Fatal("suppression count wrapped")
+	if !strings.Contains(output.String(), `"suppressed_records":999`) {
+		t.Fatal(output.String())
 	}
 }
 
-func TestDirectRuntimeOperationsAndFilteredDebug(t *testing.T) {
-	var output strings.Builder
+func TestComponentFinalSummaryBypassesProductBudget(t *testing.T) {
+	var output lockedOutput
 	logger := New(&output)
-	logger.DebugContext(context.Background(), "authorization denied", "operation", "authorize", "reason", "policy_denied")
-	if output.Len() != 0 {
+	defer Flush(logger)
+	ctx, _ := Correlate(context.Background())
+	for range 20 {
+		logger.ErrorContext(ctx, "failed", "operation", "insert", "reason", "io")
+	}
+	logger.ErrorContext(context.Background(), "component summary", "operation", "insert", "reason", "io", "diagnostic_summary", true, "suppressed_records", 50)
+	if !strings.Contains(output.String(), `"suppressed_records":50`) {
+		t.Fatal("only final component evidence was discarded")
+	}
+	logger.Debug("denied", "operation", "authorize", "reason", "policy_denied")
+	if strings.Contains(output.String(), "policy_denied") {
 		t.Fatal("debug enabled by default")
 	}
-	for range 1000 {
-		logger.Warn("readiness degraded", "component", "notes.postgresql", "operation", "readiness", "reason", "connection_failure")
+}
+
+func TestLateTimerCannotEraseReplacementWindow(t *testing.T) {
+	var output lockedOutput
+	inner := slog.NewJSONHandler(&output, nil)
+	now := time.Now()
+	b := &budget{now: func() time.Time { return now }, inner: inner}
+	fields := diagnosticFields{"db", "insert", "commit", "connection_lost", "unknown", "provider"}
+	b.admit(slog.LevelError, fields)
+	stale := b.generation
+	now = now.Add(2 * time.Second)
+	b.admit(slog.LevelError, fields)
+	b.admit(slog.LevelError, fields)
+	b.flushGeneration(stale)
+	if output.String() != "" {
+		t.Fatal("late timer flushed replacement window")
 	}
-	if got := strings.Count(output.String(), "\n"); got != 1 {
-		t.Fatalf("direct readiness emitted %d records", got)
+	b.flush()
+	if !strings.Contains(output.String(), `"suppressed_records":1`) {
+		t.Fatal("replacement evidence lost", output.String())
 	}
 }

@@ -140,9 +140,11 @@ func (w *Web) serve(writer http.ResponseWriter, r *http.Request) {
 			webError(writer, err)
 			return
 		}
-		_ = json.NewEncoder(writer).Encode(struct {
+		if err := json.NewEncoder(writer).Encode(struct {
 			CSRF string `json:"csrf"`
-		}{csrf})
+		}{csrf}); err != nil {
+			w.service.module.report(ctx, "csrf_response", "write_response", "committed", err)
+		}
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -162,7 +164,7 @@ func (w *Web) serve(writer http.ResponseWriter, r *http.Request) {
 			Login    string `json:"login"`
 			Password string `json:"password"`
 		}
-		if err := decodeWeb(writer, r, &body); err != nil {
+		if err := w.decodeWeb(writer, r, &body); err != nil {
 			webError(writer, err)
 			return
 		}
@@ -173,7 +175,9 @@ func (w *Web) serve(writer http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.setCookie(writer, session)
-		webSession(writer, session)
+		if err := webSession(writer, session); err != nil {
+			w.service.module.report(ctx, "session_response", "write_response", "committed", err)
+		}
 	case "/rotate", "/logout", "/password":
 		_, err := w.AuthenticateRequest(r, true)
 		if err != nil {
@@ -189,7 +193,9 @@ func (w *Web) serve(writer http.ResponseWriter, r *http.Request) {
 				return
 			}
 			w.setCookie(writer, session)
-			webSession(writer, session)
+			if err := webSession(writer, session); err != nil {
+				w.service.module.report(ctx, "session_response", "write_response", "committed", err)
+			}
 		case "/logout":
 			if err = w.service.Logout(ctx, value); err != nil {
 				webError(writer, err)
@@ -202,7 +208,7 @@ func (w *Web) serve(writer http.ResponseWriter, r *http.Request) {
 				Current string `json:"current"`
 				Next    string `json:"next"`
 			}
-			if err = decodeWeb(writer, r, &body); err != nil {
+			if err = w.decodeWeb(writer, r, &body); err != nil {
 				webError(writer, err)
 				return
 			}
@@ -217,7 +223,64 @@ func (w *Web) serve(writer http.ResponseWriter, r *http.Request) {
 		writer.WriteHeader(http.StatusNotFound)
 	}
 }
+
+// ErrBodyTimeout means body admission timed out before any Service mutation.
+var ErrBodyTimeout = errors.New("identity request body timeout")
+
+// bodyAdmissionError contains only canonical public identities. It proves that
+// decoding stopped before dispatch; the original transport cause stays private.
+type bodyAdmissionError struct{ public error }
+
+func (e *bodyAdmissionError) Error() string { return e.public.Error() }
+func (e *bodyAdmissionError) Unwrap() error { return e.public }
+
+// Track the reader separately from the JSON parser: parser errors can be
+// untyped, and a successful Decode can consume bytes returned with an I/O error.
+type bodyReadTracker struct {
+	reader  io.Reader
+	failure error
+}
+
+func (b *bodyReadTracker) Read(p []byte) (int, error) {
+	n, err := b.reader.Read(p)
+	if err != nil && err != io.EOF && b.failure == nil {
+		// MaxBytesReader owns this exact input-limit error. A joined/wrapped EOF
+		// is not ordinary end-of-body and may contain a meaningful I/O failure.
+		if _, limited := err.(*http.MaxBytesError); !limited {
+			b.failure = err
+		}
+	}
+	return n, err
+}
+
+func (w *Web) decodeWeb(writer http.ResponseWriter, r *http.Request, target any) error {
+	return decodeWebDiagnostic(writer, r, target, func(phase string, cause error) {
+		m := w.service.module
+		if caller := r.Context().Err(); caller != nil && errors.Is(cause, caller) {
+			// Expected caller aborts retain their protected cause and context, but
+			// do not become ordinary dependency ERROR records. An unrelated I/O
+			// failure still takes the operational path even if the caller stopped.
+			if m.config.Diagnostic != nil {
+				m.config.Diagnostic(r.Context(), "http_body", phase, cause)
+			}
+			return
+		}
+		m.report(r.Context(), "http_body", phase, "not_executed", cause)
+	})
+}
 func decodeWeb(writer http.ResponseWriter, r *http.Request, target any) error {
+	return decodeWebDiagnostic(writer, r, target, nil)
+}
+func decodeWebDiagnostic(writer http.ResponseWriter, r *http.Request, target any, report func(string, error)) error {
+	failure := func(phase string, cause error) error {
+		if report != nil {
+			report(phase, cause)
+		}
+		return bodyAdmissionFailure(r.Context(), cause)
+	}
+	if err := r.Context().Err(); err != nil {
+		return failure("admission", err)
+	}
 	if len(r.Header.Values("Content-Type")) != 1 || r.Header.Get("Content-Type") != "application/json" {
 		return ErrInvalid
 	}
@@ -230,31 +293,55 @@ func decodeWeb(writer http.ResponseWriter, r *http.Request, target any) error {
 		readDeadline = deadline
 	}
 	if err := http.NewResponseController(writer).SetReadDeadline(readDeadline); err != nil {
-		return ErrUnavailable
+		return failure("set_read_deadline", err)
 	}
 	r.Body = http.MaxBytesReader(writer, r.Body, 2048)
 	defer r.Body.Close()
-	decoder := json.NewDecoder(r.Body)
+	body := &bodyReadTracker{reader: r.Body}
+	decoder := json.NewDecoder(body)
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return decodeError(err)
+	err := decoder.Decode(target)
+	if body.failure != nil {
+		return failure("read", body.failure)
+	}
+	if err := r.Context().Err(); err != nil {
+		return failure("read", err)
+	}
+	if err != nil {
+		return ErrInvalid
 	}
 	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		return decodeError(err)
+	err = decoder.Decode(&extra)
+	if body.failure != nil {
+		return failure("read_trailing", body.failure)
+	}
+	if err := r.Context().Err(); err != nil {
+		return failure("read_trailing", err)
+	}
+	if err != io.EOF {
+		return ErrInvalid
 	}
 	return nil
 }
 
-func decodeError(err error) error {
+func bodyReadTimeout(err error) bool {
 	var network net.Error
-	if errors.As(err, &network) && network.Timeout() {
-		return ErrUnavailable
-	}
-	return ErrInvalid
+	return errors.Is(err, context.DeadlineExceeded) || errors.As(err, &network) && network.Timeout()
 }
-func webSession(writer http.ResponseWriter, s Session) {
-	_ = json.NewEncoder(writer).Encode(struct {
+func bodyAdmissionFailure(ctx context.Context, cause error) error {
+	public := ErrUnavailable
+	if caller := ctx.Err(); caller != nil {
+		public = errors.Join(public, caller)
+	}
+	// net/http can cancel the request context when its Body.Read deadline fires.
+	// The observed timeout remains a timeout even when that also canceled ctx.
+	if bodyReadTimeout(cause) || ctx.Err() == context.DeadlineExceeded {
+		public = errors.Join(ErrBodyTimeout, public)
+	}
+	return &bodyAdmissionError{public: public}
+}
+func webSession(writer http.ResponseWriter, s Session) error {
+	return json.NewEncoder(writer).Encode(struct {
 		Principal achrix.Principal `json:"principal"`
 		CSRF      string           `json:"csrf"`
 		ExpiresAt time.Time        `json:"expires_at"`
@@ -263,6 +350,8 @@ func webSession(writer http.ResponseWriter, s Session) {
 func webError(writer http.ResponseWriter, err error) {
 	code, status := "authentication_failed", http.StatusUnauthorized
 	switch {
+	case errors.Is(err, ErrBodyTimeout):
+		code, status = "body_timeout", http.StatusRequestTimeout
 	case errors.Is(err, achrix.ErrDenied):
 		code, status = "permission_denied", http.StatusForbidden
 	case errors.Is(err, ErrLimited):
@@ -275,9 +364,22 @@ func webError(writer http.ResponseWriter, err error) {
 		code, status = "authentication_conflict", http.StatusConflict
 	}
 	writer.WriteHeader(status)
+	outcome := ""
+	var admission *bodyAdmissionError
+	if errors.As(err, &admission) || errors.Is(err, ErrBodyTimeout) {
+		outcome = "not_executed"
+	}
+	field, reason := "", ""
+	var input *InputError
+	if errors.As(err, &input) {
+		field, reason = input.Field, input.Reason
+	}
 	_ = json.NewEncoder(writer).Encode(struct {
-		Code string `json:"code"`
-	}{code})
+		Code    string `json:"code"`
+		Outcome string `json:"outcome,omitempty"`
+		Field   string `json:"field,omitempty"`
+		Reason  string `json:"reason,omitempty"`
+	}{code, outcome, field, reason})
 }
 
 // Fixed-cardinality, no-queue public login budget: 60 total/minute and 10 per

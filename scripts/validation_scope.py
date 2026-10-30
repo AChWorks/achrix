@@ -14,6 +14,7 @@ DOCUMENTS = {
 ROUTING = {
     ".github/workflows/baseline.yml", "scripts/validation_scope.py",
     "scripts/test_validation_scope.py", "scripts/validate.sh",
+    "scripts/validation_diagnostics.py", "scripts/test_validation_diagnostics.py", "scripts/validate-admin-browser.sh",
     "scripts/setup-validation-postgres.sh", "scripts/setup-quality-tools.sh",
     "scripts/check-gofmt.sh", "scripts/test_go_quality.py",
     "scripts/modules.py", "scripts/verify_consumer.py", "scripts/test_module_packaging.py",

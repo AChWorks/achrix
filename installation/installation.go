@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"regexp"
 )
 
@@ -17,6 +18,15 @@ var (
 	ErrInput = errors.New("invalid installation input")
 	ErrStale = errors.New("installation binding or plan changed")
 )
+
+// InputError identifies a malformed planner field without retaining its value.
+// It preserves errors.Is(err, ErrInput); products may present Field and Problem
+// directly to the trusted planner caller or map them into their transport.
+type InputError struct{ Field, Problem string }
+
+func (e *InputError) Error() string          { return fmt.Sprintf("%s: %s: %s", ErrInput, e.Field, e.Problem) }
+func (e *InputError) Unwrap() error          { return ErrInput }
+func inputError(field, problem string) error { return &InputError{Field: field, Problem: problem} }
 
 var identifier = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 var digest = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -179,40 +189,65 @@ func (p *Plan) MarshalJSON() ([]byte, error) {
 // Missing, duplicate, unknown and malformed entries fail closed. No host tools,
 // root/panel/CPU detection, resource acquisition or effects occur here.
 func Assess(profile Profile, observations []Observation, supports []Support, progress Progress) (*Plan, error) {
-	if !validBinding(profile.Binding) || len(profile.Requirements) == 0 || len(profile.Requirements) > maxRequirements {
-		return nil, ErrInput
+	for _, field := range []struct {
+		name, value string
+		valid       *regexp.Regexp
+	}{
+		{"binding.profile_id", profile.Binding.ProfileID, identifier},
+		{"binding.operation_id", profile.Binding.OperationID, identifier},
+		{"binding.candidate_sha256", profile.Binding.CandidateSHA256, digest},
+		{"binding.preconditions_sha256", profile.Binding.PreconditionsSHA256, digest},
+	} {
+		if !field.valid.MatchString(field.value) {
+			return nil, inputError(field.name, "invalid or missing identity; supply the declared identifier or lowercase SHA-256 digest")
+		}
+	}
+	if len(profile.Requirements) == 0 || len(profile.Requirements) > maxRequirements {
+		return nil, inputError("requirements", "declare between 1 and 1024 requirements")
 	}
 	requirements := make(map[string]Requirement, len(profile.Requirements))
-	for _, r := range profile.Requirements {
+	for i, r := range profile.Requirements {
 		if !identifier.MatchString(r.ID) {
-			return nil, ErrInput
+			return nil, inputError(fmt.Sprintf("requirements[%d].id", i), "use a valid requirement identifier")
 		}
 		if _, exists := requirements[r.ID]; exists {
-			return nil, ErrInput
+			return nil, inputError(fmt.Sprintf("requirements[%d].id", i), "duplicate requirement; declare it once")
 		}
 		requirements[r.ID] = r
 	}
-	if len(observations) != len(requirements) || len(supports) > len(requirements) || len(progress.Attempts) > len(requirements) {
-		return nil, ErrInput
+	if len(observations) != len(requirements) {
+		return nil, inputError("observations", "provide exactly one observation for each declared requirement")
+	}
+	if len(supports) > len(requirements) {
+		return nil, inputError("supports", "support count exceeds declared requirements")
+	}
+	if len(progress.Attempts) > len(requirements) {
+		return nil, inputError("progress.attempts", "attempt count exceeds declared requirements")
 	}
 	observed := make(map[string]ObservedState, len(observations))
-	for _, o := range observations {
+	for i, o := range observations {
 		if _, exists := requirements[o.RequirementID]; !exists {
-			return nil, ErrInput
+			return nil, inputError(fmt.Sprintf("observations[%d].requirement_id", i), "requirement is not declared in this profile")
 		}
-		if _, duplicate := observed[o.RequirementID]; duplicate || !validObservation(o.State) {
-			return nil, ErrInput
+		if _, duplicate := observed[o.RequirementID]; duplicate {
+			return nil, inputError(fmt.Sprintf("observations[%d].requirement_id", i), "duplicate observation; provide one per requirement")
+		}
+		if !validObservation(o.State) {
+			return nil, inputError(fmt.Sprintf("observations[%d].state", i), "use a supported observed state")
 		}
 		observed[o.RequirementID] = o.State
 	}
 	adapters := make(map[string]Support, len(supports))
-	for _, s := range supports {
+	for i, s := range supports {
 		r, exists := requirements[s.RequirementID]
-		if !exists || !r.Required || !identifier.MatchString(s.AdapterID) {
-			return nil, ErrInput
+		if !exists || !r.Required {
+			return nil, inputError(fmt.Sprintf("supports[%d].requirement_id", i), "support must reference a declared required requirement")
+		}
+		if !identifier.MatchString(s.AdapterID) {
+			return nil, inputError(fmt.Sprintf("supports[%d].adapter_id", i), "use a valid adapter identifier")
 		}
 		if _, duplicate := adapters[s.RequirementID]; duplicate {
-			return nil, ErrInput
+			return nil, inputError(fmt.Sprintf("supports[%d].requirement_id", i), "duplicate support; select one adapter")
 		}
 		adapters[s.RequirementID] = s
 	}
@@ -231,18 +266,21 @@ func Assess(profile Profile, observations []Observation, supports []Support, pro
 	p.id = hex.EncodeToString(hash[:])
 	attempts := make(map[string]AttemptState, len(progress.Attempts))
 	if progress.PlanID == "" && len(progress.Attempts) != 0 {
-		return nil, ErrInput
+		return nil, inputError("progress.plan_id", "a plan identity is required when attempts exist")
 	}
 	if progress.PlanID != "" && progress.PlanID != p.id {
-		return nil, ErrStale
+		return nil, fmt.Errorf("%w: progress.plan_id: reconcile prior attempts against the current plan before effects", ErrStale)
 	}
-	for _, a := range progress.Attempts {
+	for i, a := range progress.Attempts {
 		r, exists := requirements[a.RequirementID]
-		if !exists || !r.Required || a.State != Attempted && a.State != Verified {
-			return nil, ErrInput
+		if !exists || !r.Required {
+			return nil, inputError(fmt.Sprintf("progress.attempts[%d].requirement_id", i), "attempt must reference a declared required requirement")
+		}
+		if a.State != Attempted && a.State != Verified {
+			return nil, inputError(fmt.Sprintf("progress.attempts[%d].state", i), "use attempted or verified from durable execution evidence")
 		}
 		if _, duplicate := attempts[a.RequirementID]; duplicate {
-			return nil, ErrInput
+			return nil, inputError(fmt.Sprintf("progress.attempts[%d].requirement_id", i), "duplicate attempt; reconcile durable progress first")
 		}
 		attempts[a.RequirementID] = a.State
 	}
@@ -282,22 +320,18 @@ func Assess(profile Profile, observations []Observation, supports []Support, pro
 // the returned fresh plan, never a cached earlier action list.
 func (p *Plan) Recheck(current Profile, observations []Observation, supports []Support, progress Progress) (*Plan, error) {
 	if p == nil || current.Binding != p.profile.Binding {
-		return nil, ErrStale
+		return nil, fmt.Errorf("%w: binding: assess the current candidate, preconditions and operation before effects", ErrStale)
 	}
 	next, err := Assess(current, observations, supports, progress)
 	if err != nil {
 		return nil, err
 	}
 	if next.id != p.id {
-		return nil, ErrStale
+		return nil, fmt.Errorf("%w: requirements or support changed; assess a fresh plan before effects", ErrStale)
 	}
 	return next, nil
 }
 
-func validBinding(b Binding) bool {
-	return identifier.MatchString(b.ProfileID) && identifier.MatchString(b.OperationID) &&
-		digest.MatchString(b.CandidateSHA256) && digest.MatchString(b.PreconditionsSHA256)
-}
 func validObservation(s ObservedState) bool {
 	return s == Satisfied || s == Missing || s == Unknown || s == Unsupported || s == NotApplied
 }

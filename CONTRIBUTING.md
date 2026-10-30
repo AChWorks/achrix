@@ -32,6 +32,8 @@ Use `type:idea` for unactivated feature/placement proposals awaiting evidence or
 
 Follow [Engineering principles](docs/principles/engineering-principles.md) and the owning topic document. Review the actual control flow/data/resource boundary, not only whether a preferred tool or pattern is present. Performance-sensitive changes use representative benchmark/profile/query evidence when material; security-sensitive changes use focused threat-aware tests/review and current dependency/protocol guidance. A lasting consequential choice may need an ADR; small implementation choices do not. Dependencies need maintenance/security/license/compatibility/upgrade/cost justification, not a wrapper by default.
 
+When changing failure paths, prove useful cause/phase/field/outcome evidence as well as outward data protection. Capture causes before public canonicalization, preserve confirmed and uncertain mutation results, and keep suppression counts observable after traffic stops; [Operations](docs/operations/operability-performance.md#diagnosis-and-audit) owns the diagnostic contract.
+
 ## Rights and sensitive data
 
 [Licensing](docs/legal/licensing.md) owns file/artifact scope; preserve third-party notices and use actual-license SPDX headers for new source. Templates/generated files need unambiguous scope. [CLA](docs/legal/cla.md) requires verified signed versioned consent and sufficient contributor/employer rights before covered external code merges; a PR checkbox or agent assertion is insufficient.

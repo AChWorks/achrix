@@ -319,10 +319,11 @@ func fixtureIncompleteLoginDeadline(t *testing.T, server *httptest.Server, origi
 		t.Fatal("incomplete body exceeded its bounded response deadline")
 	}
 	var result struct {
-		Code string `json:"code"`
+		Code    string `json:"code"`
+		Outcome string `json:"outcome"`
 	}
-	if response.StatusCode != http.StatusServiceUnavailable || json.Unmarshal(body, &result) != nil || result.Code != "authentication_unavailable" {
-		t.Fatal("incomplete body timeout did not fail closed with its safe unavailable result", response.StatusCode)
+	if response.StatusCode != http.StatusRequestTimeout || json.Unmarshal(body, &result) != nil || result.Code != "body_timeout" || result.Outcome != "not_executed" || len(response.Cookies()) != 0 {
+		t.Fatal("incomplete body timeout lost its pre-dispatch code/outcome or issued a session", response.StatusCode)
 	}
 }
 
@@ -466,8 +467,26 @@ func TestIdentityAuditPublicConsumer(t *testing.T) {
 	server.Config.MaxHeaderBytes = 8 << 10
 	server.StartTLS()
 	t.Cleanup(server.Close)
+	credentialState := func() (string, time.Time) {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		var hash string
+		var changed time.Time
+		if err := f.pool.QueryRow(ctx, "SELECT password_hash,changed_at FROM identity.credentials WHERE account_id=$1", account.ID).Scan(&hash, &changed); err != nil {
+			t.Fatal("private consumer credential state unavailable")
+		}
+		return hash, changed
+	}
+	beforeHash, beforeChanged := credentialState()
+	fixtureCounts(t, f.pool, 0, 1, 0)
 	fixtureIncompleteLoginDeadline(t, server, origin)
 	fixtureCounts(t, f.pool, 0, 1, 0)
+	afterHash, afterChanged := credentialState()
+	afterAccount, err := f.identity.Account(context.Background(), fixtureAdministrator, account.ID)
+	if err != nil || afterAccount != account || afterHash != beforeHash || !afterChanged.Equal(beforeChanged) {
+		t.Fatal("body timeout changed durable account or credential state")
+	}
 	loginBody, _ := json.Marshal(map[string]string{"login": stableFixtureLogin, "password": fixtureInitialPassword})
 	cookie, csrf := fixtureSession(t, identityRequest(t, server, "POST", "/identity/login", origin, "", string(loginBody), nil), principal)
 	if got, err := f.identity.Authenticate(context.Background(), cookie.Value); err != nil || got != principal {

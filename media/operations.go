@@ -6,7 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -14,27 +16,19 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Explicit SQL errors prove rejection; transport/context failures around an
-// autocommit mutation can have lost an acknowledgement. Do not interpret them as
-// rollback or authorize filesystem compensation without confirmed durable intent.
+// Ordinary SQL rejections abort this owned statement. Completion-unknown and
+// connection exceptions do not prove rollback, even when delivered as PgError.
+// Transport/context failures can also lose an acknowledgement. No classification
+// here authorizes replay or compensation without confirmed durable intent.
 func mutationError(err error) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrConflict
 	}
 	var pgerr *pgconn.PgError
-	if errors.As(err, &pgerr) && pgerr.Severity == "ERROR" {
-		return ErrUnavailable
+	if errors.As(err, &pgerr) && pgerr.Severity == "ERROR" && validSQLState(pgerr.Code) && pgerr.Code != "40003" && !strings.HasPrefix(pgerr.Code, "08") {
+		return &diagnosticFault{phase: "autocommit", reason: "mutation_rejected", outcome: "not_executed", cause: err}
 	}
-	return errors.Join(ErrUnknownOutcome, errContext(err))
-}
-func errContext(err error) error {
-	if errors.Is(err, context.Canceled) {
-		return context.Canceled
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return context.DeadlineExceeded
-	}
-	return nil
+	return errors.Join(ErrUnknownOutcome, err)
 }
 func (m *Module) create(parent context.Context, filename string, input io.Reader) (Asset, error) {
 	ctx, p, st, finish, err := m.acquire(parent)
@@ -46,16 +40,16 @@ func (m *Module) create(parent context.Context, filename string, input io.Reader
 	if err != nil {
 		return Asset{}, m.failure(ctx, "storage_lock", err)
 	}
-	defer storageRelease()
+	defer func() { m.cleanupFailure(ctx, "create", "storage_unlock", storageRelease()) }()
 	a := Asset{ID: newID(), Filename: filename, State: "pending", Revision: 1, CreatedAt: m.config.Now().UTC().Truncate(time.Microsecond)}
 	if a.CreatedAt.Year() < 1 || a.CreatedAt.Year() > 9999 {
-		return Asset{}, ErrConfiguration
+		return Asset{}, fmt.Errorf("%w: Now must return a date in years 1 through 9999", ErrConfiguration)
 	}
 	c, release, err := lockAsset(ctx, p, a.ID, false)
 	if err != nil {
 		return Asset{}, m.failure(ctx, "create_lock", err)
 	}
-	defer release()
+	defer func() { m.cleanupFailure(ctx, "create", "asset_unlock", release()) }()
 	if err = st.unused(a.ID); err != nil {
 		return Asset{}, m.failure(ctx, "create_storage_identity", err)
 	}
@@ -97,12 +91,12 @@ func (m *Module) read(parent context.Context, id string, dst io.Writer) (Asset, 
 	if err != nil {
 		return Asset{}, m.failure(ctx, "storage_lock", err)
 	}
-	defer storageRelease()
+	defer func() { m.cleanupFailure(ctx, "read", "storage_unlock", storageRelease()) }()
 	c, release, err := lockAsset(ctx, p, id, true)
 	if err != nil {
 		return Asset{}, m.failure(ctx, "read_lock", err)
 	}
-	defer release()
+	defer func() { m.cleanupFailure(ctx, "read", "asset_unlock", release()) }()
 	a, err := findAsset(ctx, c, id)
 	if err != nil {
 		return Asset{}, m.failure(ctx, "read", err)
@@ -114,10 +108,13 @@ func (m *Module) read(parent context.Context, id string, dst io.Writer) (Asset, 
 	if err != nil {
 		return a, m.failure(ctx, "read_storage", err)
 	}
-	defer func() { _ = f.Close() }()
+	defer func() { m.cleanupFailure(ctx, "read", "source_close", f.Close()) }()
 	info, err := f.Stat()
-	if err != nil || info.Size() != a.Size {
-		return a, m.failure(ctx, "read_size", ErrUnavailable)
+	if err != nil {
+		return a, m.failure(ctx, "read_stat", err)
+	}
+	if info.Size() != a.Size {
+		return a, m.failure(ctx, "read_size", fault("source_size", "stored_size_mismatch", ErrUnavailable))
 	}
 	h := sha256.New()
 	n, err := copyBounded(ctx, h, f, MaxUploadBytes+1)
@@ -125,7 +122,7 @@ func (m *Module) read(parent context.Context, id string, dst io.Writer) (Asset, 
 		return a, m.failure(ctx, "read_verify", err)
 	}
 	if n != a.Size || hex.EncodeToString(h.Sum(nil)) != a.SHA256 {
-		return a, m.failure(ctx, "read_integrity", ErrUnavailable)
+		return a, m.failure(ctx, "read_integrity", fault("source_integrity", "stored_hash_mismatch", ErrUnavailable))
 	}
 	if _, err = f.Seek(0, io.SeekStart); err != nil {
 		return a, m.failure(ctx, "read_seek", err)
@@ -135,7 +132,7 @@ func (m *Module) read(parent context.Context, id string, dst io.Writer) (Asset, 
 		return a, m.failure(ctx, "read_copy", err)
 	}
 	if n != a.Size {
-		return a, ErrUnavailable
+		return a, m.failure(ctx, "read_copy", io.ErrUnexpectedEOF)
 	}
 	return a, ctx.Err()
 }
@@ -149,12 +146,12 @@ func (m *Module) delete(parent context.Context, id string, expected int64) error
 	if err != nil {
 		return m.failure(ctx, "storage_lock", err)
 	}
-	defer storageRelease()
+	defer func() { m.cleanupFailure(ctx, "delete", "storage_unlock", storageRelease()) }()
 	c, release, err := lockAsset(ctx, p, id, false)
 	if err != nil {
 		return m.failure(ctx, "delete_lock", err)
 	}
-	defer release()
+	defer func() { m.cleanupFailure(ctx, "delete", "asset_unlock", release()) }()
 	a, err := findAsset(ctx, c, id)
 	if err != nil {
 		return m.failure(ctx, "delete", err)
@@ -196,7 +193,7 @@ func (m *Module) cleanup(ctx context.Context, c *pgxpool.Conn, st *localStorage,
 			return false, ErrConflict
 		}
 	default:
-		return false, ErrUnavailable
+		return false, fault("cleanup_state", "invalid_asset_state", ErrUnavailable)
 	}
 	// The deleting intent was read/acknowledged under this asset's exclusive lock.
 	// File deletion is idempotent; missing files are normal after interrupted unlink.
@@ -222,7 +219,7 @@ func (m *Module) reconcile(parent context.Context, limit int) (ReconcileResult, 
 	if err != nil {
 		return ReconcileResult{}, m.failure(ctx, "storage_lock", err)
 	}
-	defer storageRelease()
+	defer func() { m.cleanupFailure(ctx, "reconcile", "storage_unlock", storageRelease()) }()
 	rows, err := p.Query(ctx, "SELECT id FROM media.assets WHERE state IN ('pending','deleting') ORDER BY id LIMIT $1", limit)
 	if err != nil {
 		return ReconcileResult{}, m.failure(ctx, "reconcile_list", err)
@@ -251,7 +248,7 @@ func (m *Module) reconcile(parent context.Context, limit int) (ReconcileResult, 
 			return result, m.failure(ctx, "reconcile_lock", err)
 		}
 		changed, err := m.cleanup(ctx, c, st, id)
-		release()
+		m.cleanupFailure(ctx, "reconcile", "asset_unlock", release())
 		if err != nil {
 			return result, m.failure(ctx, "reconcile_finish", err)
 		}

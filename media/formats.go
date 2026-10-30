@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"os"
@@ -113,7 +114,7 @@ func selectFormats(selection []string) ([]string, error) {
 		return nil, nil
 	}
 	if len(selection) == 0 || len(selection) > len(supportedFormats) {
-		return nil, ErrConfiguration
+		return nil, fmt.Errorf("%w: AllowedMIMEs must contain between 1 and %d selected supported types", ErrConfiguration, len(supportedFormats))
 	}
 	copy := slices.Clone(selection)
 	for i, value := range copy {
@@ -124,8 +125,11 @@ func selectFormats(selection []string) ([]string, error) {
 				break
 			}
 		}
-		if !known || slices.Contains(copy[:i], value) {
-			return nil, ErrConfiguration
+		if !known {
+			return nil, fmt.Errorf("%w: AllowedMIMEs[%d] is unsupported; select a canonical MIME from SupportedFormats", ErrConfiguration, i)
+		}
+		if slices.Contains(copy[:i], value) {
+			return nil, fmt.Errorf("%w: AllowedMIMEs[%d] repeats an earlier type", ErrConfiguration, i)
 		}
 	}
 	return copy, nil

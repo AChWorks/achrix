@@ -144,3 +144,7 @@ When a feature is removed from selection, its factory/start path must not run;
 its data is retained for compatible re-enable. Owning Module dependencies still
 apply (for example Identity requires Audit). Future actual domain Search or bulk
 operations retain their own accepted work/evidence gates.
+
+### Actionable planning failures
+
+Trusted configuration/planning failures identify bounded field/index/precondition details while preserving `errors.Is` categories. Selected graph errors retain Core's `ErrComposition` cause, including missing versus incompatible capability ABI. No provider/database exception is involved in this pure planning boundary. Runtime syntax errors explain the caller's malformed field without echoing its value or discovering a site. Authorization still precedes site existence/selection lookup; unknown and disabled sites remain outwardly indistinguishable. Policy diagnostics belong to Core and propagate the existing context. A stale revision requires a fresh authorized read/plan, not automatic activation.

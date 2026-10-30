@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -43,6 +44,20 @@ var (
 	ErrUnknownOutcome = errors.New("media outcome requires reconciliation")
 )
 
+// InputError identifies a safe source-owned validation rule without retaining
+// the submitted value. Machine fields/reasons are independent of locale.
+type InputError struct{ field, reason, explanation string }
+
+func (e *InputError) Error() string {
+	return fmt.Sprintf("%s: %s %s", ErrInput, e.field, e.explanation)
+}
+func (e *InputError) Unwrap() error  { return ErrInput }
+func (e *InputError) Field() string  { return e.field }
+func (e *InputError) Reason() string { return e.reason }
+func inputFailure(field, reason, explanation string) error {
+	return &InputError{field, reason, explanation}
+}
+
 // Config identifies an existing product-owned private 0700 directory outside any
 // webroot. Now is a trusted concurrent-safe UTC time source, not an attestation.
 type Config struct {
@@ -59,6 +74,10 @@ type Config struct {
 	// Construction copies the selection; it does not revoke retained reads.
 	AllowedMIMEs []string
 	Now          func() time.Time
+	// Diagnostic receives the original failure privately before public mapping.
+	// It runs synchronously and must return promptly. Products own access and
+	// provider-aware redaction before retention/export; never blindly log cause.
+	Diagnostic func(context.Context, string, string, error)
 }
 type Asset struct {
 	ID            string
@@ -111,8 +130,11 @@ func deadline(parent context.Context, maximum time.Duration) (context.Context, c
 // Input readers are trusted composition objects and MUST return on their caller's
 // deadline/cancellation. This synchronous API cannot interrupt arbitrary Read.
 func (s *Service) Create(parent context.Context, actor achrix.Principal, filename string, input io.Reader) (Asset, error) {
-	if !validFilename(filename) || input == nil {
-		return Asset{}, ErrInput
+	if !validFilename(filename) {
+		return Asset{}, inputFailure("filename", "invalid_filename", "must be bounded UTF-8 text without path separators, outer whitespace or control characters")
+	}
+	if input == nil {
+		return Asset{}, inputFailure("file", "missing_input", "requires an input stream")
 	}
 	ctx, cancel := deadline(parent, 15*time.Second)
 	defer cancel()
@@ -126,8 +148,11 @@ func (s *Service) Create(parent context.Context, actor achrix.Principal, filenam
 // Pages use immutable generated IDs as keysets and are not a multi-page snapshot.
 func (s *Service) List(parent context.Context, actor achrix.Principal, cursor string, limit int) (Page, error) {
 	after, err := decodeCursor(cursor)
-	if err != nil || limit < 1 || limit > 100 {
-		return Page{}, ErrInput
+	if err != nil {
+		return Page{}, inputFailure("cursor", "invalid_cursor", "must be an unmodified continuation from List")
+	}
+	if limit < 1 || limit > 100 {
+		return Page{}, inputFailure("limit", "limit_range", "must be between 1 and 100")
 	}
 	ctx, cancel := deadline(parent, time.Second)
 	defer cancel()
@@ -141,7 +166,7 @@ func (s *Service) List(parent context.Context, actor achrix.Principal, cursor st
 // Pending/deleting outcomes are not byte-readable; deleted is a minimal tombstone.
 func (s *Service) Status(parent context.Context, actor achrix.Principal, id string) (Asset, error) {
 	if !validID(id) {
-		return Asset{}, ErrInput
+		return Asset{}, inputFailure("asset_id", "invalid_asset_id", "must be the 26-character generated asset identity")
 	}
 	ctx, cancel := deadline(parent, time.Second)
 	defer cancel()
@@ -155,8 +180,11 @@ func (s *Service) Status(parent context.Context, actor achrix.Principal, id stri
 // trusted destination must honor cancellation; products serve attachment with
 // exact MIME, nosniff and private/no-store, never static paths or public links.
 func (s *Service) Read(parent context.Context, actor achrix.Principal, id string, dst io.Writer) (Asset, error) {
-	if !validID(id) || dst == nil {
-		return Asset{}, ErrInput
+	if !validID(id) {
+		return Asset{}, inputFailure("asset_id", "invalid_asset_id", "must be the 26-character generated asset identity")
+	}
+	if dst == nil {
+		return Asset{}, inputFailure("destination", "missing_destination", "requires a writer")
 	}
 	ctx, cancel := deadline(parent, 15*time.Second)
 	defer cancel()
@@ -166,8 +194,11 @@ func (s *Service) Read(parent context.Context, actor achrix.Principal, id string
 	return s.module.read(ctx, id, dst)
 }
 func (s *Service) Delete(parent context.Context, actor achrix.Principal, id string, expectedRevision int64) error {
-	if !validID(id) || expectedRevision < 1 {
-		return ErrInput
+	if !validID(id) {
+		return inputFailure("asset_id", "invalid_asset_id", "must be the 26-character generated asset identity")
+	}
+	if expectedRevision < 1 {
+		return inputFailure("revision", "invalid_revision", "must be the positive revision returned by Status")
 	}
 	ctx, cancel := deadline(parent, 5*time.Second)
 	defer cancel()
@@ -182,7 +213,7 @@ func (s *Service) Delete(parent context.Context, actor achrix.Principal, id stri
 // incomplete asset. A currently locked operation is counted Busy and untouched.
 func (s *Service) Reconcile(parent context.Context, actor achrix.Principal, limit int) (ReconcileResult, error) {
 	if limit < 1 || limit > 40 {
-		return ReconcileResult{}, ErrInput
+		return ReconcileResult{}, inputFailure("limit", "limit_range", "must be between 1 and 40")
 	}
 	ctx, cancel := deadline(parent, 10*time.Second)
 	defer cancel()

@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"regexp"
 	"slices"
@@ -115,21 +116,24 @@ func NewManaged(config Config, input ManagementConfig) (*Module, error) {
 func newManagement(config Config, input ManagementConfig) (*management, error) {
 	// Catalogue/request bounds protect planning and public output. There is no
 	// global site-count ceiling; products own their finite inventory budget.
-	if len(input.Available) > 256 || len(input.Sites) > len(config.Sites) {
-		return nil, ErrConfiguration
+	if len(input.Available) > 256 {
+		return nil, fmt.Errorf("%w: available: at most 256 module descriptors are supported", ErrConfiguration)
+	}
+	if len(input.Sites) > len(config.Sites) {
+		return nil, fmt.Errorf("%w: selections: count exceeds declared sites", ErrConfiguration)
 	}
 	m := &management{catalog: make(map[string]achrix.Descriptor, len(input.Available)), sites: make(map[SiteID]SiteInfo, len(config.Sites)), generations: make(map[SiteID]uint64, len(config.Sites))}
 	catalog := cloneDescriptors(input.Available)
-	sort.Slice(catalog, func(i, j int) bool { return catalog[i].ID < catalog[j].ID })
-	for _, descriptor := range catalog {
-		if !validDescriptor(descriptor) {
-			return nil, ErrConfiguration
+	for i, descriptor := range catalog {
+		if err := validateDescriptor(descriptor); err != nil {
+			return nil, fmt.Errorf("available[%d]: %w", i, err)
 		}
 		if _, duplicate := m.catalog[descriptor.ID]; duplicate {
-			return nil, ErrConfiguration
+			return nil, fmt.Errorf("%w: available[%d].id: duplicate module %s", ErrConfiguration, i, descriptor.ID)
 		}
 		m.catalog[descriptor.ID] = descriptor
 	}
+	sort.Slice(catalog, func(i, j int) bool { return catalog[i].ID < catalog[j].ID })
 	m.catalogRevision = digest(catalog)
 	for _, site := range config.Sites {
 		m.sites[site.ID] = SiteInfo{ID: site.ID, Disabled: site.Disabled}
@@ -137,15 +141,18 @@ func newManagement(config Config, input ManagementConfig) (*management, error) {
 	}
 	sort.Slice(m.ids, func(i, j int) bool { return m.ids[i] < m.ids[j] })
 	seen := make(map[SiteID]bool, len(input.Sites))
-	for _, selection := range input.Sites {
+	for i, selection := range input.Sites {
 		site, exists := m.sites[selection.ID]
-		if !exists || seen[selection.ID] {
-			return nil, ErrConfiguration
+		if !exists {
+			return nil, fmt.Errorf("%w: selections[%d].id: site is not declared in the supplied configuration", ErrConfiguration, i)
+		}
+		if seen[selection.ID] {
+			return nil, fmt.Errorf("%w: selections[%d].id: duplicate selection", ErrConfiguration, i)
 		}
 		seen[selection.ID] = true
 		modules, _, err := selectedDescriptors(m.catalog, selection.Modules)
 		if err != nil {
-			return nil, ErrConfiguration
+			return nil, fmt.Errorf("%w: selections[%d].modules: %w", ErrConfiguration, i, err)
 		}
 		site.Modules = modules
 		m.generations[selection.ID] = selection.Generation
@@ -162,28 +169,45 @@ func validModuleIdentity(value string) bool {
 	return len(value) > 0 && len(value) <= 128 && moduleIdentity.MatchString(value)
 }
 
-func validDescriptor(d achrix.Descriptor) bool {
-	if !validModuleIdentity(d.ID) || d.Version == "" || len(d.Version) > 256 ||
-		len(d.Provides) > 256 || len(d.Requires) > 256 || len(d.Optional) > 256 {
-		return false
+func validateDescriptor(d achrix.Descriptor) error {
+	if !validModuleIdentity(d.ID) {
+		return fmt.Errorf("%w: id: use a bounded lowercase module identifier", ErrConfiguration)
+	}
+	if d.Version == "" || len(d.Version) > 256 {
+		return fmt.Errorf("%w: module %s version: provide an implementation version of 1..256 bytes", ErrConfiguration, d.ID)
+	}
+	if len(d.Provides) > 256 || len(d.Requires) > 256 || len(d.Optional) > 256 {
+		return fmt.Errorf("%w: module %s capabilities: each group is limited to 256 declarations", ErrConfiguration, d.ID)
 	}
 	provided := make(map[string]bool, len(d.Provides))
-	for _, c := range d.Provides {
-		if !validModuleIdentity(c.ID) || c.ID == "achrix.authorization" || c.Version == 0 || provided[c.ID] {
-			return false
+	for i, c := range d.Provides {
+		if !validModuleIdentity(c.ID) || c.Version == 0 {
+			return fmt.Errorf("%w: module %s provides[%d]: valid ID and positive ABI revision required", ErrConfiguration, d.ID, i)
+		}
+		if c.ID == "achrix.authorization" {
+			return fmt.Errorf("%w: module %s provides[%d]: authorization is owned by Core", ErrConfiguration, d.ID, i)
+		}
+		if provided[c.ID] {
+			return fmt.Errorf("%w: module %s provides[%d]: duplicate capability", ErrConfiguration, d.ID, i)
 		}
 		provided[c.ID] = true
 	}
 	seen := make(map[string]bool, len(d.Requires)+len(d.Optional))
-	for _, group := range [][]achrix.Capability{d.Requires, d.Optional} {
-		for _, c := range group {
-			if !validModuleIdentity(c.ID) || c.Version == 0 || seen[c.ID] {
-				return false
+	for _, group := range []struct {
+		name         string
+		capabilities []achrix.Capability
+	}{{"requires", d.Requires}, {"optional", d.Optional}} {
+		for i, c := range group.capabilities {
+			if !validModuleIdentity(c.ID) || c.Version == 0 {
+				return fmt.Errorf("%w: module %s %s[%d]: valid ID and positive ABI revision required", ErrConfiguration, d.ID, group.name, i)
+			}
+			if seen[c.ID] {
+				return fmt.Errorf("%w: module %s %s[%d]: duplicate dependency", ErrConfiguration, d.ID, group.name, i)
 			}
 			seen[c.ID] = true
 		}
 	}
-	return true
+	return nil
 }
 
 // descriptorOnly cannot construct/start an actual Module or acquire resources.
@@ -198,19 +222,24 @@ func (descriptorOnly) Stop(context.Context) error      { return nil }
 
 func selectedDescriptors(catalog map[string]achrix.Descriptor, requested []string) ([]string, []achrix.Descriptor, error) {
 	if len(requested) > 256 {
-		return nil, nil, ErrInput
+		return nil, nil, fmt.Errorf("%w: modules: select at most 256 modules", ErrInput)
+	}
+	for i, id := range requested {
+		if !validModuleIdentity(id) {
+			return nil, nil, fmt.Errorf("%w: modules[%d]: invalid module identifier", ErrInput, i)
+		}
 	}
 	ids := append([]string(nil), requested...)
 	sort.Strings(ids)
 	descriptors := make([]achrix.Descriptor, 0, len(ids))
 	modules := make([]achrix.Module, 0, len(ids))
 	for i, id := range ids {
-		if !validModuleIdentity(id) || i > 0 && ids[i-1] == id {
-			return nil, nil, ErrInput
+		if i > 0 && ids[i-1] == id {
+			return nil, nil, fmt.Errorf("%w: modules: duplicate selection %s", ErrInput, id)
 		}
 		descriptor, exists := catalog[id]
 		if !exists {
-			return nil, nil, ErrInput
+			return nil, nil, fmt.Errorf("%w: modules: %s is absent from the available catalog", ErrInput, id)
 		}
 		descriptors = append(descriptors, cloneDescriptor(descriptor))
 		modules = append(modules, descriptorOnly{descriptor})
@@ -218,13 +247,13 @@ func selectedDescriptors(catalog map[string]achrix.Descriptor, requested []strin
 	app, err := achrix.New(achrix.Config{StartupTimeout: time.Second, ShutdownTimeout: time.Second},
 		achrix.PolicyFunc(func(context.Context, achrix.Principal, string, string) error { return achrix.ErrDenied }), modules...)
 	if err != nil {
-		return nil, nil, ErrConfiguration
+		return nil, nil, fmt.Errorf("%w: selected module graph: %w", ErrConfiguration, err)
 	}
 	// New has acquired no Module resources; close its unused Core admission state.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	if err := app.Shutdown(ctx); err != nil {
-		return nil, nil, ErrUnavailable
+		return nil, nil, fmt.Errorf("%w: close planning composition: %w", ErrUnavailable, err)
 	}
 	return ids, descriptors, nil
 }
@@ -283,7 +312,7 @@ func (s *Service) Site(parent context.Context, actor achrix.Principal, id SiteID
 		return SiteInfo{}, err
 	}
 	if !validSiteID(id) {
-		return SiteInfo{}, ErrInput
+		return SiteInfo{}, fmt.Errorf("%w: site_id: use the bounded canonical site identifier", ErrInput)
 	}
 	ctx, cancel := context.WithTimeout(parent, time.Second)
 	defer cancel()
@@ -315,8 +344,11 @@ func (s *Service) Inventory(parent context.Context, actor achrix.Principal, curs
 		return InventoryPage{}, err
 	}
 	after, err := decodeInventoryCursor(cursor)
-	if err != nil || limit < 1 || limit > 100 {
-		return InventoryPage{}, ErrInput
+	if err != nil {
+		return InventoryPage{}, fmt.Errorf("%w: cursor: use a previously returned inventory cursor", ErrInput)
+	}
+	if limit < 1 || limit > 100 {
+		return InventoryPage{}, fmt.Errorf("%w: limit: choose 1..100 entries", ErrInput)
 	}
 	ctx, cancel := context.WithTimeout(parent, time.Second)
 	defer cancel()
@@ -379,11 +411,17 @@ func (s *Service) PlanActivation(parent context.Context, actor achrix.Principal,
 	if err := parent.Err(); err != nil {
 		return ActivationPlan{}, err
 	}
-	if !validSiteID(request.SiteID) || len(request.ExpectedRevision) != 64 || len(request.Modules) > 256 {
-		return ActivationPlan{}, ErrInput
+	if !validSiteID(request.SiteID) {
+		return ActivationPlan{}, fmt.Errorf("%w: site_id: use a canonical site identifier", ErrInput)
+	}
+	if len(request.ExpectedRevision) != 64 {
+		return ActivationPlan{}, fmt.Errorf("%w: expected_revision: provide the current 64-character revision", ErrInput)
+	}
+	if len(request.Modules) > 256 {
+		return ActivationPlan{}, fmt.Errorf("%w: modules: select at most 256 modules", ErrInput)
 	}
 	if _, err := hex.DecodeString(request.ExpectedRevision); err != nil {
-		return ActivationPlan{}, ErrInput
+		return ActivationPlan{}, fmt.Errorf("%w: expected_revision: use a hexadecimal revision", ErrInput)
 	}
 	ctx, cancel := context.WithTimeout(parent, time.Second)
 	defer cancel()
@@ -398,8 +436,11 @@ func (s *Service) PlanActivation(parent context.Context, actor achrix.Principal,
 	if !exists || site.Disabled {
 		return ActivationPlan{}, ErrNotFound
 	}
-	if request.ExpectedRevision != site.Revision || m.generations[site.ID] == math.MaxUint64 {
-		return ActivationPlan{}, ErrConflict
+	if request.ExpectedRevision != site.Revision {
+		return ActivationPlan{}, fmt.Errorf("%w: expected_revision: refresh the authorized site before planning again", ErrConflict)
+	}
+	if m.generations[site.ID] == math.MaxUint64 {
+		return ActivationPlan{}, fmt.Errorf("%w: generation exhausted; operator reconciliation required", ErrConflict)
 	}
 	ids, descriptors, err := selectedDescriptors(m.catalog, request.Modules)
 	if err != nil {
@@ -420,7 +461,7 @@ func (s *Service) PlanActivation(parent context.Context, actor achrix.Principal,
 // persistence/activation the product reauthorizes and serializes/CASes its state.
 func (p ActivationPlan) Replacement(current Config, input ManagementConfig) (ManagementConfig, error) {
 	if !validSiteID(p.site) || p.before == "" || p.after == "" {
-		return ManagementConfig{}, ErrInput
+		return ManagementConfig{}, fmt.Errorf("%w: plan: obtain a valid authorized activation plan", ErrInput)
 	}
 	module, err := NewManaged(current, input)
 	if err != nil {
@@ -431,14 +472,14 @@ func (p ActivationPlan) Replacement(current Config, input ManagementConfig) (Man
 		return ManagementConfig{}, ErrNotFound
 	}
 	if site.Revision != p.before || module.management.generations[site.ID] == math.MaxUint64 || module.management.generations[site.ID]+1 != p.generation {
-		return ManagementConfig{}, ErrConflict
+		return ManagementConfig{}, fmt.Errorf("%w: selection revision or generation changed; refresh and reauthorize before replacement", ErrConflict)
 	}
 	ids, _, err := selectedDescriptors(module.management.catalog, p.modules)
 	if err != nil {
 		return ManagementConfig{}, err
 	}
 	if selectionRevision(site.ID, site.Disabled, ids, module.management.catalogRevision, p.generation) != p.after {
-		return ManagementConfig{}, ErrConflict
+		return ManagementConfig{}, fmt.Errorf("%w: planned selection no longer matches its after revision", ErrConflict)
 	}
 	output := cloneManagement(input)
 	found := false

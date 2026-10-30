@@ -42,6 +42,7 @@ func (r *testRepository) Find(context.Context, string) (domain.Note, error) {
 func TestRepeatedRejectionsHaveBoundedSafeEdgeVisibility(t *testing.T) {
 	var output strings.Builder
 	logger := diagnosis.New(&output)
+	defer diagnosis.Flush(logger)
 	repository := &testRepository{}
 	app, err := achrix.New(achrix.Config{StartupTimeout: time.Second, ShutdownTimeout: time.Second, Logger: logger}, achrix.PolicyFunc(application.Policy), &testModule{})
 	if err != nil {
@@ -85,8 +86,10 @@ func TestRepeatedRejectionsHaveBoundedSafeEdgeVisibility(t *testing.T) {
 	if repository.reads != 0 || repository.writes != 0 {
 		t.Fatal("rejected traffic accessed persistence")
 	}
+	diagnosis.Flush(logger)
 	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
-	bound := int(time.Since(started)/time.Second) + 1
+	// Four distinct rejection classes, each with a first record and final summary.
+	bound := 8 * (int(time.Since(started)/time.Second) + 1)
 	if len(lines) > bound {
 		t.Fatalf("%d edge records exceeded elapsed-time bound %d", len(lines), bound)
 	}
@@ -96,8 +99,13 @@ func TestRepeatedRejectionsHaveBoundedSafeEdgeVisibility(t *testing.T) {
 			t.Fatal(err)
 		}
 		id, _ := record["request_id"].(string)
-		if record["level"] != "INFO" || record["component"] != "notes.http" || record["operation"] != "request" || !ids[id] {
+		if record["level"] != "INFO" || record["component"] != "notes.http" || record["operation"] != "request" || record["diagnostic_summary"] != true && !ids[id] {
 			t.Fatal("missing safe bounded edge attribution", record)
+		}
+	}
+	for _, reason := range []string{"unauthenticated", "permission_denied", "invalid_input", "json_required"} {
+		if !strings.Contains(output.String(), `"reason":"`+reason+`"`) {
+			t.Fatal("distinct rejected operation lost", reason)
 		}
 	}
 	if strings.Contains(output.String(), "PRIVATE_") || strings.Contains(output.String(), "192.0.2.") || strings.Contains(output.String(), "achrix.authorization") {
@@ -108,6 +116,7 @@ func TestRepeatedRejectionsHaveBoundedSafeEdgeVisibility(t *testing.T) {
 func TestUnavailableAndReadinessRemainBoundedAndFailClosed(t *testing.T) {
 	var output strings.Builder
 	logger := diagnosis.New(&output)
+	defer diagnosis.Flush(logger)
 	repository := &testRepository{}
 	dependency := &testModule{readiness: errors.New("PRIVATE_DEPENDENCY")}
 	app, err := achrix.New(achrix.Config{StartupTimeout: time.Second, ShutdownTimeout: time.Second, Logger: logger}, achrix.PolicyFunc(func(context.Context, achrix.Principal, string, string) error {
@@ -137,10 +146,16 @@ func TestUnavailableAndReadinessRemainBoundedAndFailClosed(t *testing.T) {
 	if repository.reads != 0 || repository.writes != 0 {
 		t.Fatal("unavailable policy accessed persistence")
 	}
-	if count, bound := strings.Count(output.String(), "\n"), int(time.Since(started)/time.Second)+1; count == 0 || count > bound {
+	diagnosis.Flush(logger)
+	if count, bound := strings.Count(output.String(), "\n"), 6*(int(time.Since(started)/time.Second)+1); count == 0 || count > bound {
 		t.Fatalf("abnormal request visibility count=%d bound=%d", count, bound)
 	}
-	if strings.Contains(output.String(), "PRIVATE_") || strings.Contains(output.String(), `"level":"ERROR"`) {
-		t.Fatal("raw failure or duplicate dependency detail logged")
+	if strings.Contains(output.String(), "PRIVATE_") {
+		t.Fatal("raw failure logged")
+	}
+	for _, reason := range []string{"not_ready", "unavailable", "policy_evaluation_failed"} {
+		if !strings.Contains(output.String(), `"reason":"`+reason+`"`) {
+			t.Fatal("distinct operational evidence lost", reason)
+		}
 	}
 }

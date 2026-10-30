@@ -8,6 +8,7 @@ import (
 	"embed"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"runtime"
@@ -27,25 +28,28 @@ var migrations embed.FS
 const migrationLock int64 = 61873542138
 
 type Module struct {
-	config         Config
-	dbConfig       *pgxpool.Config
-	mu             sync.Mutex
-	pool           *pgxpool.Pool
-	storage        *localStorage
-	state          string
-	work           context.Context
-	cancel         context.CancelFunc
-	active         int
-	drained        chan struct{}
-	decoders       chan struct{}
-	logger         *slog.Logger
-	failures       atomic.Uint64
-	lastDiagnostic atomic.Int64
+	config      Config
+	dbConfig    *pgxpool.Config
+	mu          sync.Mutex
+	pool        *pgxpool.Pool
+	storage     *localStorage
+	state       string
+	work        context.Context
+	cancel      context.CancelFunc
+	active      int
+	drained     chan struct{}
+	decoders    chan struct{}
+	logger      *slog.Logger
+	failures    atomic.Uint64
+	diagnostics diagnosticBudget
 }
 
 func NewPostgres(dsn string, config Config, logger *slog.Logger) (*Module, error) {
-	if config.MaxConns < 0 || config.MaxOperations < 0 {
-		return nil, ErrConfiguration
+	if config.MaxConns < 0 {
+		return nil, fmt.Errorf("%w: MaxConns must be zero (default) or positive", ErrConfiguration)
+	}
+	if config.MaxOperations < 0 {
+		return nil, fmt.Errorf("%w: MaxOperations must be zero (default) or positive", ErrConfiguration)
 	}
 	if config.MaxConns == 0 {
 		config.MaxConns = 4
@@ -55,11 +59,31 @@ func NewPostgres(dsn string, config Config, logger *slog.Logger) (*Module, error
 	}
 	c, err := databaseConfig(dsn)
 	if err != nil {
-		return nil, err
+		if config.Diagnostic != nil {
+			config.Diagnostic(context.Background(), "configure", "database", err)
+		}
+		detail := "database connection configuration is invalid"
+		var diagnostic *diagnosticFault
+		if errors.As(err, &diagnostic) {
+			switch diagnostic.reason {
+			case "dsn_length":
+				detail = "database DSN must contain between 1 and 4096 bytes"
+			case "dsn_syntax":
+				detail = "database DSN syntax is invalid; use a PostgreSQL URI or keyword=value connection string"
+			case "verified_tls_required":
+				detail = "database host requires verified TLS; use sslmode=verify-full for remote connections"
+			case "fallback_verified_tls_required":
+				detail = "every remote database fallback host requires verified TLS; use sslmode=verify-full for all fallback connections"
+			}
+		}
+		return nil, fmt.Errorf("%w: %s", ErrConfiguration, detail)
 	}
 	c.MaxConns = config.MaxConns
-	if runtime.GOOS != "linux" || config.StorageRoot == "" || len(config.StorageRoot) > 4096 || !strings.HasPrefix(config.StorageRoot, "/") {
-		return nil, ErrConfiguration
+	if runtime.GOOS != "linux" {
+		return nil, fmt.Errorf("%w: the local storage provider requires Linux", ErrConfiguration)
+	}
+	if config.StorageRoot == "" || len(config.StorageRoot) > 4096 || !strings.HasPrefix(config.StorageRoot, "/") {
+		return nil, fmt.Errorf("%w: StorageRoot must be an absolute path of at most 4096 bytes", ErrConfiguration)
 	}
 	config.AllowedMIMEs, err = selectFormats(config.AllowedMIMEs)
 	if err != nil {
@@ -78,18 +102,18 @@ func NewPostgres(dsn string, config Config, logger *slog.Logger) (*Module, error
 }
 func databaseConfig(dsn string) (*pgxpool.Config, error) {
 	if len(dsn) == 0 || len(dsn) > 4096 {
-		return nil, ErrConfiguration
+		return nil, fault("connection_config", "dsn_length", ErrConfiguration)
 	}
 	c, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		return nil, ErrConfiguration
+		return nil, fault("connection_config", "dsn_syntax", errors.Join(ErrConfiguration, err))
 	}
 	if !safeHostTLS(c.ConnConfig.Host, c.ConnConfig.TLSConfig) {
-		return nil, ErrConfiguration
+		return nil, fault("connection_config", "verified_tls_required", ErrConfiguration)
 	}
-	for _, f := range c.ConnConfig.Fallbacks {
+	for i, f := range c.ConnConfig.Fallbacks {
 		if f == nil || !safeHostTLS(f.Host, f.TLSConfig) {
-			return nil, ErrConfiguration
+			return nil, fault("connection_config", "fallback_verified_tls_required", ErrConfiguration, slog.Int("fallback_index", i))
 		}
 	}
 	// Durable PostgreSQL intent must precede filesystem effects. Explicit session
@@ -124,12 +148,13 @@ func (m *Module) Start(ctx context.Context) error {
 		return err
 	}
 	if _, ok := ctx.Deadline(); !ok {
-		return ErrConfiguration
+		return fmt.Errorf("%w: Start requires a context deadline", ErrConfiguration)
 	}
 	m.mu.Lock()
 	if m.state != "new" {
+		state := m.state
 		m.mu.Unlock()
-		return ErrUnavailable
+		return fmt.Errorf("%w: Start requires a new Module instance; current lifecycle state is %s", ErrUnavailable, state)
 	}
 	m.state = "starting"
 	m.mu.Unlock()
@@ -147,11 +172,11 @@ func (m *Module) Start(ctx context.Context) error {
 	m.mu.Lock()
 	m.pool = pool
 	m.mu.Unlock()
-	if err = checkEnvironment(ctx, pool); err == nil {
-		err = checkSchema(ctx, pool)
+	if err = checkEnvironment(ctx, pool); err != nil {
+		return m.failure(ctx, "start_environment", err)
 	}
-	if err != nil {
-		return m.failure(ctx, "start", err)
+	if err = checkSchema(ctx, pool); err != nil {
+		return m.failure(ctx, "start_schema", err)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -166,7 +191,7 @@ func (m *Module) acquire(parent context.Context) (context.Context, *pgxpool.Pool
 		return nil, nil, nil, nil, err
 	}
 	if _, ok := parent.Deadline(); !ok {
-		return nil, nil, nil, nil, ErrConfiguration
+		return nil, nil, nil, nil, fmt.Errorf("%w: a Media operation requires a context deadline", ErrConfiguration)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -209,6 +234,7 @@ func (m *Module) Ready(parent context.Context) error {
 	return nil
 }
 func (m *Module) Stop(ctx context.Context) error {
+	defer m.flushDiagnostics()
 	m.mu.Lock()
 	if m.state == "stopped" {
 		m.mu.Unlock()
@@ -224,7 +250,6 @@ func (m *Module) Stop(ctx context.Context) error {
 		return ctx.Err()
 	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	if m.pool != nil {
 		m.pool.Close()
 		m.pool = nil
@@ -235,7 +260,11 @@ func (m *Module) Stop(ctx context.Context) error {
 		m.storage = nil
 	}
 	m.state = "stopped"
-	return err
+	m.mu.Unlock()
+	if err != nil {
+		return m.failure(ctx, "stop_storage", err)
+	}
+	return nil
 }
 func (m *Module) FailureCount() uint64 { return m.failures.Load() }
 
@@ -249,6 +278,11 @@ func canonicalFailureError(err error) error {
 	var safe []error
 	for _, category := range []error{context.Canceled, context.DeadlineExceeded, ErrInput, ErrConflict, ErrLimited, ErrNotFound, ErrUnknownOutcome} {
 		if errors.Is(err, category) {
+			var input *InputError
+			if category == ErrInput && errors.As(err, &input) {
+				safe = append(safe, &InputError{input.field, input.reason, input.explanation})
+				continue
+			}
 			safe = append(safe, category)
 		}
 	}
@@ -262,34 +296,38 @@ func canonicalFailureError(err error) error {
 }
 
 func (m *Module) failure(ctx context.Context, operation string, err error) error {
-	err = canonicalFailureError(err)
-	if !errors.Is(err, ErrUnknownOutcome) && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrInput) || errors.Is(err, ErrConflict) || errors.Is(err, ErrLimited) || errors.Is(err, ErrNotFound)) {
-		return err
+	return m.failureResult(ctx, operation, err, canonicalFailureError(err))
+}
+
+func (m *Module) failureResult(ctx context.Context, operation string, cause, result error) error {
+	unknown := errors.Is(result, ErrUnknownOutcome)
+	var diagnostic *diagnosticFault
+	if !unknown && !errors.As(cause, &diagnostic) && !hasOperationalMember(ctx, cause) && (errors.Is(result, ErrInput) || errors.Is(result, ErrConflict) || errors.Is(result, ErrLimited) || errors.Is(result, ErrNotFound) || ctx.Err() != nil && (errors.Is(result, context.Canceled) || errors.Is(result, context.DeadlineExceeded))) {
+		return result
 	}
 	m.failures.Add(1)
-	now := time.Now().UnixNano()
-	last := m.lastDiagnostic.Load()
-	if now-last >= int64(time.Second) && m.lastDiagnostic.CompareAndSwap(last, now) {
-		reason := "dependency_failure"
-		if errors.Is(err, ErrUnknownOutcome) {
-			reason = "unknown_outcome"
-		}
-		m.logger.ErrorContext(ctx, "media operation failed", "component", "achrix.media", "operation", operation, "reason", reason)
+	outcome := ""
+	if unknown {
+		outcome = "unknown"
 	}
-	if errors.Is(err, ErrUnknownOutcome) {
-		return err
-	}
-	return ErrUnavailable
+	m.diagnose(ctx, operation, operation, cause, outcome)
+	return result
 }
 func checkEnvironment(ctx context.Context, p *pgxpool.Pool) error {
 	var version int
 	var encoding, commit string
 	var fsync, fullPages bool
 	if err := p.QueryRow(ctx, "SELECT current_setting('server_version_num')::integer,current_setting('server_encoding'),current_setting('fsync')::boolean,current_setting('full_page_writes')::boolean,current_setting('synchronous_commit')").Scan(&version, &encoding, &fsync, &fullPages, &commit); err != nil {
-		return err
+		return fault("environment_query", "environment_query_failed", err)
 	}
-	if version < 180000 || version >= 190000 || encoding != "UTF8" || !fsync || !fullPages || commit != "on" {
-		return ErrConfiguration
+	if version < 180000 || version >= 190000 {
+		return fault("environment_check", "unsupported_postgres", ErrConfiguration, slog.Int("server_version_num", version))
+	}
+	if encoding != "UTF8" {
+		return fault("environment_check", "utf8_required", ErrConfiguration)
+	}
+	if !fsync || !fullPages || commit != "on" {
+		return fault("environment_check", "durability_settings", ErrConfiguration, slog.Bool("fsync", fsync), slog.Bool("full_page_writes", fullPages), slog.Bool("synchronous_commit", commit == "on"))
 	}
 	return nil
 }
@@ -324,7 +362,7 @@ func migrationPlan() []migration {
 func ledgerVersion(ctx context.Context, q schemaQuery, plan []migration) (int, error) {
 	rows, err := q.Query(ctx, "SELECT version,checksum FROM media.schema_migrations ORDER BY version")
 	if err != nil {
-		return 0, err
+		return 0, fault("ledger_query", "ledger_unavailable", err)
 	}
 	defer rows.Close()
 	count := 0
@@ -332,28 +370,37 @@ func ledgerVersion(ctx context.Context, q schemaQuery, plan []migration) (int, e
 		var version int
 		var checksum string
 		if err := rows.Scan(&version, &checksum); err != nil {
-			return 0, err
+			return 0, fault("ledger_scan", "ledger_invalid_row", err, slog.Int("entry", count+1))
 		}
-		if count >= len(plan) || version != count+1 || checksum != plan[count].checksum {
-			return 0, ErrConfiguration
+		if count >= len(plan) || version > len(plan) {
+			return 0, fault("ledger_validate", "ledger_unknown_version", ErrConfiguration, slog.Int("version", version))
+		}
+		if version != count+1 {
+			return 0, fault("ledger_validate", "ledger_noncontiguous", ErrConfiguration, slog.Int("expected_version", count+1), slog.Int("version", version))
+		}
+		if checksum != plan[count].checksum {
+			return 0, fault("ledger_validate", "ledger_checksum_changed", ErrConfiguration, slog.Int("version", version))
 		}
 		count++
 	}
 	if err := rows.Err(); err != nil {
-		return 0, err
+		return 0, fault("ledger_read", "ledger_read_failed", err)
 	}
 	if count == 0 {
-		return 0, ErrConfiguration
+		return 0, fault("ledger_validate", "ledger_empty", ErrConfiguration)
 	}
 	return count, nil
 }
 func checkAssetSchema(ctx context.Context, q schemaQuery) error {
 	rows, err := q.Query(ctx, "SELECT id,state,revision,filename,mime,size,width,height,sha256,created_at FROM media.assets WHERE false")
 	if err != nil {
-		return err
+		return fault("asset_schema", "asset_schema_invalid", err)
 	}
 	rows.Close()
-	return rows.Err()
+	if err = rows.Err(); err != nil {
+		return fault("asset_schema", "asset_schema_invalid", err)
+	}
+	return nil
 }
 func checkSchema(ctx context.Context, p *pgxpool.Pool) error {
 	plan := migrationPlan()
@@ -362,7 +409,7 @@ func checkSchema(ctx context.Context, p *pgxpool.Pool) error {
 		return err
 	}
 	if version != len(plan) {
-		return ErrConfiguration
+		return fault("ledger_validate", "migration_required", ErrConfiguration, slog.Int("installed_version", version), slog.Int("required_version", len(plan)))
 	}
 	return checkAssetSchema(ctx, p)
 }
@@ -371,61 +418,82 @@ func checkSchema(ctx context.Context, p *pgxpool.Pool) error {
 // one transactional advisory lock. Start never does DDL. A source rollback
 // cannot reverse the ledger or durable filesystem effects.
 func Migrate(ctx context.Context, dsn string) error {
+	return MigrateWithDiagnostics(ctx, dsn, nil, nil)
+}
+
+// MigrateWithDiagnostics preserves startup/migration causes at a protected
+// product-owned boundary. Public errors retain the existing safe identities.
+// The hook must redact provider secrets before storing/exporting its evidence.
+func MigrateWithDiagnostics(ctx context.Context, dsn string, logger *slog.Logger, diagnostic func(context.Context, string, string, error)) error {
+	m := &Module{logger: logger, config: Config{Diagnostic: diagnostic}}
+	defer m.flushDiagnostics()
+	effectOutcome := "not_executed"
+	fail := func(phase string, cause error, result error) error {
+		outcome := effectOutcome
+		if errors.Is(result, ErrUnknownOutcome) {
+			outcome = "unknown"
+		}
+		m.diagnose(ctx, "migrate", phase, cause, outcome)
+		return result
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if _, ok := ctx.Deadline(); !ok {
-		return ErrConfiguration
+		return fmt.Errorf("%w: Migrate requires a context deadline", ErrConfiguration)
 	}
 	c, err := databaseConfig(dsn)
 	if err != nil {
-		return err
+		return fail("connection_config", err, fmt.Errorf("%w: check database connection syntax and verified TLS configuration", ErrConfiguration))
 	}
 	p, err := pgxpool.NewWithConfig(ctx, c)
 	if err != nil {
-		return ErrUnavailable
+		return fail("pool_initialize", err, ErrUnavailable)
 	}
 	defer p.Close()
 	if err = checkEnvironment(ctx, p); err != nil {
-		return ErrUnavailable
+		return fail("environment", err, ErrUnavailable)
 	}
 	tx, err := p.Begin(ctx)
 	if err != nil {
-		return ErrUnavailable
+		return fail("begin", err, ErrUnavailable)
 	}
 	defer func() {
 		c, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		defer cancel()
-		_ = tx.Rollback(c)
+		m.cleanupFailure(c, "migrate", "rollback", tx.Rollback(c))
 	}()
 	if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", migrationLock); err != nil {
-		return ErrUnavailable
+		return fail("lock", err, ErrUnavailable)
 	}
 	var exists bool
 	if err = tx.QueryRow(ctx, "SELECT to_regnamespace('media') IS NOT NULL").Scan(&exists); err != nil {
-		return ErrUnavailable
+		return fail("namespace", err, ErrUnavailable)
 	}
 	plan := migrationPlan()
 	version := 0
 	if exists {
 		version, err = ledgerVersion(ctx, tx, plan)
 		if err != nil {
-			return ErrUnavailable
+			return fail("ledger", err, ErrUnavailable)
 		}
 	}
 	for i := version; i < len(plan); i++ {
+		// DDL may execute within the transaction before a later statement fails.
+		// A pre-commit failure proves no commit, not that nothing ran.
+		effectOutcome = "not_committed"
 		if _, err = tx.Exec(ctx, plan[i].sql); err != nil {
-			return ErrUnavailable
+			return fail("ddl", fault("ddl", "migration_ddl_failed", err, slog.Int("version", i+1)), ErrUnavailable)
 		}
 		if _, err = tx.Exec(ctx, "INSERT INTO media.schema_migrations(version,checksum) VALUES($1,$2)", i+1, plan[i].checksum); err != nil {
-			return ErrUnavailable
+			return fail("ledger_insert", fault("ledger_insert", "ledger_insert_failed", err, slog.Int("version", i+1)), ErrUnavailable)
 		}
 	}
 	if err = checkAssetSchema(ctx, tx); err != nil {
-		return ErrUnavailable
+		return fail("asset_schema", err, ErrUnavailable)
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return ErrUnknownOutcome
+		return fail("commit", err, ErrUnknownOutcome)
 	}
 	return nil
 }
@@ -449,7 +517,7 @@ func findAsset(ctx context.Context, c *pgxpool.Conn, id string) (Asset, error) {
 // Session advisory locks span filesystem effects without an open DB transaction.
 // Failed unlock discards the physical connection so a pooled session cannot retain
 // a lock. Busy locks fail immediately rather than creating an unbounded queue.
-func lockAsset(ctx context.Context, p *pgxpool.Pool, id string, shared bool) (*pgxpool.Conn, func(), error) {
+func lockAsset(ctx context.Context, p *pgxpool.Pool, id string, shared bool) (*pgxpool.Conn, func() error, error) {
 	c, err := p.Acquire(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -464,7 +532,9 @@ func lockAsset(ctx context.Context, p *pgxpool.Pool, id string, shared bool) (*p
 		if err != nil {
 			conn := c.Hijack()
 			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
-			_ = conn.Close(cleanup)
+			if closeErr := unexpectedCleanup(conn.Close(cleanup)); closeErr != nil {
+				err = errors.Join(err, fault("lock_connection_close", "lock_discard_close_failed", closeErr))
+			}
 			cancel()
 		} else {
 			c.Release()
@@ -474,16 +544,20 @@ func lockAsset(ctx context.Context, p *pgxpool.Pool, id string, shared bool) (*p
 		}
 		return nil, nil, err
 	}
-	release := func() {
+	release := func() error {
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		defer cancel()
 		var released bool
 		if err := c.QueryRow(cleanup, "SELECT "+unlock+"($1)", lockKey(id)).Scan(&released); err != nil || !released {
 			conn := c.Hijack()
-			_ = conn.Close(cleanup)
+			if err == nil {
+				err = fault("asset_unlock", "lock_not_owned", ErrUnavailable)
+			}
+			return errors.Join(fault("asset_unlock", "asset_unlock_failed", err), conn.Close(cleanup))
 		} else {
 			c.Release()
 		}
+		return nil
 	}
 	return c, release, nil
 }

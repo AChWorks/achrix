@@ -18,7 +18,7 @@ Public Go declarations own exact signatures.
 
 Identifiers and digests must identify safe opaque references and non-secret artifact/configuration/target metadata. Never insert DSNs, paths, passwords, tokens, secret values or raw provider errors. A digest does not establish publisher authenticity, compatibility or permission. Products verify candidate authenticity and supported component/schema combinations independently and change their binding when the intended artifact, target or approved configuration/preconditions changes.
 
-`Assess(profile, observations, supports, progress)` rejects malformed, missing, duplicate and unknown entries with fixed `ErrInput`; a progress plan mismatch returns `ErrStale`. It returns no partially valid plan on those errors. No CPU, operating-system, package-manager, panel or product names are built into evaluation.
+`Assess(profile, observations, supports, progress)` rejects malformed, missing, duplicate and unknown entries with `InputError` wrapping `ErrInput`; its `Field` and `Problem` identify the correction without echoing invalid values. A progress plan mismatch returns `ErrStale` with reconciliation guidance. Use `errors.Is` for category checks and `errors.As` for field details; do not compare full error strings. It returns no partially valid plan on those errors. No CPU, operating-system, package-manager, panel or product names are built into evaluation.
 
 ## Observation and plan meaning
 

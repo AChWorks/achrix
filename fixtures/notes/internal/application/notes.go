@@ -5,6 +5,8 @@ package application
 import (
 	"context"
 	"crypto/rand"
+	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -25,9 +27,21 @@ type Service struct {
 	app        *achrix.Application
 	repository Repository
 	logger     *slog.Logger
+	diagnostic func(context.Context, string, string, error)
 }
 
-func New(app *achrix.Application, r Repository, l *slog.Logger) *Service { return &Service{app, r, l} }
+func New(app *achrix.Application, r Repository, l *slog.Logger) *Service {
+	return NewWithDiagnostics(app, r, l, nil)
+}
+
+// NewWithDiagnostics retains unexpected repository causes at an explicitly
+// protected product boundary. The callback owns redaction and diagnostic export.
+func NewWithDiagnostics(app *achrix.Application, r Repository, l *slog.Logger, diagnostic func(context.Context, string, string, error)) *Service {
+	if l == nil {
+		l = slog.Default()
+	}
+	return &Service{app: app, repository: r, logger: l, diagnostic: diagnostic}
+}
 
 // Create has no retry: an interrupted database write can have an unknown outcome.
 // This fixture has no external effects or automatic replay.
@@ -42,8 +56,22 @@ func (s *Service) Create(parent context.Context, p achrix.Principal, text string
 	}
 	n := domain.Note{ID: rand.Text(), Text: text, CreatedAt: time.Now().UTC()}
 	if err := s.repository.Save(ctx, n); err != nil {
-		s.logger.DebugContext(ctx, "note write failed", "component", "notes.application", "operation", Create, "reason", "persistence_failure")
-		return domain.Note{}, domain.ErrUnavailable
+		// Keep the persistence owner's truthful classification; a generic timeout
+		// or unavailable result must never be upgraded to permission to replay.
+		switch {
+		case errors.Is(err, domain.ErrNotExecuted):
+			return domain.Note{}, domain.ErrNotExecuted
+		case errors.Is(err, domain.ErrNotCommitted):
+			return domain.Note{}, domain.ErrNotCommitted
+		case errors.Is(err, domain.ErrUnknownOutcome):
+			return domain.Note{ID: n.ID}, domain.ErrUnknownOutcome
+		default:
+			if s.diagnostic != nil {
+				s.diagnostic(ctx, Create, "repository_save", err)
+			}
+			s.logger.ErrorContext(ctx, "note write outcome unknown", "component", "notes.application", "operation", Create, "phase", "repository_save", "reason", "unclassified_repository_failure", "cause_type", fmt.Sprintf("%T", err), "outcome", "unknown")
+			return domain.Note{ID: n.ID}, domain.ErrUnknownOutcome
+		}
 	}
 	return n, nil
 }

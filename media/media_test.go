@@ -295,14 +295,16 @@ func BenchmarkCopy10MiB(b *testing.B) {
 func TestBoundedSafeOperationalDiagnostics(t *testing.T) {
 	var log bytes.Buffer
 	m := &Module{logger: slog.New(slog.NewJSONHandler(&log, nil))}
-	ctx := context.Background()
+	t.Cleanup(m.flushDiagnostics)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 	for _, err := range []error{ErrInput, ErrConflict, ErrLimited, ErrNotFound, context.Canceled, context.DeadlineExceeded} {
 		if got := m.failure(ctx, "create_input", err); !errors.Is(got, err) {
 			t.Fatal("routine error changed", got)
 		}
 	}
 	if m.FailureCount() != 0 || log.Len() != 0 {
-		t.Fatal("routine input/cancellation became diagnostics")
+		t.Fatal("routine input/caller cancellation became diagnostics")
 	}
 	unknown := errors.Join(ErrUnknownOutcome, context.Canceled)
 	for range 2 {
@@ -310,11 +312,10 @@ func TestBoundedSafeOperationalDiagnostics(t *testing.T) {
 			t.Fatal("unknown outcome/cancel not preserved", got)
 		}
 	}
-	if m.FailureCount() != 2 || strings.Count(log.String(), "media operation failed") != 1 || !strings.Contains(log.String(), "unknown_outcome") {
+	if m.FailureCount() != 2 || strings.Count(log.String(), "media operation failed") != 1 || !strings.Contains(log.String(), `"outcome":"unknown"`) {
 		t.Fatal("unknown diagnostics not counted/bounded", log.String())
 	}
-	m.lastDiagnostic.Store(0)
-	if got := m.failure(ctx, "read_storage", errors.New("password=secret filename=private /outside/path")); !errors.Is(got, ErrUnavailable) {
+	if got := m.failure(context.Background(), "read_storage", errors.New("password=secret filename=private /outside/path")); !errors.Is(got, ErrUnavailable) {
 		t.Fatal("unsafe dependency error returned", got)
 	}
 	for _, private := range []string{"secret", "private", "/outside/path", "password="} {
@@ -323,7 +324,11 @@ func TestBoundedSafeOperationalDiagnostics(t *testing.T) {
 		}
 	}
 	if m.FailureCount() != 3 || strings.Count(log.String(), "media operation failed") != 2 {
-		t.Fatal("operational diagnostics missing")
+		t.Fatal("distinct operational failure hidden by earlier unknown outcome")
+	}
+	m.flushDiagnostics()
+	if !strings.Contains(log.String(), `"suppressed_records":1`) || !strings.Contains(log.String(), `"diagnostic_summary":true`) {
+		t.Fatal("final suppression evidence missing", log.String())
 	}
 }
 
@@ -368,7 +373,7 @@ func TestFailureAccountsUnknownOutcomeJoinedWithExpectedCategory(t *testing.T) {
 	if m.FailureCount() != 1 {
 		t.Fatalf("unknown outcome was not accounted: %d", m.FailureCount())
 	}
-	if !strings.Contains(log.String(), `"reason":"unknown_outcome"`) || strings.Contains(log.String(), private) {
+	if !strings.Contains(log.String(), `"outcome":"unknown"`) || strings.Contains(log.String(), private) {
 		t.Fatalf("unknown outcome diagnostic was not bounded: %s", log.String())
 	}
 }

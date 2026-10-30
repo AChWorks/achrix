@@ -82,6 +82,12 @@ type Config struct {
 	StartupTimeout  time.Duration
 	ShutdownTimeout time.Duration
 	Logger          *slog.Logger
+	// Diagnostic receives original causes only at a protected product boundary.
+	// It is synchronous and must be safe for concurrent calls. Apply provider-aware
+	// redaction before storage/export; never blindly serialize causes to public or
+	// ordinary logs. The arguments identify operation and phase; context retains
+	// the caller's trusted correlation. Nil keeps structured Logger diagnostics.
+	Diagnostic func(context.Context, string, string, error)
 }
 
 type component struct {
@@ -112,8 +118,14 @@ var identity = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$`)
 // any module starts. Module descriptors are snapshotted to prevent mutable registry
 // state leaking between instances. No process-global registration exists.
 func New(config Config, policy Policy, modules ...Module) (*Application, error) {
-	if nilValue(policy) || config.StartupTimeout <= 0 || config.ShutdownTimeout <= 0 || config.StartupTimeout > time.Minute || config.ShutdownTimeout > time.Minute {
-		return nil, fmt.Errorf("%w: policy and lifecycle bounds required", ErrComposition)
+	if nilValue(policy) {
+		return nil, fmt.Errorf("%w: policy: a non-nil authorization policy is required", ErrComposition)
+	}
+	if config.StartupTimeout <= 0 || config.StartupTimeout > time.Minute {
+		return nil, fmt.Errorf("%w: StartupTimeout: must be greater than zero and at most one minute", ErrComposition)
+	}
+	if config.ShutdownTimeout <= 0 || config.ShutdownTimeout > time.Minute {
+		return nil, fmt.Errorf("%w: ShutdownTimeout: must be greater than zero and at most one minute", ErrComposition)
 	}
 	if config.Logger == nil {
 		config.Logger = slog.Default()
@@ -124,20 +136,26 @@ func New(config Config, policy Policy, modules ...Module) (*Application, error) 
 	all := make([]component, len(modules))
 	for i, m := range modules {
 		if nilValue(m) {
-			return nil, fmt.Errorf("%w: nil module", ErrComposition)
+			return nil, fmt.Errorf("%w: modules[%d]: a non-nil Module is required", ErrComposition, i)
 		}
 		d := clone(m.Descriptor())
-		if !identity.MatchString(d.ID) || d.Version == "" || ids[d.ID] {
-			return nil, fmt.Errorf("%w: module identity", ErrComposition)
+		if !identity.MatchString(d.ID) {
+			return nil, fmt.Errorf("%w: modules[%d].ID: use a lowercase semantic identifier", ErrComposition, i)
+		}
+		if d.Version == "" {
+			return nil, fmt.Errorf("%w: modules[%d] (%s).Version: implementation version is required", ErrComposition, i, diagnosticName(d.ID))
+		}
+		if ids[d.ID] {
+			return nil, fmt.Errorf("%w: modules[%d].ID: duplicate module %s", ErrComposition, i, diagnosticName(d.ID))
 		}
 		ids[d.ID] = true
 		all[i] = component{m, d}
-		for _, c := range d.Provides {
+		for j, c := range d.Provides {
 			if !valid(c) {
-				return nil, fmt.Errorf("%w: capability identity", ErrComposition)
+				return nil, fmt.Errorf("%w: modules[%d].Provides[%d]: valid capability ID and positive ABI revision are required", ErrComposition, i, j)
 			}
 			if _, ok := owners[c.ID]; ok {
-				return nil, fmt.Errorf("%w: duplicate capability %s", ErrComposition, c.ID)
+				return nil, fmt.Errorf("%w: modules[%d].Provides[%d]: duplicate capability %s", ErrComposition, i, j, diagnosticName(c.ID))
 			}
 			owners[c.ID] = i
 			a.capabilities[c.ID] = c
@@ -155,15 +173,18 @@ func New(config Config, policy Policy, modules ...Module) (*Application, error) 
 		}{{c.descriptor.Requires, false}, {c.descriptor.Optional, true}} {
 			for _, r := range group.capabilities {
 				if !valid(r) || seen[r.ID] {
-					return nil, fmt.Errorf("%w: dependency declaration %s", ErrComposition, r.ID)
+					return nil, fmt.Errorf("%w: module %s dependency: invalid or duplicate declaration for %s", ErrComposition, diagnosticName(c.descriptor.ID), diagnosticName(r.ID))
 				}
 				seen[r.ID] = true
 				got, present := a.capabilities[r.ID]
 				if !present && group.optional {
 					continue
 				}
-				if !present || got.Version != r.Version {
-					return nil, fmt.Errorf("%w: dependency capability %s", ErrComposition, r.ID)
+				if !present {
+					return nil, fmt.Errorf("%w: module %s requires missing capability %s (ABI %d); compose a compatible provider", ErrComposition, diagnosticName(c.descriptor.ID), diagnosticName(r.ID), r.Version)
+				}
+				if got.Version != r.Version {
+					return nil, fmt.Errorf("%w: module %s requires capability %s ABI %d; provider exposes incompatible ABI %d", ErrComposition, diagnosticName(c.descriptor.ID), diagnosticName(r.ID), r.Version, got.Version)
 				}
 				if owner := owners[r.ID]; owner >= 0 {
 					deps[i][owner] = true
@@ -192,7 +213,11 @@ func New(config Config, policy Policy, modules ...Module) (*Application, error) 
 			}
 		}
 		if !progress {
-			return nil, fmt.Errorf("%w: startup dependency cycle", ErrComposition)
+			for i, c := range all {
+				if !used[i] {
+					return nil, fmt.Errorf("%w: startup dependency cycle blocks module %s; remove a required/optional dependency cycle", ErrComposition, diagnosticName(c.descriptor.ID))
+				}
+			}
 		}
 	}
 	a.lifecycle = make(chan struct{}, 1)
@@ -252,7 +277,7 @@ func (a *Application) Start(parent context.Context) error {
 			err = ctx.Err()
 		}
 		if err != nil {
-			a.config.Logger.ErrorContext(parent, "lifecycle failure", "component", c.descriptor.ID, "operation", "start", "reason", reason(err))
+			a.diagnose(parent, slog.LevelError, c.descriptor.ID, "start", "module_start", reason(err), err)
 			startErr = fmt.Errorf("component %s start: %w", c.descriptor.ID, err)
 			break
 		}
@@ -340,7 +365,7 @@ func (a *Application) stop(ctx context.Context, components []component) error {
 	for i := len(components) - 1; i >= 0; i-- {
 		c := components[i]
 		if err := c.module.Stop(ctx); err != nil {
-			a.config.Logger.ErrorContext(ctx, "lifecycle failure", "component", c.descriptor.ID, "operation", "stop", "reason", reason(err))
+			a.diagnose(ctx, slog.LevelError, c.descriptor.ID, "stop", "module_stop", reason(err), err)
 			errs = append(errs, fmt.Errorf("component %s stop: %w", c.descriptor.ID, err))
 		}
 	}
@@ -365,7 +390,7 @@ func (a *Application) Ready(ctx context.Context) error {
 			return canceled
 		}
 		if err != nil {
-			a.config.Logger.DebugContext(ctx, "readiness failure", "component", c.descriptor.ID, "operation", "ready", "reason", reason(err))
+			a.diagnose(ctx, slog.LevelDebug, c.descriptor.ID, "ready", "module_ready", reason(err), err)
 			return fmt.Errorf("component %s readiness: %w", c.descriptor.ID, err)
 		}
 	}
@@ -379,7 +404,8 @@ func (a *Application) Ready(ctx context.Context) error {
 // Callers must supply a deadline. Shutdown cancels/drains admitted policy work;
 // calls outside ready return ErrNotReady without invoking policy. Policy errors
 // never expose raw provider text: only explicit ErrDenied is a permission denial.
-// Core emits safe DEBUG detail; the product owns bounded denial/failure visibility.
+// Core emits DEBUG denials and ERROR evaluation failures; the product owns the
+// bounded diagnostic sink and its protected cause callback.
 func (a *Application) Authorize(ctx context.Context, p Principal, capability, resource string) error {
 	ctx, finish, err := a.admit(ctx)
 	if err != nil {
@@ -405,7 +431,7 @@ func (a *Application) Authorize(ctx context.Context, p Principal, capability, re
 		return ErrDenied
 	}
 	if err != nil {
-		a.config.Logger.DebugContext(ctx, "authorization unavailable", "component", "achrix.authorization", "operation", "authorize", "reason", "policy_evaluation_failed")
+		a.diagnose(ctx, slog.LevelError, "achrix.authorization", "authorize", "policy", "policy_evaluation_failed", err)
 		return ErrAuthorizationUnavailable
 	}
 	return nil
@@ -518,4 +544,24 @@ func reason(err error) string {
 		return "canceled"
 	}
 	return "component_failure"
+}
+
+// diagnosticName bounds trusted composition metadata without exposing arbitrary
+// invalid descriptors or allowing multiline error text.
+func diagnosticName(value string) string {
+	if !identity.MatchString(value) {
+		return "<invalid identifier>"
+	}
+	if len(value) > 128 {
+		return value[:128] + "..."
+	}
+	return value
+}
+
+func (a *Application) diagnose(ctx context.Context, level slog.Level, component, operation, phase, category string, cause error) {
+	if a.config.Diagnostic != nil {
+		a.config.Diagnostic(ctx, operation, phase, cause)
+	}
+	a.config.Logger.Log(ctx, level, "component operation failed", "component", component,
+		"operation", operation, "phase", phase, "reason", category, "cause_type", fmt.Sprintf("%T", cause))
 }

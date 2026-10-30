@@ -298,7 +298,7 @@ func TestPostgresPublicImageDestinationErrorsAreSafe(t *testing.T) {
 	if strings.Contains(logs.String(), "private") || strings.Contains(logs.String(), "password=") {
 		t.Fatal("private writer details logged")
 	}
-	if f.module.FailureCount() != 2 {
+	if f.module.FailureCount() != 4 {
 		t.Fatal("unexpected safe diagnostic classification", f.module.FailureCount())
 	}
 	f.module.mu.Lock()
@@ -310,6 +310,61 @@ func TestPostgresPublicImageDestinationErrorsAreSafe(t *testing.T) {
 	var output bytes.Buffer
 	if _, err := f.service.PreparePublicImage(ctx, publicImageActor, PreparePublicImageRequest{asset.ID, asset.Revision}, &output); err != nil {
 		t.Fatal("safe failure prevented later preparation", err)
+	}
+}
+
+func TestPostgresPublicImageJoinedDestinationFailuresRetainEvidence(t *testing.T) {
+	f := newFixture(t)
+	ctx, cancel := operationContext(t)
+	defer cancel()
+	ctx = context.WithValue(ctx, diagnosticContextKey{}, "trusted-destination-operation")
+	asset, err := f.service.Create(ctx, testActor, "joined-writer.png", bytes.NewReader(imageBytes(t, "png", 2, 2)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logs := &diagnosticBuffer{}
+	f.module.logger = slog.New(slog.NewJSONHandler(logs, nil))
+	const private = "private-destination-provider-token"
+	for _, scenario := range []struct {
+		name, reason string
+		cause, want  error
+		operational  bool
+	}{
+		{"short_write", "short_write", errors.Join(ErrInput, fmt.Errorf("%s: %w", private, io.ErrShortWrite)), ErrInput, true},
+		{"network", "network_failure", errors.Join(ErrLimited, &net.OpError{Op: "write", Net: "tcp", Err: errors.New(private)}), ErrLimited, true},
+		{"nested_provider", "dependency_failure", fmt.Errorf("%s: %w", private, errors.Join(ErrLimited, errors.New(private))), ErrLimited, true},
+		{"expected_wrapper", "", fmt.Errorf("%s: %w", private, ErrLimited), ErrLimited, false},
+		{"expected_join", "", errors.Join(ErrLimited, fmt.Errorf("%s: %w", private, ErrLimited)), ErrLimited, false},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			calls := 0
+			f.module.config.Diagnostic = func(ctx context.Context, operation, phase string, cause error) {
+				calls++
+				if cause != scenario.cause || operation != "prepare_output" || phase != "prepare_output" || ctx.Value(diagnosticContextKey{}) != "trusted-destination-operation" {
+					t.Error("destination cause/phase/correlation changed", operation, phase, cause)
+				}
+			}
+			beforeCount, beforeLog := f.module.FailureCount(), len(logs.String())
+			result, got := f.service.PreparePublicImage(ctx, publicImageActor, PreparePublicImageRequest{asset.ID, asset.Revision}, wrappedPublicWriter{scenario.cause})
+			if result != (PublicImage{}) || got != scenario.want || errors.Is(got, ErrUnknownOutcome) || errors.Is(got, io.ErrShortWrite) || strings.Contains(got.Error(), private) {
+				t.Fatal("destination changed public identity or exposed private chain", result, got)
+			}
+			var network *net.OpError
+			if errors.As(got, &network) {
+				t.Fatal("private network object escaped", got)
+			}
+			ordinary := logs.String()[beforeLog:]
+			if scenario.operational {
+				if calls != 1 || f.module.FailureCount() != beforeCount+1 || !strings.Contains(ordinary, `"reason":"`+scenario.reason+`"`) || !strings.Contains(ordinary, `"phase":"prepare_output"`) {
+					t.Fatal("routine sibling suppressed operational destination evidence", calls, f.module.FailureCount(), ordinary)
+				}
+			} else if calls != 0 || f.module.FailureCount() != beforeCount || ordinary != "" {
+				t.Fatal("pure expected destination became an operational failure", calls, ordinary)
+			}
+			if strings.Contains(ordinary, private) {
+				t.Fatal("private provider text entered ordinary diagnostics")
+			}
+		})
 	}
 }
 
@@ -366,8 +421,13 @@ func TestPostgresReadAndPublicImageDependencyErrorsAreSafe(t *testing.T) {
 			if got != category || errors.As(got, &connectionError) || ctx.Err() != nil || result != (PublicImage{}) || output.Len() != 0 {
 				t.Fatal("dependency failure was not canonical with a live caller", got, result)
 			}
-			if strings.Contains(logs.String(), private) || strings.Contains(got.Error(), private) || f.module.FailureCount() != 0 {
-				t.Fatal("dependency error leaked or changed expected cancellation diagnostics")
+			if strings.Contains(logs.String(), private) || strings.Contains(got.Error(), private) || f.module.FailureCount() != 2 {
+				t.Fatal("dependency error leaked or missing live-caller diagnostics")
+			}
+			for _, phase := range []string{"read_lock", "prepare_asset_lock"} {
+				if !strings.Contains(logs.String(), phase) {
+					t.Fatal("missing distinct dependency phase", logs.String())
+				}
 			}
 			f.module.mu.Lock()
 			active := f.module.active

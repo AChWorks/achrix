@@ -37,9 +37,22 @@ var (
 	ErrLimited       = errors.New("audit capacity exceeded")
 )
 
+// InputError identifies a malformed field without echoing caller values.
+type InputError struct{ Field, Reason string }
+
+func (e *InputError) Error() string { return ErrInput.Error() + ": " + e.Field + " (" + e.Reason + ")" }
+func (e *InputError) Unwrap() error { return ErrInput }
+
 // Config.Now is a trusted, concurrent-safe product time source. Records store UTC
 // microsecond instants; it conveys no trusted timestamp or clock attestation.
 type Config struct {
+	// Diagnostic receives the original cause only at this component's protected
+	// owner boundary. The product must redact provider secrets before retention
+	// or export, keep access restricted, and return promptly. It must not log
+	// the raw error to ordinary output. The original request context is retained.
+	// It sees every operational cause before ordinary-log suppression; the
+	// product owns its diagnostic sink's volume policy.
+	Diagnostic func(context.Context, string, string, error)
 	// MaxConns bounds this instance's pool. Zero uses four; negatives are invalid.
 	MaxConns int32
 	// MaxOperations bounds active owned leases, including nested AppendInTx work.
@@ -97,8 +110,20 @@ func validReference(v string) bool { return len(v) > 0 && len(v) <= 128 && refer
 func validName(v string) bool      { return len(v) > 0 && len(v) <= 96 && name.MatchString(v) }
 
 func (s *Service) Prepare(ctx context.Context, actor achrix.Principal, event Event) (Prepared, error) {
-	if !validReference(string(actor)) || !validReference(event.Target) || !validName(event.Action) || !validName(event.Authority) || event.Outcome != "succeeded" {
-		return Prepared{}, ErrInput
+	if !validReference(string(actor)) {
+		return Prepared{}, &InputError{"actor", "invalid_reference"}
+	}
+	if !validReference(event.Target) {
+		return Prepared{}, &InputError{"target", "invalid_reference"}
+	}
+	if !validName(event.Action) {
+		return Prepared{}, &InputError{"action", "invalid_name"}
+	}
+	if !validName(event.Authority) {
+		return Prepared{}, &InputError{"authority", "invalid_name"}
+	}
+	if event.Outcome != "succeeded" {
+		return Prepared{}, &InputError{"outcome", "must_be_succeeded"}
 	}
 	if err := s.app.Authorize(ctx, actor, Append, event.Target); err != nil {
 		return Prepared{}, err
@@ -119,8 +144,20 @@ func (s *Service) Prepare(ctx context.Context, actor achrix.Principal, event Eve
 // passwords, TLS trust and fallback settings are compared without being exposed.
 func (s *Service) CheckDatabase(dsn string) error {
 	c, err := databaseConfig(dsn)
-	if err != nil || !sameDatabase(s.module.dbConfig.ConnConfig, c.ConnConfig) {
-		return ErrConfiguration
+	if err != nil {
+		var owned *diagnosticError
+		if errors.As(err, &owned) {
+			s.module.report(context.Background(), "check_database", "database_config", "not_executed", err)
+			return configuration("dsn", owned.detail)
+		}
+		// The remaining preflight errors contain only source-owned field rules.
+		s.module.report(context.Background(), "check_database", "database_config", "not_executed", diagnosticFault("configuration_precondition_failed", err.Error(), err))
+		return err
+	}
+	if !sameDatabase(s.module.dbConfig.ConnConfig, c.ConnConfig) {
+		const requirement = "must match Audit's database and security profile"
+		s.module.report(context.Background(), "check_database", "compare_profile", "not_executed", diagnosticFault("configuration_profile_mismatch", requirement, ErrConfiguration))
+		return configuration("dsn", requirement)
 	}
 	return nil
 }
@@ -191,8 +228,14 @@ func (s *Service) Export(ctx context.Context, actor achrix.Principal, target, cu
 	return s.page(ctx, actor, target, cursor, limit, Export)
 }
 func (s *Service) page(parent context.Context, actor achrix.Principal, target, cursor string, limit int, capability string) (Page, error) {
-	if !validReference(string(actor)) || !validReference(target) || limit < 1 || limit > 100 {
-		return Page{}, ErrInput
+	if !validReference(string(actor)) {
+		return Page{}, &InputError{"actor", "invalid_reference"}
+	}
+	if !validReference(target) {
+		return Page{}, &InputError{"target", "invalid_reference"}
+	}
+	if limit < 1 || limit > 100 {
+		return Page{}, &InputError{"limit", "must_be_between_1_and_100"}
 	}
 	after, err := decodeCursor(target, cursor)
 	if err != nil {
@@ -246,15 +289,15 @@ func decodeCursor(target, cursor string) (int64, error) {
 		return 0, nil
 	}
 	if len(cursor) != 34 {
-		return 0, ErrInput
+		return 0, &InputError{"cursor", "invalid_or_wrong_target"}
 	}
 	b, err := base64.RawURLEncoding.DecodeString(cursor)
 	if err != nil || len(b) != 25 || b[0] != 1 || base64.RawURLEncoding.EncodeToString(b) != cursor {
-		return 0, ErrInput
+		return 0, &InputError{"cursor", "invalid_or_wrong_target"}
 	}
 	seq := int64(binary.BigEndian.Uint64(b[1:9]))
 	if seq <= 0 || encodeCursor(target, seq) != cursor {
-		return 0, ErrInput
+		return 0, &InputError{"cursor", "invalid_or_wrong_target"}
 	}
 	return seq, nil
 }
