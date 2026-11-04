@@ -80,6 +80,13 @@ func TestPresentationKeepsOpaqueRevisionsAndMinimalDeletedState(t *testing.T) {
 		}
 	}
 	asset.State = "ready"
+	selection := presentSelection(asset)
+	encoded, err := json.Marshal(selection)
+	if err != nil || selection.Revision != "9007199254740993" ||
+		strings.Contains(string(encoded), "content") || strings.Contains(string(encoded), "sha256") ||
+		strings.Contains(string(encoded), "created_at") || selection.State != "ready" {
+		t.Fatal("selection emitted prohibited byte/recovery metadata", string(encoded), err)
+	}
 	if present(asset, nil, false).Content != nil {
 		t.Fatal("List metadata manufactured a content grant")
 	}
@@ -137,7 +144,7 @@ func TestOwningInputAndUnknownOutcomeRemainDistinct(t *testing.T) {
 }
 
 func TestReadAndMutationFailureEvidenceIsConservative(t *testing.T) {
-	for _, operation := range []string{ListOperation, StatusOperation, ReadOperation} {
+	for _, operation := range []string{ListOperation, StatusOperation, SelectOperation, ReadOperation} {
 		for _, err := range []error{media.ErrUnavailable, media.ErrNotFound, media.ErrConflict, media.ErrUnknownOutcome, context.DeadlineExceeded} {
 			if f := operationFault(err, operation, "", nil); f.Outcome != bridge.NotExecuted {
 				t.Fatal("query failure implied a mutation attempt", operation, f)
@@ -189,11 +196,12 @@ func TestDirectHandlerUseWithoutVerifiedContextFailsClosed(t *testing.T) {
 	ctx := context.Background()
 	_, listErr := list(service)(ctx, ListInput{})
 	_, statusErr := status(service, resource)(ctx, StatusInput{testAssetID})
+	_, selectErr := selectAsset(service)(ctx, StatusInput{testAssetID})
 	_, deleteErr := deleteAsset(service)(ctx, DeleteInput{testAssetID, "1"})
 	_, reconcileErr := reconcile(service)(ctx, ReconcileInput{})
 	_, createErr := create(service, resource)(ctx, uploadInput{"file.txt", strings.NewReader("private")})
 	readErr := download(service, media.MaxUploadBytes)(ctx, StatusInput{testAssetID}, httptest.NewRecorder())
-	for _, failure := range []error{listErr, statusErr, deleteErr, reconcileErr, createErr, readErr} {
+	for _, failure := range []error{listErr, statusErr, selectErr, deleteErr, reconcileErr, createErr, readErr} {
 		if f := expectFault(t, failure, 401); f.Outcome != bridge.NotExecuted || f.Reference != "" {
 			t.Fatal("unverified direct call established authority", f)
 		}

@@ -26,6 +26,7 @@ const (
 	CreateOperation       = media.Create
 	ListOperation         = media.List
 	StatusOperation       = "achrix.media.status"
+	SelectOperation       = media.Select
 	ReadOperation         = media.Read
 	DeleteOperation       = media.Delete
 	ReconcileOperation    = media.Reconcile
@@ -71,6 +72,27 @@ type AssetInfo struct {
 	SHA256    string            `json:"sha256,omitempty"`
 	Content   *ContentReference `json:"content,omitempty"`
 }
+
+// SelectionInfo is deliberately not AssetInfo: no original-byte content
+// reference, digest or reconciliation-only lifecycle fields are possible.
+type SelectionInfo struct {
+	ID       string `json:"id"`
+	State    string `json:"state"`
+	Revision string `json:"revision"`
+	Filename string `json:"filename"`
+	MIME     string `json:"mime"`
+	Size     int64  `json:"size"`
+	Width    int    `json:"width"`
+	Height   int    `json:"height"`
+}
+
+func presentSelection(a media.Asset) SelectionInfo {
+	return SelectionInfo{
+		ID: a.ID, State: a.State, Revision: strconv.FormatInt(a.Revision, 10),
+		Filename: a.Filename, MIME: a.MIME, Size: a.Size, Width: a.Width, Height: a.Height,
+	}
+}
+
 type Page struct {
 	Assets     []AssetInfo `json:"assets"`
 	NextCursor string      `json:"next_cursor,omitempty"`
@@ -172,6 +194,22 @@ func status(service *media.Service, resource *url.URL) func(context.Context, Sta
 		}
 		bridge.Confirm(ctx, asset.ID)
 		return present(asset, resource, true), nil
+	}
+}
+
+// selectAsset returns a fresh authorized ready reference. It deliberately never
+// manufactures a content URL or Read grant; the product still owns its use.
+func selectAsset(service *media.Service) func(context.Context, StatusInput) (SelectionInfo, error) {
+	return func(ctx context.Context, input StatusInput) (SelectionInfo, error) {
+		actor, err := principal(ctx)
+		if err != nil {
+			return SelectionInfo{}, err
+		}
+		asset, err := service.Select(ctx, actor, input.AssetID)
+		if err != nil {
+			return SelectionInfo{}, operationFault(err, SelectOperation, "", nil)
+		}
+		return presentSelection(asset), nil
 	}
 }
 

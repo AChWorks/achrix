@@ -24,6 +24,7 @@ import (
 const (
 	Create               = "achrix.media.create"
 	List                 = "achrix.media.list"
+	Select               = "achrix.media.select"
 	Read                 = "achrix.media.read"
 	Delete               = "achrix.media.delete"
 	Reconcile            = "achrix.media.reconcile"
@@ -174,6 +175,29 @@ func (s *Service) Status(parent context.Context, actor achrix.Principal, id stri
 		return Asset{}, err
 	}
 	return s.module.status(ctx, id)
+}
+
+// Select checks a separate exact-asset permission and current ready state. It
+// returns metadata only: selecting never grants original-byte Read, deletion,
+// publication or a product-specific content relationship. Products must still
+// validate the selected reference in their own authorized Application operation.
+func (s *Service) Select(parent context.Context, actor achrix.Principal, id string) (Asset, error) {
+	if !validID(id) {
+		return Asset{}, inputFailure("asset_id", "invalid_asset_id", "must be the 26-character generated asset identity")
+	}
+	ctx, cancel := deadline(parent, time.Second)
+	defer cancel()
+	if err := s.app.Authorize(ctx, actor, Select, id); err != nil {
+		return Asset{}, err
+	}
+	a, err := s.module.status(ctx, id)
+	if err != nil {
+		return Asset{}, err
+	}
+	if a.State != "ready" {
+		return Asset{}, ErrNotFound
+	}
+	return a, nil
 }
 
 // Read authenticates the stored size/hash before copying original bytes. The

@@ -94,6 +94,42 @@
     },
     "permissions.unavailable": {
       "other": "Permission checks are temporarily unavailable. Actions are disabled; refresh to check them again. Completed uploads remain saved."
+    },
+    "picker.open": {
+      "other": "Choose an existing file"
+    },
+    "picker.results": {
+      "other": "Selectable files"
+    },
+    "picker.refresh": {
+      "other": "Refresh"
+    },
+    "picker.next": {
+      "other": "Next page"
+    },
+    "picker.select": {
+      "other": "Select"
+    },
+    "picker.loading": {
+      "other": "Checking available files…"
+    },
+    "picker.ready": {
+      "other": "Choose a file from this page."
+    },
+    "picker.empty": {
+      "other": "No selectable files on this page. Try the next page if available."
+    },
+    "picker.selected": {
+      "other": "Selected: {Filename}. The product must validate this reference when saving."
+    },
+    "picker.stale": {
+      "other": "This file is no longer available for selection. Refresh the list."
+    },
+    "picker.denied": {
+      "other": "You do not have permission to select this file."
+    },
+    "picker.unavailable": {
+      "other": "The file list or current selection could not be checked. Try refreshing."
     }
   }
 }

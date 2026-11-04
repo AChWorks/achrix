@@ -67,6 +67,10 @@ func (s *libraryStub) List(_ context.Context, p achrix.Principal, cursor string,
 	s.limit = limit
 	return s.page, s.err
 }
+func (s *libraryStub) Select(_ context.Context, p achrix.Principal, id string) (media.Asset, error) {
+	s.record("select", p, id)
+	return s.asset, s.err
+}
 func (s *libraryStub) Status(_ context.Context, p achrix.Principal, id string) (media.Asset, error) {
 	s.record("status", p, id)
 	return s.asset, s.err

@@ -14,6 +14,21 @@ The surface owns its English/Persian catalogs in the `media` domain and register
 
 Module-owned focused tests cover framing before Service access, admission/transport bounds, exact target dispatch, denied operations, decimal int64 CAS, empty/localized rendering, known unknown-outcome identity and delayed private attachment/error semantics. Normal pinned consumer and actual TLS/browser evidence cover the enclosing Admin contract and the common attachment extension in #67. Upload limits remain Media-owned: this slice retains 10 MiB; a future authorized settings surface may expose a typed limit only within its reviewed resource profile.
 
+## Optional composable picker
+
+Within the existing Media Admin surface, `GET /admin/media/picker.js` serves an optional vanilla custom element, `<achrix-media-picker>`, that other trusted Admin surfaces can include without a new framework or Module. The product must compose the Media surface and its catalogs with the same Admin shell and authenticate the browsing actor. Example markup in a product-owned Admin template:
+
+```html
+<script src="/admin/media/picker.js" defer></script>
+<achrix-media-picker accept="image/png,image/jpeg"></achrix-media-picker>
+```
+
+The product's external script listens for the bubbling `achrix:media-selected` event. Its immutable `detail` contains `{id, filename, mime, size, width, height, revision}`, with `revision` as an exact decimal **string**. This is a proposed reference, not an executed product edit or permission token; submit it through the product's ordinary authorized Application operation, which must recheck its own business/site scope, permitted MIME and current Media state. The optional `accept` attribute filters on canonical MIME strings for user convenience; it is never a server access control.
+
+Picker browse is bounded to 25 ready metadata records per underlying `Service.List` page (`GET /admin/media/picker/page[/{cursor}]`), then checks **`media.Select` on each exact asset** to omit currently denied choices. Each selection (`GET /admin/media/picker/asset/{id}`) goes through `Service.Select` again, verifying the current exact permission and ready state before returning typed metadata; it does not require `Read`, copy bytes, emit storage paths or grant publication/deletion. A permission-evaluation error fails the entire page closed with an actionable error; stale/deleted assets cannot be selected. Cursors retain Media's non-snapshot keyset semantics; an empty displayed page does not imply later pages lack selectable items. Keyboard users can use native summary/buttons and Escape returns focus to the trigger. Announcements, escaped filenames, Persian/English text and document RTL direction reuse the shell.
+
+**Visibility boundary:** the shared Admin surface's navigation and paging still require whole-library `media.List`, which grants filename/metadata visibility regardless of individual `Select` rights. Only use this initial picker for product principals that already legitimately hold that broad collection permission. Do **not** grant global List to tenant-scoped editors merely to enable browsing: a separately justified scoped discovery contract is required before supporting them. Product-side integration in another repository remains separately authorized.
+
 ## Failure and completion semantics
 
 JSON and multipart read deadlines/timeouts are reported as `request_timeout` with `outcome: not_executed` only before calling the owning Service. Other underlying body-read failures return safe `unavailable` with the same proven non-execution outcome; the protected diagnosis retains the original reader error and the JSON value/trailing or multipart part/body/trailing phase. Deadline-support errors also preserve their pre-dispatch non-execution evidence. Malformed input/framing remains separate and size limits retain HTTP 413. Safe Media `InputError` values expose machine `field` and `reason`; neither body values nor arbitrary exception text are returned. `permission_denied` is a genuine denial; `authorization_unavailable` is a policy evaluation failure, not a claim that the actor lacks permission.

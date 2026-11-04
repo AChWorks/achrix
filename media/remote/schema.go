@@ -23,7 +23,7 @@ func publishedSchemas() (map[string]json.RawMessage, error) {
 	if err := json.Unmarshal(openAPI, &document); err != nil {
 		return nil, fmt.Errorf("media remote: published schema: %w", err)
 	}
-	for _, name := range []string{"ListInput", "StatusInput", "DeleteInput", "ReconcileInput", "Page", "AssetInfo", "DeleteResult", "ReconcileResult"} {
+	for _, name := range []string{"ListInput", "StatusInput", "DeleteInput", "ReconcileInput", "Page", "AssetInfo", "SelectionInfo", "DeleteResult", "ReconcileResult"} {
 		if len(document.Components.Schemas[name]) == 0 {
 			return nil, fmt.Errorf("media remote: published %s schema is absent", name)
 		}

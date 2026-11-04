@@ -79,6 +79,9 @@ func newFixtureConfig(t *testing.T, config Config) *fixture {
 		if p == publicImageActor && c == PreparePublicImage && validID(r) {
 			return nil
 		}
+		if p == "media-selection-only" && c == Select && validID(r) {
+			return nil
+		}
 		if p != testActor {
 			return achrix.ErrDenied
 		}
@@ -87,7 +90,7 @@ func newFixtureConfig(t *testing.T, config Config) *fixture {
 			if r == LibraryTarget {
 				return nil
 			}
-		case Read, Delete:
+		case Read, Delete, Select:
 			if validID(r) {
 				return nil
 			}
