@@ -10,7 +10,7 @@ Prefer the standard library and maintained components over a custom general-purp
 
 ## Consequences
 
-Maintain supported toolchain/dependency versions and test actual consumer boundaries. Go's compatibility policy has exceptions and does not guarantee third-party API stability or thirty-year support. [ADR-0003](ADR-0003-postgresql-and-optional-infrastructure.md) owns infrastructure defaults. [ADR-0006](ADR-0006-independent-components-and-lifecycle.md) and [Consumption](../architecture/consumption-and-packaging.md) own current independent-component consumption; [ADR-0005](ADR-0005-initial-go-consumption.md) records the original starting decision.
+Maintain supported toolchain/dependency versions and test actual consumer boundaries. Go's compatibility policy has exceptions and does not guarantee third-party API stability or thirty-year support. [ADR-0003](ADR-0003-postgresql-and-optional-infrastructure.md) records the PostgreSQL baseline and optional-infrastructure rationale; the owning module manifests and [Operations](../operations/operability-performance.md#supported-environment) establish actual dependencies and tested support. [ADR-0006](ADR-0006-independent-components-and-lifecycle.md) and [Consumption](../architecture/consumption-and-packaging.md) own current independent-component consumption; [ADR-0005](ADR-0005-initial-go-consumption.md) records the original starting decision.
 
 ## Evidence
 
