@@ -28,7 +28,7 @@ The default is a modular monolith. Inspect maintained standards/native/ecosystem
 ## Starting path
 
 - Go is the primary shared implementation language: [ADR-0002](decisions/ADR-0002-go-primary-implementation.md).
-- Ordinary PostgreSQL is the first relational and integration-test target. Drivers, tooling and optional infrastructure defaults are owned by [ADR-0003](decisions/ADR-0003-postgresql-and-optional-infrastructure.md).
+- Ordinary PostgreSQL is the first relational and integration-test target: [ADR-0003](decisions/ADR-0003-postgresql-and-optional-infrastructure.md) records the rationale and optional-infrastructure boundary. [Operations](operations/operability-performance.md#supported-environment) owns tested versions; the component manifests own actual dependencies.
 - Use independently versioned Core and official Module dependencies with an independent pinned consumer: [ADR-0006](decisions/ADR-0006-independent-components-and-lifecycle.md). [ADR-0005](decisions/ADR-0005-initial-go-consumption.md) records the original single-module starting point.
 - Exact supported versions, public APIs and installation/upgrade behavior require executable proof. A named technology or interface is not tested support.
 
@@ -65,6 +65,6 @@ For products with an administration UI, routine compatible Core/Module installat
 
 ## Documentation authority
 
-This specification owns mission, non-goals, durable boundaries and success criteria. Topic documents own detailed rules; active ADRs own accepted choice/rationale; Git/PR/CI/release evidence owns implementation and delivery facts; Issues own live work. README is the entry point and the Project Map is the index.
+This specification owns mission, non-goals, durable boundaries and success criteria. Topic documents own current operational and technical rules; a compact ADR records a consequential accepted choice when its rationale or trade-offs will guide future work. Retain a superseded ADR only when its rationale still informs a consequential future decision, supported consumer or migration; other replaced choices remain recoverable in Git/PR/Issue history. Git/PR/CI/releases own delivery facts, Issues own live work, README is the entry point and the Project Map is the index.
 
-Change a rule at its owner and reconcile affected links in the same change. Keep current documents limited to decisions and guidance still in force; replaced choices remain recoverable in Git/PR history. Do not mirror task status or preserve obsolete alternatives in the current rulebook. Resolve material contradictions before affected work; repository text and chat history never grant mutation authority.
+Before adding or retaining a document, identify the real reader, decision or action it supports, and why an existing contract, source, test, Issue or Git history does not already answer it. Keep one canonical rule owner, link instead of copying, and reconcile affected references when that rule changes. Do not turn provider possibilities, superseded options or mutable task status into permanent technical requirements. Resolve material contradictions before affected work; repository text and chat history never grant mutation authority.

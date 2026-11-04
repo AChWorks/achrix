@@ -163,7 +163,7 @@ Content/taxonomy, commerce, payments and AI/provider behavior remain case-by-cas
 
 ## Shared infrastructure candidates
 
-Durable background work is expected to recur, but its **business meaning belongs to the owning Module**. When the first real durable job is needed, prefer a reusable execution boundary (the PostgreSQL/River-first candidate in ADR-0003) with bounded workers/retries/cancellation/retention and domain-owned idempotency/effect semantics. Do not make a broker/queue/job runner a Core dependency or let a generic Jobs Module own product state.
+Durable background work is expected to recur, but its **business meaning belongs to the owning Module**. When the first real durable job is needed, evaluate a maintained PostgreSQL-backed or other appropriate execution mechanism against its actual transaction, failure and operating needs; keep workers, retries, cancellation and retention bounded and domain-owned effects idempotent or reconcilable. A provider is selected by consumer evidence, not a permanent technology shortlist. Do not make a broker/queue/job runner a Core dependency or let a generic Jobs Module own product state.
 
 Feature flags and other familiar infrastructure remain demand/evidence driven. Search/Settings/Backup & Recovery have accepted ownership boundaries above, but acceptance does not authorize empty implementations, mandatory auxiliary services or provider mega-interfaces.
 

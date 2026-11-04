@@ -6,7 +6,7 @@ The document index, not a status report. Start from README/AGENTS and the releva
 | --- | --- |
 | Mission, durable boundaries and success | [MASTER-SPEC](MASTER-SPEC.md) |
 | Development/review rules | [CONTRIBUTING](../CONTRIBUTING.md), [AGENTS](../AGENTS.md) |
-| Active choices and rationale | [ADRs](decisions/) |
+| Significant accepted choices, including still-relevant superseded rationale | [ADRs](decisions/); a superseded decision is not current implementation guidance |
 | Reuse, ownership judgment and dependencies | [Engineering principles](principles/engineering-principles.md) |
 | Core/application shape | [Architecture](architecture/overview.md) |
 | Module ownership, composition, provider variation and trust, including Search/Settings/Backup & Recovery placement | [Module model](architecture/module-model.md) |
