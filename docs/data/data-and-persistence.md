@@ -4,7 +4,7 @@
 
 Each durable domain dataset has one owning Module. Shared database access is not shared table ownership; other Modules use an intentional Application/query contract, projection or justified event-driven copy.
 
-Ordinary PostgreSQL is the first relational implementation/integration-test target. [ADR-0003](../decisions/ADR-0003-postgresql-and-optional-infrastructure.md) owns driver/tool/extension defaults. SQLite is outside this baseline. Another engine/profile is supported only with actual migrations, concurrency/constraint behavior and compatibility tests.
+Ordinary PostgreSQL is the first relational implementation/integration-test target. [ADR-0003](../decisions/ADR-0003-postgresql-and-optional-infrastructure.md) explains this baseline; the owning Module manifests declare actual drivers and [Operations](../operations/operability-performance.md#supported-environment) owns tested versions. SQLite is outside this baseline. Another engine/profile is supported only with actual migrations, concurrency/constraint behavior and compatibility tests.
 
 Use useful vendor capabilities behind the owning Infrastructure boundary without making them business identity or leaking private schemas/driver types into public contracts. Declare real requirements such as transactions, foreign keys, row/advisory locks, JSON, indexes or full-text search; portability does not mean a lowest common denominator. Keep migration/export formats usable rather than unnecessarily trapping data.
 

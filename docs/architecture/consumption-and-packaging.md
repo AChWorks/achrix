@@ -2,11 +2,26 @@
 
 ## Supported reuse
 
-A suitable product consumes versioned Core and selected reusable component dependencies, while its thin composition shell and product/domain behavior remain independently owned. [ADR-0006](../decisions/ADR-0006-independent-components-and-lifecycle.md) owns the independent version units; [ADR-0005](../decisions/ADR-0005-initial-go-consumption.md) records the original Go consumption decision. Exact supported versions and APIs need executable evidence.
+A suitable product consumes versioned Core and selected reusable component dependencies **throughout its supported product lifecycle**, while its thin composition shell and product/domain behavior remain independently owned. AChrix remains the maintained Foundation dependency after initial installation: improvements ship in official Core/component releases and reach consumers through deliberately selected updates, not regenerated or manually copied runtime sources. [ADR-0006](../decisions/ADR-0006-independent-components-and-lifecycle.md) owns the independent version units; [ADR-0005](../decisions/ADR-0005-initial-go-consumption.md) records the original Go consumption decision. Exact supported versions and APIs need executable evidence.
 
 The consumer must identify/pin its Core and selected component versions, deliberately review updates and check the resolved compatible set and migrations before activation. Shared security and lifecycle fixes must be obtainable through this path. Products rebuild, validate and redeploy their binaries to receive dependency updates; changing the Foundation source does not update a deployed product automatically.
 
 Generated bootstrap files may transfer to the product. Shared runtime is not an unmanaged permanent source copy. A justified fork has explicit independent ownership/maintenance and follows [Trademark Policy](../../TRADEMARKS.md); ordinary dependency consumption remains the default shared path.
+
+## Product development lifecycle
+
+Use AChrix as a **maintained dependency for the lifetime of a suitable product**, not as one-time generated source. The product should be independently owned yet able to adopt later reviewed compatible Core/Module releases without carrying private AChrix patches. This is the normal supported path; an intentional fork/exit has separate maintenance obligations.
+
+| Stage | Product maintainer action | Authoritative contract and evidence |
+| --- | --- | --- |
+| Decide | Confirm AChrix fits; choose only the required Modules and a supported runtime/storage profile. Keep the business model, product policy, configuration and deployment ownership in the product. | [Module ownership](module-model.md), [supported environment](../operations/operability-performance.md#supported-environment) |
+| Bootstrap | Create a separately owned product module; pin exact reviewed Core and component releases, commit the product's `go.mod`/`go.sum`, retain the tested resolved dependency inventory, and compose only through exported contracts. | [Start a product](#start-a-product), [component inventory](../../modules.json) |
+| Extend | Implement domain operations and persistence in product code. Call existing authorized AChrix Application/Module services instead of duplicating common behavior. For a missing shared seam, propose an upstream versioned contract in AChrix rather than patching its source. | [Extend and upgrade](#extend-and-upgrade-without-losing-product-code), [public contracts](contracts-and-interfaces.md) |
+| Integrate | Reuse the product's current identity, authorization and domain invariants for UI, HTTP and MCP where applicable; enable only deliberately supported channels. No transport or library grants additional product authority. | [Application/public contracts](contracts-and-interfaces.md#internal-and-external-programmatic-coverage), [security](../security/security-and-authorization.md) |
+| Validate and deliver | Exercise real product use cases with the resolved dependency graph, startup/readiness, required data migrations, authorized and denied operations, supported deployment and diagnostic paths. Record exact product and selected component identities. | [Install and upgrade](../lifecycle/lifecycle-and-compatibility.md#install-and-upgrade), [consumer tests](../../fixtures/notes/README.md) |
+| Upgrade | Review Core/Module release and migration changes as a compatible **set**; adopt new pinned versions, rebuild and test the product, stage and verify stateful changes, then activate through a recoverable product deployment. Publishing a Module does not update deployed product binaries. | [Upgrade steps](#extend-and-upgrade-without-losing-product-code), [compatibility and recovery](../lifecycle/lifecycle-and-compatibility.md#compatibility-and-recovery) |
+
+**Where changes belong:** a product-specific capability, data model or policy stays in that product; reusable behavior or a missing generic public extension point belongs in the owning AChrix Module after compatibility review. A project consuming AChrix does **not** modify the Foundation as part of ordinary feature work. The same boundaries apply to agents and automated product development, not just manual contributions.
 
 ## Start a product
 
@@ -96,7 +111,7 @@ Core and official components below have independent Go-module versions. Select a
 | Installation assessment and re-entry planning | [Installation](../../installation/README.md): `Assess`, immutable plan and `Recheck` | Standalone tooling before a Core runtime/database/admin exists. Products declare requirements and provide verified observations/adapter authority/progress; product/adapters own actual effects and postflight. |
 | Optional user-authorized MCP and HTTP access | [Bridge](../../bridge/README.md) resource-server adapters; [Multi-Site reads](../../multisite/remote/README.md), [private Media workflow](../../media/remote/README.md), [Identity administration](../../identity/remote/README.md), [Audit pages](../../audit/remote/README.md) | Mount a bounded handler over existing typed application operations. Product supplies current credential verification, user/client binding and connection/channel admission; owning services still authorize each operation. This presentation component is not an `achrix.Module`, OAuth issuer, background connection manager or separate daemon. |
 
-Add only needed module paths with exact reviewed versions. For example, an Identity/Audit composition pins its chosen set together:
+Add only needed module paths with exact reviewed versions **after the product imports and composes them**; otherwise `go mod tidy` removes requirements that no product code uses. For example, an Identity/Audit composition with those imports already in its source pins its chosen set together:
 
 ```bash
 ACHRIX_CORE_VERSION="<reviewed-core-version>"
@@ -126,7 +141,27 @@ The attributed Identity workflow requires Audit's version-2 schema and a compati
 
 ### Extend and upgrade without losing product code
 
-Keep product/domain packages, schemas, roles, content/media relationships, configuration and deployment code in the product. Implement supported public interfaces or use typed public collaborators; request a Foundation contract extension when no public seam fits rather than patching dependency-cache files or importing private implementation. A deliberate fork has its own maintenance/merge obligations.
+Keep product/domain packages, schemas, roles, content/media relationships, configuration and deployment code in the product. Implement supported public interfaces or use typed public collaborators; request an upstream Foundation contract extension when no public seam fits rather than patching dependency-cache files, modifying the Foundation for one product, shadowing Modules or importing private implementation. A deliberate fork or product exit is permitted but explicitly transfers replacement/compatibility/security and any necessary data migration/operational obligations to the product; it does not receive later shared fixes through the normal compatible dependency-upgrade path. Such an exit is an owned migration decision, not the normal product extension pattern.
+
+Before a product feature is integrated, use this ownership decision:
+
+| Need | Correct implementation home | Avoid |
+| --- | --- | --- |
+| Existing shared capability | Compose and invoke the owning released AChrix Module through its documented public contract and current product permission checks. | Copying a Module, editing its source/dependency cache, importing private implementation, direct writes to Module-owned tables. |
+| Product-specific behavior | Implement and test in the product; store product-owned data and expose only its intended operations. | Adding business roles, schemas or screens to Core merely because the product uses AChrix. |
+| Shared capability/extension gap | Record the concrete consumer contract, propose a backward-compatible AChrix Module/API change, review and release it upstream, then pin and adopt it in the product. | Maintaining one-off Foundation forks or pretending unshipped interfaces exist. |
+| External integration | Use a reviewed bounded adapter appropriate to the owning product/Module and preserve applicable versioned contracts and replacement path. | Selecting a provider only for implementation speed or leaking provider internals into public AChrix APIs. |
+
+Before accepting a Foundation dependency update in a product, positively verify:
+
+- **Dependency identity:** exact Core, selected Module and transitive versions; module/capability ABI and any required version constraints. Successful compilation alone does not prove compatibility.
+- **Product behavior:** affected Application/UI/HTTP/MCP use cases as applicable, current user and resource authorization, negative paths and important product-specific invariants; no duplicate shared implementation or private import has appeared.
+- **Persisted state:** relevant migration ledgers, retained configuration, credentials/keys, data and asset relationships; stage recovery for changes that can alter data. Never claim source rollback restores incompatible data.
+- **Activation:** supported deployment artifact, preflight, bounded downtime/interruption handling, ready/health checks and a safe rollback, roll-forward or reconciliation plan suitable for the actual changes.
+- **Traceability:** the tested candidate product build, source/dependency identities, schema versions, actual checks and unsupported/breaking cases. Record product-facing adaptation when a release is intentionally incompatible.
+
+These are **acceptance decisions for affected changes**, not a demand to retest unrelated Modules or a promise of automatic/hot updates. Consumers should keep a verifiable path to later compatible releases even when deferring a particular update.
+
 
 For an upgrade, choose an exact reviewed component version, inspect its release/migration notes and public/dependency/schema diff against the whole affected dependency set, then:
 

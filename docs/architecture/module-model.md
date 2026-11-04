@@ -71,6 +71,8 @@ Identity owns reusable authentication/account/session mechanics inside each cons
 
 Products remain independently operable and own their account namespace/data, product profile/business meanings and permission grants. Domain roles such as author, customer, staff, seller or member belong to the owning product/domain unless separately proven generic. Successful login/SSO establishes identity only; Core's/product policy authorization still decides allowed actions. Identity does not imply a shared central AChWorks account service or cross-product user table.
 
+Product login through an external OIDC identity provider is distinct from authorizing third-party clients to act for a product user. [OAuth/OIDC #125](https://github.com/AChWorks/achrix/issues/125) owns the optional AChrix authorization, consent and grant capability; its implementation, package placement and supported profile require separate evidence. Neither Identity's login contracts nor the existing Bridge imply an available issuer.
+
 ### Admin
 
 Admin owns a reusable administration presentation shell and Module-facing admin-surface composition boundary, including the common layout/navigation/routing integration and user-facing conventions needed across products.
@@ -88,6 +90,8 @@ Media owns reusable asset/upload/storage lifecycle mechanics:
 - delete/retention semantics and declared recovery dependencies.
 
 Products/other Modules own the business relationship to a Media asset, such as featured image, product gallery, avatar or content-specific meaning. Provider-specific capabilities stay explicit rather than forcing one storage/processing mega-interface.
+
+A reusable authorized private-asset picker and selection interface belong within this existing Media boundary, not a new Module or a copy in each product. [Issue #126](https://github.com/AChWorks/achrix/issues/126) owns the first accepted selection contract. Choosing an asset grants no Read or publication authority; products validate each intended domain use.
 
 ### Audit
 
@@ -153,13 +157,13 @@ Identity, Admin, Media, Audit, Notifications, Search, Settings, Installation/upd
 
 The optional [Bridge component](../../bridge/README.md) owns reusable MCP resource-server transport, trusted caller context, bounded typed bindings and safe diagnostic projection. Products register their ordinary application operations and supply verified user/client identity, current connection admission and any narrower channel restriction. Domain permissions, site/resource binding, operation semantics, durable outcome/reconciliation records and required Audit stay with the owning product/service.
 
-Bridge is an independently versioned presentation component in this repository under ADR-0006. It adds no protocol SDK, token issuer, provider/model dependency or universal operation registry to Core. Products mount its request handler in their own process; a configured idle connection does not require a separate worker/service. Product OAuth onboarding and real direct-client/Gateway interoperability require their own integration evidence under [Issue #5](https://github.com/AChWorks/achrix/issues/5).
+Bridge is an independently versioned presentation component in this repository under ADR-0006. It adds no protocol SDK, token issuer, provider/model dependency or universal operation registry to Core. Products mount its request handler in their own process; a configured idle connection does not require a separate worker/service. Product OAuth onboarding and real direct-client/Gateway interoperability require their own integration evidence under [Issue #5](https://github.com/AChWorks/achrix/issues/5); the reusable optional issuer/consent/grant capability belongs to [Issue #125](https://github.com/AChWorks/achrix/issues/125), not Bridge.
 
 Content/taxonomy, commerce, payments and AI/provider behavior remain case-by-case until their own evidence/decision establishes placement; a familiar feature name alone is not reuse evidence.
 
 ## Shared infrastructure candidates
 
-Durable background work is expected to recur, but its **business meaning belongs to the owning Module**. When the first real durable job is needed, prefer a reusable execution boundary (the PostgreSQL/River-first candidate in ADR-0003) with bounded workers/retries/cancellation/retention and domain-owned idempotency/effect semantics. Do not make a broker/queue/job runner a Core dependency or let a generic Jobs Module own product state.
+Durable background work is expected to recur, but its **business meaning belongs to the owning Module**. When the first real durable job is needed, start with the PostgreSQL/River-first candidate retained in [Notifications #110](https://github.com/AChWorks/achrix/issues/110); verify its transactional, failure/recovery, resource and operating fit for that consumer, and justify another maintained mechanism if the evidence favors it. This is a starting preference, **not** an implemented dependency or permission to activate the Owner-gated Notifications work. Keep workers, retries, cancellation and retention bounded and domain-owned effects idempotent or reconcilable. Do not make a broker/queue/job runner a Core dependency or let a generic Jobs Module own product state.
 
 Feature flags and other familiar infrastructure remain demand/evidence driven. Search/Settings/Backup & Recovery have accepted ownership boundaries above, but acceptance does not authorize empty implementations, mandatory auxiliary services or provider mega-interfaces.
 

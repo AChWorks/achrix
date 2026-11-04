@@ -2,7 +2,7 @@
 
 ## Configuration and readiness
 
-Simple applications run without mandatory auxiliary services. [ADR-0003](../decisions/ADR-0003-postgresql-and-optional-infrastructure.md) owns infrastructure defaults; introduce them for actual requirements.
+Simple applications run without mandatory auxiliary services. [ADR-0003](../decisions/ADR-0003-postgresql-and-optional-infrastructure.md) records the PostgreSQL/optional-service choice; the support matrix below and actual manifests determine available implementations.
 
 Separate runtime/deployment configuration, secrets, application-level operator settings and domain data. Configuration has an owner, meaningful defaults, validation and explicit environment behavior. The **product/composition boundary owns deployment/runtime configuration sources and precedence**; reusable Modules receive typed validated configuration and should not read environment variables, process-global config or secret stores directly.
 
@@ -185,6 +185,8 @@ Logs explain operational failure. Durable Audit answers who/what/when/target/out
 ## Code-level performance engineering
 
 Performance starts with algorithm, data movement and resource ownership before cache/infrastructure selection.
+
+When a real workload justifies caching, define its authoritative source, freshness/invalidation, TTL, memory/eviction limits and outage behavior. Cached projections remain disposable unless an owning capability explicitly proves durable semantics; session, permission, quota, lock or job-progress correctness must not depend on unexamined best-effort eviction. [Security](../security/security-and-authorization.md) owns permission freshness and [Data](../data/data-and-persistence.md) owns authoritative state.
 
 - Know expected cardinality for loops/maps/graphs and avoid accidental unbounded, N+1 or quadratic work on request/data paths that can grow with users/content. A small bounded startup path may legitimately choose simpler code over a more complex asymptotic implementation.
 - Treat memory allocation/copying, lock contention, goroutine growth, database round trips/query plans, serialization, storage/network I/O and telemetry volume as costs when they can affect the workload.

@@ -1,40 +1,18 @@
 # ADR-0005 — Initial Go Consumption Shape
 
-Status: accepted historical starting decision; the single-Go-module packaging choice is superseded for the independent-component line by [ADR-0006](ADR-0006-independent-components-and-lifecycle.md). Compiled composition, normal pinned consumption and the remaining constraints continue to apply. Operations and Contracts own implemented support/public APIs, and Issue #1 owns exact initial acceptance evidence.
+Status: **Superseded for packaging** by [ADR-0006](ADR-0006-independent-components-and-lifecycle.md). Retained only because the older published dependency shape still matters for consumer migrations.
 Date: 2026-10-01.
 
-## Context
+## Historical choice and reason
 
-AChrix must be a versioned reusable dependency with a small extension surface, rather than a copied starter or mandatory central service. Deciding the distribution shape now reduces avoidable coupling without requiring a framework, SDK repository or runtime infrastructure before implementation.
+AChrix initially used one repository-aligned Go module, `github.com/AChWorks/achrix`, containing Core and the initial shared packages. That let the first executable Foundation and its independent Notes consumer prove ordinary versioned Go imports, a small public composition/authorization contract and real PostgreSQL behavior without premature coordination of several release units, separate repositories or a vanity module domain.
 
-## Decision
+The proving consumer had its own `go.mod`, selected a source-backed pinned Foundation dependency without a permanent local `replace`/workspace override, and composed the published code rather than copying runtime sources or importing internals. Compiled composition avoided the portability and toolchain constraints of dynamic Go plugins. [Issue #1](https://github.com/AChWorks/achrix/issues/1) owns the original executable acceptance/evidence; historical publication remains in the immutable tags/releases.
 
-- Begin with one Go module for the shared Foundation, using the repository-aligned module path `github.com/AChWorks/achrix`. Preserve its spelling in imports and metadata. No `go.mod` or package is created by this documentation decision.
-- Core and necessary internal Modules may share that module. Publish only packages/APIs that the first independent consumer actually needs; implementation details use appropriate Go `internal` packages and unexported identifiers. An architecture Module does not automatically become a separately distributed Go module.
-- Use compiled Module composition under [Consumption](../architecture/consumption-and-packaging.md#module-installation); [Lifecycle](../lifecycle/lifecycle-and-compatibility.md#product-update-experience) owns in-product update safety. This decision implements neither an updater nor a dynamic Go plugin loader.
-- The initial first-party artifact follows the existing MPL-2.0 scope. Do not extract an Apache-2.0 SDK merely to satisfy a directory pattern; designate one only when an actual integration artifact and rights boundary warrant it.
-- The proving consumer has its own `go.mod` and composes a necessary minimal extension using intentionally public contracts. It must install/build/use a pinned Foundation version outside the Foundation module, without copying runtime source or importing its internals.
-- A local `replace` or workspace can help development, but it is not the only consumption proof. Verify the published dependency path in an isolated consumer without a local replacement/workspace override, using a source-backed version or Go pseudo-version before the first suitable tag. Do not disable checksum/security mechanisms merely to make the proof pass.
-- Start published development releases in `v0.x`, with explicit compatibility/change notes; this is not a promise of a stable `v1` API. Choose `v1` only when the tested contract deserves it. Future breaking major versions follow Go's module-path rules, including `/v2` and later suffixes when applicable.
-- Before coupling code, verify versions and the consumer's necessary public APIs. [Operations](../operations/operability-performance.md#supported-environment) owns the support matrix, manifests own pins, [Contracts](../architecture/contracts-and-interfaces.md)/API documentation own the public surface, and Issue #1 links executable proof. Do not mirror moving tables here or equate preference with tested support.
+## What superseded it
 
-## Consequences
+[ADR-0006](ADR-0006-independent-components-and-lifecycle.md) adopted independently versioned Core and component Go modules **within the same source repository**, preserving the established import paths. Old monolithic roots can still contain the child packages; combining one with separately published child modules may create ambiguous imports.
 
-One repository-aligned module avoids premature multi-package release coordination and a vanity-domain ownership commitment. It provides a cheap normal dependency path; changing that path later requires an explicit compatibility/migration decision.
+Consumers moving from the old line must follow the [monolithic-to-independent transition](../lifecycle/lifecycle-and-compatibility.md#monolithic-to-independent-module-packaging), choose a coherent pinned dependency set, inspect compatibility and migrations, then rebuild and verify their product. Do not read this historical ADR as an instruction to start a new single-module release or to rewrite old tags.
 
-Compiled composition preserves normal Go dependency/testing mechanics and a coherent component set. Go plugins' toolchain/dependency and portability constraints put them outside the starting supported path. Product packaging can hide build/deploy mechanics without giving Core host-administration authority.
-
-Supported external contracts and deliberate upgrades preserve future options; this does not promise immutable imports or third-party compatibility for thirty years.
-
-## Canonical owners and proof
-
-[Consumption and packaging](../architecture/consumption-and-packaging.md) owns the durable constraints. [Module model](../architecture/module-model.md) owns capability placement. [Licensing](../legal/licensing.md) owns artifact terms. [Lifecycle](../lifecycle/lifecycle-and-compatibility.md) owns compatibility/release evidence. [Issue #1](https://github.com/AChWorks/achrix/issues/1) remains the stable executable-baseline acceptance/evidence reference; live gates and task state belong to GitHub rather than this ADR.
-
-Do not infer that a public repository is a runnable module, that `internal` is a sandbox, or that this ADR validates an unimplemented extension API.
-
-## Official evidence
-
-- [Go Modules Reference](https://go.dev/ref/mod): module/package paths, versioning, pseudo-versions, major-version suffixes and replacements.
-- [Go module layout](https://go.dev/doc/modules/layout): separating supported external imports from implementation details.
-- [Go compatibility policy](https://go.dev/doc/go1compat): supported language/library compatibility boundaries, not a guarantee for untested third-party contracts.
-- [Go plugin documentation](https://pkg.go.dev/plugin): execution, portability and toolchain/dependency constraints of dynamically loaded Go plugins.
+Current package selection and extension are governed by [Consumption](../architecture/consumption-and-packaging.md), exact public APIs by [Contracts](../architecture/contracts-and-interfaces.md), supported environment by [Operations](../operations/operability-performance.md#supported-environment), and published release identities by Git/Go manifests and releases.

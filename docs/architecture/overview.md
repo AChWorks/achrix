@@ -18,7 +18,7 @@ The optional installation tooling owns reusable requirement/evidence and re-entr
 
 The optional [Bridge](../../bridge/README.md) is a bounded MCP presentation/resource-server adapter over those same application operations. Products supply current user/client verification and connection admission; channel restrictions can narrow ordinary product permissions. Protocol mechanics stay outside Core, while product OAuth onboarding and actual AI/Gateway compatibility remain separately evidenced integrations. Shared code does not require Gateway, an AI provider, a central issuer or idle connection workers.
 
-Use maintained Go/native/ecosystem functionality rather than build a general-purpose framework. [ADR-0003](../decisions/ADR-0003-postgresql-and-optional-infrastructure.md) owns concrete infrastructure choices; [Module model](module-model.md) owns composition/placement; [Consumption](consumption-and-packaging.md) owns the product dependency and packaging boundary.
+Use maintained Go/native/ecosystem functionality rather than build a general-purpose framework. [ADR-0003](../decisions/ADR-0003-postgresql-and-optional-infrastructure.md) records the PostgreSQL baseline and optional-service rationale; [Module model](module-model.md) owns composition/placement; [Consumption](consumption-and-packaging.md) owns the product dependency and packaging boundary.
 
 ## Extraction
 
