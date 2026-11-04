@@ -38,6 +38,8 @@ go get "github.com/AChWorks/achrix@$ACHRIX_CORE_VERSION"
 
 Follow the [product quick start](docs/architecture/consumption-and-packaging.md#start-a-product) for a runnable application, compatible Module selection and explicit database setup. The [Notes example](fixtures/notes/README.md) shows a separately composed consumer.
 
+**Building a product that remains upgradable:** use the [product development lifecycle](docs/architecture/consumption-and-packaging.md#product-development-lifecycle) as the starting workflow. It shows which code belongs in the product versus AChrix, how to use only public extension/Application contracts, which compatible Core/Module versions to pin, what to verify before integrating features, and how to [adopt later versions without forking the Foundation](docs/architecture/consumption-and-packaging.md#extend-and-upgrade-without-losing-product-code). Products keep their own business logic and deployment while AChrix stays an official, maintained dependency.
+
 AChrix is currently a **pre-v1 developer foundation**. Review each component's release notes before adoption. Existing consumers should follow the [upgrade guide](docs/lifecycle/lifecycle-and-compatibility.md#monolithic-to-independent-module-packaging), especially when moving from a shared-version release to independent components. Products own their permission policy, actual installation/activation and deployment.
 
 ## Learn more and contribute
