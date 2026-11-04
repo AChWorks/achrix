@@ -4,6 +4,7 @@
 import contextlib
 import http.server
 import json
+import sys
 import tempfile
 import threading
 import unittest
@@ -207,6 +208,30 @@ class MetadataContract(unittest.TestCase):
         for literal in ("NaN", "Infinity", "-Infinity", "1e9999"):
             with self.subTest(literal=literal), self.assertRaisesRegex(probe.ProbeError, "non-finite"):
                 probe.read_json(("{\"x_info\":" + literal + "}").encode())
+
+    def test_json_decoder_resource_limits_produce_safe_diagnostics(self):
+        # Parser limit exceptions must remain deterministic and never include
+        # untrusted parser diagnostics or a traceback on the CLI.
+        for error in (ValueError('untrusted raw detail'), RecursionError('too deep')):
+            with self.subTest(error=type(error).__name__):
+                with mock.patch.object(probe.json, 'loads', side_effect=error):
+                    with self.assertRaisesRegex(probe.ProbeError, '^invalid metadata JSON$'):
+                        probe.read_json(b'{}')
+        # Python's integer-digit limit depends on runtime/version; test the
+        # actual failure when enabled, without imposing a new metadata policy.
+        max_digits = getattr(sys, 'get_int_max_str_digits', lambda: 0)()
+        if max_digits and max_digits + 8 <= probe.MAX_BYTES:
+            too_many_digits = b'{"x":' + b'1' * (max_digits + 1) + b'}'
+            with self.assertRaisesRegex(probe.ProbeError, '^invalid metadata JSON$'):
+                probe.read_json(too_many_digits)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'metadata.json'
+            path.write_bytes(b'{}')
+            stderr = StringIO()
+            with mock.patch.object(probe.json, 'loads', side_effect=ValueError('untrusted raw detail')):
+                with contextlib.redirect_stderr(stderr):
+                    self.assertEqual(probe.main(['--issuer', ISSUER, '--metadata-file', str(path)]), 1)
+            self.assertEqual(stderr.getvalue(), 'FAIL: invalid metadata JSON\n')
 
     def test_offline_file_read_is_bounded_before_allocation(self):
         payload = b"x" * (probe.MAX_BYTES + 2)

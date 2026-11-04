@@ -123,7 +123,11 @@ def read_json(data):
     try:
         result = json.loads(data, object_pairs_hook=_unique_object,
                             parse_constant=_reject_nonfinite, parse_float=_finite_float)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+    except ProbeError:
+        raise
+    except (ValueError, RecursionError) as error:
+        # Python JSON parsers can reject bounded inputs via integer-digit or
+        # nesting limits; never expose an uncaught traceback to callers.
         raise ProbeError("invalid metadata JSON") from error
     if not isinstance(result, dict):
         raise ProbeError("metadata must be a JSON object")
