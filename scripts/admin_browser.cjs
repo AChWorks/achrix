@@ -372,6 +372,7 @@ async function main() {
       assert.equal(await viewerRow.count(),1,"metadata viewer sees ready file");
       assert.equal(await viewerRow.locator("a[data-download],form[data-operation=delete]").count(),0,"metadata never grants Read or Delete");
       assert.equal(await page.locator("form[data-operation=upload]").count(),0);
+      await pickerProof({page,endpoint,asset:retained,probe,selectable:false});
       const beforeMediaDenied=await probe();
       assert.equal((await request("/admin/media/status",{id:retained.id},viewerToken)).status,403);
       assert.equal((await request("/admin/media/delete",{id:retained.id,revision:retained.revision},viewerToken)).status,403);
@@ -410,6 +411,53 @@ async function main() {
     console.log(JSON.stringify({proof:"actual HTTPS normal-SDK Identity Media Admin browser",reports},null,2));
   } finally { await browser.close(); }
 }
+// Exercise the real optional picker source through the actual authenticated
+// HTTPS Admin shell, version-pinned consumer and persisted Media database.
+// The editor host is synthetic composition only; no product domain writes.
+async function pickerProof({page,endpoint,asset,probe,selectable}) {
+  const before=await probe();
+  await page.evaluate(()=>{
+    const target=document.createElement("achrix-media-picker");
+    target.id="achrix-picker-browser-fixture";
+    document.body.append(target);
+    window.__achrixPickerEvents=[];
+    target.addEventListener("achrix:media-selected",event=>window.__achrixPickerEvents.push(event.detail));
+  });
+  await page.addScriptTag({url:endpoint.origin+"/admin/media/picker.js"});
+  const root=page.locator("#achrix-picker-browser-fixture");
+  assert.equal(await root.locator("summary").count(),1,"picker script registered custom element");
+  const listed=page.waitForResponse(response=>new URL(response.url()).pathname==="/admin/media/picker/page");
+  await root.locator("summary").press("Enter");
+  const response=await listed;
+  assert.equal(response.status(),200,"picker list must be real authenticated Service.List response");
+  await page.waitForFunction(()=>{const p=document.querySelector("#achrix-picker-browser-fixture");return p && !p.busy && p.notice && p.notice.textContent!=="";
+  });
+  if (selectable) {
+    const choose=root.locator("li button").filter({hasText:asset.filename});
+    await choose.waitFor({state:"visible",timeout:10000});
+    assert.equal(await choose.count(),1,"exact selectable item was not shown");
+    assert.equal(await root.locator("img,svg,[onerror]").count(),0,"filename cannot create active markup");
+    const selected=page.waitForResponse(response=>new URL(response.url()).pathname==="/admin/media/picker/asset/"+asset.id);
+    await choose.press("Enter");
+    assert.equal((await selected).status(),200,"selection rechecks current exact-asset rights");
+    await page.waitForFunction(()=>window.__achrixPickerEvents.length===1);
+    const selections=await page.evaluate(()=>window.__achrixPickerEvents);
+    assert.equal(selections[0].id,asset.id);
+    assert.equal(selections[0].revision,asset.revision,"int64 revision stays exact decimal text");
+    assert.equal(selections[0].mime,asset.mime);
+    assert.equal(selections[0].filename,asset.filename);
+    assert(!("sha256" in selections[0]) && !("content" in selections[0]),"picker emits only safe reference metadata");
+    assert.equal(await root.locator("summary").evaluate(node=>node===document.activeElement),true,"selection restores keyboard focus");
+  } else {
+    await page.waitForFunction(()=>{const p=document.querySelector("#achrix-picker-browser-fixture");return p && !p.busy && p.list && p.list.childElementCount===0 && p.notice && p.notice.textContent!=="";
+    });
+    assert.equal(await root.locator("li").count(),0,"List-only viewer cannot Select any asset");
+    assert.deepEqual(await page.evaluate(()=>window.__achrixPickerEvents),[],"viewer selection event must not fire");
+  }
+  sameState(before,await probe(),"picker view/choice has no product or Media state mutation");
+  await root.evaluate(node=>node.remove());
+}
+
 async function mediaFlow({page,navigate,responseSubmit,request,csrf,probe,endpoint,fa,context,images,files}) {
   await navigate("/admin/media");
   assert.equal(await page.locator("#media-empty").isVisible(),true,"real empty library");
@@ -447,6 +495,7 @@ async function mediaFlow({page,navigate,responseSubmit,request,csrf,probe,endpoi
   const jpegRow=page.locator('#assets tr[data-asset-id="'+second.id+'"]');
   assert.equal(await jpegRow.locator("bdi").first().innerText(),jpegName,"stored markup-like filename rendered as text");
   assert.equal(await jpegRow.locator("img,svg,[onerror]").count(),0,"module-owned refreshed DOM uses contextual escaping");
+  await pickerProof({page,endpoint,asset:second,probe,selectable:true});
   // These are original owned files, not preview/conversion outputs of Media.
   // Chromium itself produces complete WebP/WebM fixtures for this pinned test.
   const nativeFiles=await page.evaluate(async ()=>{

@@ -57,7 +57,7 @@ func (p *adminBrowserPolicy) Authorize(_ context.Context, actor achrix.Principal
 		switch capability {
 		case identity.AccountCreate, identity.AccountRead, identity.AccountLookup,
 			identity.CredentialSet, identity.AccountSetEnabled, identity.SessionRevokeAll,
-			audit.Append, media.Create, media.List, media.Read, media.Delete:
+			audit.Append, media.Create, media.List, media.Select, media.Read, media.Delete:
 			return nil
 		}
 	}
