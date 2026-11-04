@@ -6,9 +6,11 @@ Canonical project intent for `AChWorks/achrix`. Detailed rules have one owner ea
 
 AChrix is a reusable, versioned AChWorks Foundation for web-connected applications. Its purpose is to shorten the path from an idea to a maintainable product by sharing useful engineering capabilities while each product keeps its differentiating business behavior.
 
+**AChrix is also a coherent product-building starting foundation, not merely a collection of libraries.** A new suitable product should have an understandable, supported route from initial composition to a maintainable application: appropriate optional Modules, predictable conventions, documented extension/operations paths, safe authorization, independent versioned dependencies, and upgrade/recovery evidence. The starting experience must reuse maintained shared implementations and contracts rather than become copy-and-modify source scaffolding. This is AChrix's own product and technology identity; comparable developer experience elsewhere does not make AChrix a general-purpose framework or require imitation of another ecosystem.
+
 `AChrix` is the project/technology name; Foundation is its architectural category. Pronunciation: `ATCH-riks` (Persian: `اَچ‌ریکس`). Suitable consumers include content sites, SaaS, marketplaces, commerce, financial products, media, APIs and automation; none must adopt unrelated modules or infrastructure.
 
-Koinon owns AChWorks cross-project governance/discovery/contracts. AChrix owns its implementation, application-specific contracts, Core/Modules, packaging and releases. Koinon is not a runtime dependency or a prerequisite for public consumers to understand the usage and extension rules published here.
+Koinon owns AChWorks cross-project governance/discovery/contracts. AChrix owns its implementation, application-specific contracts, Core/Modules, packaging and releases. Koinon is not a runtime dependency or a prerequisite for public consumers to understand the usage and extension rules published here. Ecosystem-wide coordination policy and AChrix-specific engineering/module design are distinct ownership layers: AChrix can use Foundation-family-specific reuse, dependency and interoperability rules within compatible ecosystem boundaries, without imposing its technology choices on unrelated projects.
 
 ## Durable boundaries
 
@@ -21,7 +23,7 @@ Koinon owns AChWorks cross-project governance/discovery/contracts. AChrix owns i
 7. **Reuse-first placement, evidence-based implementation/extraction.** When current product knowledge makes a coherent capability more likely than not to recur across product classes, establish the reusable Module ownership boundary before the first product duplicates it. Implement only real near-term behavior, and keep uncertain/product-specific semantics local. Independent packages, repositories, services or databases still require their own evidence and cost justification.
 8. **Public meaning for humans and machines.** Products exposing public web content preserve semantic, accessible and truthful output for people, search and AI retrieval. [Web](web/seo-and-semantic-web.md#public-content-and-ai-retrieval) owns the detailed publication rules; Core gains no mandatory SEO, content or crawler subsystem.
 
-The default is a modular monolith. Reuse maintained standard/native/ecosystem capabilities before owning commodity infrastructure. [Engineering principles](principles/engineering-principles.md) define the decision and evidence rules; the [Module model](architecture/module-model.md) owns detailed placement and the accepted initial reusable Module boundaries.
+The default is a modular monolith. Inspect maintained standards/native/ecosystem capabilities, but select internal ownership versus an external dependency by the **long-term** security, control, interoperability, portability, licence, maintenance, upgrade and replacement trade-off, never implementation speed alone. AChrix deliberately owns reusable product-building capability semantics where shared ownership lowers lifetime cost and protects evolution; low-level established implementations may still be appropriate under reviewed dependencies. Avoid exposing provider/library details as enduring public contracts or forcing an external runtime/service. [Engineering principles](principles/engineering-principles.md) own the evidence rules; the [Module model](architecture/module-model.md) owns detailed placement and accepted reusable Module boundaries.
 
 ## Starting path
 
@@ -30,11 +32,11 @@ The default is a modular monolith. Reuse maintained standard/native/ecosystem ca
 - Use independently versioned Core and official Module dependencies with an independent pinned consumer: [ADR-0006](decisions/ADR-0006-independent-components-and-lifecycle.md). [ADR-0005](decisions/ADR-0005-initial-go-consumption.md) records the original single-module starting point.
 - Exact supported versions, public APIs and installation/upgrade behavior require executable proof. A named technology or interface is not tested support.
 
-Products may use another justified runtime/provider/database through an explicit boundary. This does not force migration of other repositories or require a central AChrix service.
+Go is the current primary implementation path, not a universal-language mandate. A product may use another justified runtime/provider/database through an explicit, intentionally versioned boundary; concrete cross-runtime support must be proven for that interface and consumer, not assumed for all in-process Modules. The architecture should keep such future interoperability viable when cheap and credible, without building unneeded adapters. This does not force migration of other repositories or require a central AChrix service.
 
 ## Non-goals
 
-- A copied starter, a new general-purpose framework, or mandatory microservices.
+- A copy-and-modify starter as the architecture, an all-purpose framework identity, or mandatory microservices. A coherent, supported product starting experience is a goal; it must compose maintained Modules and versioned contracts rather than duplicate their sources.
 - Universal entity/field/value storage, wrappers around every library, or one package/service per Module.
 - Every database, provider, delivery adapter, tenant/feature-flag engine or future product feature built in advance.
 - Mandatory cache, broker, workflow engine, search cluster, company account, container runtime or orchestrator.
