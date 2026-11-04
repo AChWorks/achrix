@@ -35,6 +35,8 @@ jobs:
           checkout_tree=$(git rev-parse HEAD^{tree})
           printf 'checkout_sha=%s\ncheckout_tree=%s\n' "$checkout_sha" "$checkout_tree" >> "$GITHUB_OUTPUT"
           printf 'Validation identity: checkout=%s tree=%s PR/source-head=%s base=%s\n' "$checkout_sha" "$checkout_tree" "$PR_HEAD_SHA" "$BASE_SHA"
+      - name: Verify OAuth issuer metadata preflight regression tests
+        run: python3 -m unittest discover -s scripts -p 'test_oauth_metadata_probe.py'
       - name: Validate changed routing and shell entry points
         if: steps.scope.outputs.routing_tests == 'true'
         run: |
