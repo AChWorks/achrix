@@ -33,7 +33,7 @@ class ProbeError(ValueError):
     """Input or profile mismatch; contains no token or credential values."""
 
 
-def _parse_url(value, *, allow_local_http=False):
+def _parse_url(value, *, allow_local_http=False, allow_query=False):
     if not isinstance(value, str) or not value or len(value) > MAX_ISSUER_LENGTH:
         raise ProbeError("URL must be a bounded nonempty string")
     try:
@@ -43,8 +43,8 @@ def _parse_url(value, *, allow_local_http=False):
         raise ProbeError("invalid URL") from error
     if parsed.username is not None or parsed.password is not None:
         raise ProbeError("URL userinfo is forbidden")
-    if parsed.query or parsed.fragment or not parsed.hostname or (port is not None and port == 0):
-        raise ProbeError("URL must have a host and no query or fragment")
+    if (parsed.query and not allow_query) or parsed.fragment or not parsed.hostname or (port is not None and port == 0):
+        raise ProbeError("URL must have a host, without a forbidden query or fragment")
     if parsed.scheme == "https":
         return parsed
     if parsed.scheme == "http" and allow_local_http and parsed.hostname in ("localhost", "127.0.0.1", "::1"):
@@ -111,7 +111,9 @@ def validate(metadata, issuer, *, allow_refresh=False, auth_methods=("none",), a
     for field in ("authorization_endpoint", "token_endpoint"):
         value = metadata.get(field)
         try:
-            _parse_url(value, allow_local_http=allow_local_http)
+            # RFC 6749 permits fixed query parameters on endpoint URLs, but
+            # never on the issuer identifier or discovery URL itself.
+            _parse_url(value, allow_local_http=allow_local_http, allow_query=True)
         except ProbeError:
             problems.append(field + ": canonical HTTPS endpoint required")
     arrays = {
@@ -129,12 +131,14 @@ def validate(metadata, issuer, *, allow_refresh=False, auth_methods=("none",), a
         problems.append("authorization_response_iss_parameter_supported: explicit true required")
     # This first OAuth-only profile makes no OIDC claims. An eventual separate
     # OIDC profile must get its own contract and real-client proof.
-    for name in ("userinfo_endpoint", "id_token_signing_alg_values_supported"):
+    for name in ("userinfo_endpoint", "id_token_signing_alg_values_supported",
+                 "registration_endpoint", "device_authorization_endpoint",
+                 "end_session_endpoint"):
         if name in metadata:
             problems.append(name + ": unsupported OIDC capability advertised")
     if "revocation_endpoint" in metadata:
         try:
-            _parse_url(metadata["revocation_endpoint"], allow_local_http=allow_local_http)
+            _parse_url(metadata["revocation_endpoint"], allow_local_http=allow_local_http, allow_query=True)
         except ProbeError:
             problems.append("revocation_endpoint: canonical HTTPS endpoint required")
         # The revocation endpoint may support a narrower set than token exchange;

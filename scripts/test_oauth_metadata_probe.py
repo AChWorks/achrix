@@ -122,11 +122,24 @@ class MetadataContract(unittest.TestCase):
                     doc[field] = value
                     self.assertTrue(probe.validate(doc, ISSUER))
 
-    def test_unsupported_oidc_advertisement(self):
-        for field in ("userinfo_endpoint", "id_token_signing_alg_values_supported"):
+    def test_unsupported_oidc_and_extension_advertisement(self):
+        for field in ("userinfo_endpoint", "id_token_signing_alg_values_supported",
+                      "registration_endpoint", "device_authorization_endpoint",
+                      "end_session_endpoint"):
             doc = valid()
             doc[field] = "https://identity.example.test/unused"
             self.assertTrue(any(field in x for x in probe.validate(doc, ISSUER)))
+
+    def test_fixed_query_parameters_on_authorization_and_token_endpoints(self):
+        # RFC 6749 permits fixed query components on endpoint URLs. They are
+        # forbidden only on the issuer identifier itself.
+        doc = valid()
+        doc["authorization_endpoint"] += "?tenant=one"
+        doc["token_endpoint"] += "?tenant=one"
+        self.assertEqual(probe.validate(doc, ISSUER), [])
+        doc["revocation_endpoint"] = "https://identity.example.test/revoke?tenant=one"
+        doc["revocation_endpoint_auth_methods_supported"] = ["none"]
+        self.assertEqual(probe.validate(doc, ISSUER), [])
 
     def test_revocation_defaults_must_not_be_inferred(self):
         doc = valid()
