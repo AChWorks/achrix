@@ -71,7 +71,7 @@ Identity owns reusable authentication/account/session mechanics inside each cons
 
 Products remain independently operable and own their account namespace/data, product profile/business meanings and permission grants. Domain roles such as author, customer, staff, seller or member belong to the owning product/domain unless separately proven generic. Successful login/SSO establishes identity only; Core's/product policy authorization still decides allowed actions. Identity does not imply a shared central AChWorks account service or cross-product user table.
 
-Product login through an external OIDC identity provider is distinct from authorizing third-party clients to act for a product user. [OAuth/OIDC #125](https://github.com/AChWorks/achrix/issues/125) owns the optional AChrix authorization, consent and grant capability; its implementation, package placement and supported profile require separate evidence. Neither Identity's login contracts nor the existing Bridge imply an available issuer.
+Product login through an external OIDC identity provider is distinct from authorizing third-party clients to act for a product user. [OAuth/OIDC #125](https://github.com/AChWorks/achrix/issues/125) owns the optional AChrix authorization, consent and grant capability; its implementation, package placement and supported profile require separate evidence. Neither Identity's login contracts nor the existing Bridge imply an available issuer. [ADR-0007](../decisions/ADR-0007-optional-oauth-authorization-profile.md) records the proposed first interoperable profile, security proof gates and SDK comparison; it does not itself authorize deployment or claim the issuer is implemented.
 
 ### Admin
 
