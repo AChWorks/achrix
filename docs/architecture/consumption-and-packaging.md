@@ -111,7 +111,7 @@ Core and official components below have independent Go-module versions. Select a
 | Installation assessment and re-entry planning | [Installation](../../installation/README.md): `Assess`, immutable plan and `Recheck` | Standalone tooling before a Core runtime/database/admin exists. Products declare requirements and provide verified observations/adapter authority/progress; product/adapters own actual effects and postflight. |
 | Optional user-authorized MCP and HTTP access | [Bridge](../../bridge/README.md) resource-server adapters; [Multi-Site reads](../../multisite/remote/README.md), [private Media workflow](../../media/remote/README.md), [Identity administration](../../identity/remote/README.md), [Audit pages](../../audit/remote/README.md) | Mount a bounded handler over existing typed application operations. Product supplies current credential verification, user/client binding and connection/channel admission; owning services still authorize each operation. This presentation component is not an `achrix.Module`, OAuth issuer, background connection manager or separate daemon. |
 
-Add only needed module paths with exact reviewed versions. For example, an Identity/Audit composition pins its chosen set together:
+Add only needed module paths with exact reviewed versions **after the product imports and composes them**; otherwise `go mod tidy` removes requirements that no product code uses. For example, an Identity/Audit composition with those imports already in its source pins its chosen set together:
 
 ```bash
 ACHRIX_CORE_VERSION="<reviewed-core-version>"
