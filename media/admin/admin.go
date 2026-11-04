@@ -27,7 +27,7 @@ type library interface {
 	Formats() []media.Format
 	Create(context.Context, achrix.Principal, string, io.Reader) (media.Asset, error)
 	List(context.Context, achrix.Principal, string, int) (media.Page, error)
-	Select(context.Context, achrix.Principal, string) (media.Asset, error)
+	Select(context.Context, achrix.Principal, string) (media.Selection, error)
 	Status(context.Context, achrix.Principal, string) (media.Asset, error)
 	Read(context.Context, achrix.Principal, string, io.Writer) (media.Asset, error)
 	Delete(context.Context, achrix.Principal, string, int64) error
@@ -111,6 +111,10 @@ var supportedMIMEs = func() map[string]bool {
 func metadata(a media.Asset) asset {
 	return asset{a.ID, a.Filename, a.MIME, a.Size, a.Width, a.Height, a.Revision, a.State}
 }
+func selectedMetadata(a media.Selection) asset {
+	return asset{a.ID, a.Filename, a.MIME, a.Size, a.Width, a.Height, a.Revision, a.State}
+}
+
 func present(a media.Asset, view shell.Request) item {
 	result := item{Asset: metadata(a), Permissions: map[string]bool{"read": false, "delete": false}}
 	read, err := permission(view, media.Read, a.ID)
@@ -194,7 +198,7 @@ func (h *handler) pickerSelect(w http.ResponseWriter, r *http.Request, view shel
 	}
 	reply(w, view, struct {
 		Asset asset `json:"asset"`
-	}{metadata(a)})
+	}{selectedMetadata(a)})
 }
 
 func (h *handler) serve(w http.ResponseWriter, r *http.Request, view shell.Request) {

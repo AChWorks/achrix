@@ -62,7 +62,7 @@ Create an existing absolute-path directory with mode `0700`, outside every webro
 | --- | --- | --- |
 | `Create` | `LibraryTarget` (`library`) | Create a private supported attachment. |
 | `List` | `LibraryTarget` | Discover bounded collection metadata, including filenames. |
-| `Select` | Exact generated asset ID | Return currently ready, authorized metadata only; grant no byte Read or product relationship. |
+| `Select` | Exact generated asset ID | Return currently ready, authorized metadata only; grant no byte Read, content fingerprint, or product relationship. |
 | `Read` | Exact generated asset ID | Read durable status or original attachment bytes. |
 | `Delete` | Exact generated asset ID | Conditionally delete that asset at a supplied revision. |
 | `Reconcile` | `LibraryTarget` | Abort interrupted pending uploads and finish deletion, in bounded batches. |

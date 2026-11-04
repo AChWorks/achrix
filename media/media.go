@@ -91,6 +91,21 @@ type Asset struct {
 	State         string
 	CreatedAt     time.Time
 }
+
+// Selection is the exact, ready-asset reference exposed by Select. It
+// intentionally cannot carry private content hashes, original bytes, storage
+// locations, timestamps, or downstream product-domain grants. A caller must
+// independently authorize its own usage when persisting the reference.
+type Selection struct {
+	ID            string
+	Filename      string
+	MIME          string
+	Size          int64
+	Width, Height int
+	Revision      int64
+	State         string
+}
+
 type Page struct {
 	Assets     []Asset
 	NextCursor string
@@ -181,23 +196,27 @@ func (s *Service) Status(parent context.Context, actor achrix.Principal, id stri
 // returns metadata only: selecting never grants original-byte Read, deletion,
 // publication or a product-specific content relationship. Products must still
 // validate the selected reference in their own authorized Application operation.
-func (s *Service) Select(parent context.Context, actor achrix.Principal, id string) (Asset, error) {
+func (s *Service) Select(parent context.Context, actor achrix.Principal, id string) (Selection, error) {
 	if !validID(id) {
-		return Asset{}, inputFailure("asset_id", "invalid_asset_id", "must be the 26-character generated asset identity")
+		return Selection{}, inputFailure("asset_id", "invalid_asset_id", "must be the 26-character generated asset identity")
 	}
 	ctx, cancel := deadline(parent, time.Second)
 	defer cancel()
 	if err := s.app.Authorize(ctx, actor, Select, id); err != nil {
-		return Asset{}, err
+		return Selection{}, err
 	}
 	a, err := s.module.status(ctx, id)
 	if err != nil {
-		return Asset{}, err
+		return Selection{}, err
 	}
 	if a.State != "ready" {
-		return Asset{}, ErrNotFound
+		return Selection{}, ErrNotFound
 	}
-	return a, nil
+	return Selection{
+		ID: a.ID, Filename: a.Filename, MIME: a.MIME,
+		Size: a.Size, Width: a.Width, Height: a.Height,
+		Revision: a.Revision, State: a.State,
+	}, nil
 }
 
 // Read authenticates the stored size/hash before copying original bytes. The

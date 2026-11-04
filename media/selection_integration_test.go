@@ -4,6 +4,7 @@ package media
 import (
 	"bytes"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/AChWorks/achrix"
@@ -21,6 +22,12 @@ func TestPostgresSelectionIsReadyAndSeparatelyAuthorized(t *testing.T) {
 	if err != nil || got.ID != ready.ID || got.State != "ready" || got.Revision != ready.Revision || got.Filename != ready.Filename {
 		t.Fatal("ready selection", got, err)
 	}
+	// Exact selection cannot accidentally start exposing a future Asset digest,
+	// storage path, content URL or timestamp when the broad Asset model grows.
+	if shape := reflect.TypeOf(got); shape.Name() != "Selection" || shape.NumField() != 8 {
+		t.Fatal("selection output expanded beyond reviewed metadata contract", shape)
+	}
+
 	if _, err := f.service.Select(ctx, "other-user", ready.ID); !errors.Is(err, achrix.ErrDenied) {
 		t.Fatal("cross-user selection was not denied", err)
 	}

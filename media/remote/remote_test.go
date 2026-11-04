@@ -80,7 +80,7 @@ func TestPresentationKeepsOpaqueRevisionsAndMinimalDeletedState(t *testing.T) {
 		}
 	}
 	asset.State = "ready"
-	selection := presentSelection(asset)
+	selection := presentSelection(media.Selection{ID: asset.ID, Filename: asset.Filename, MIME: asset.MIME, Size: asset.Size, Width: asset.Width, Height: asset.Height, Revision: asset.Revision, State: asset.State})
 	encoded, err := json.Marshal(selection)
 	if err != nil || selection.Revision != "9007199254740993" ||
 		strings.Contains(string(encoded), "content") || strings.Contains(string(encoded), "sha256") ||

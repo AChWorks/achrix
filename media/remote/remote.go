@@ -86,7 +86,7 @@ type SelectionInfo struct {
 	Height   int    `json:"height"`
 }
 
-func presentSelection(a media.Asset) SelectionInfo {
+func presentSelection(a media.Selection) SelectionInfo {
 	return SelectionInfo{
 		ID: a.ID, State: a.State, Revision: strconv.FormatInt(a.Revision, 10),
 		Filename: a.Filename, MIME: a.MIME, Size: a.Size, Width: a.Width, Height: a.Height,

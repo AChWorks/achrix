@@ -214,7 +214,7 @@ func TestPublishedSchemasMatchActualSDKCatalogAndHTTPBindings(t *testing.T) {
 		validateSchema(t, document.Components.Schemas["AssetInfo"], present(asset, resource, true))
 	}
 	asset.State = "ready"
-	validateSchema(t, document.Components.Schemas["SelectionInfo"], presentSelection(asset))
+	validateSchema(t, document.Components.Schemas["SelectionInfo"], presentSelection(media.Selection{ID: asset.ID, Filename: asset.Filename, MIME: asset.MIME, Size: asset.Size, Width: asset.Width, Height: asset.Height, Revision: asset.Revision, State: asset.State}))
 	validateSchema(t, document.Components.Schemas["Page"], Page{Assets: []AssetInfo{present(asset, nil, false)}})
 	validateSchema(t, document.Components.Schemas["Page"], Page{Assets: []AssetInfo{}})
 	validateSchema(t, document.Components.Schemas["DeleteResult"], DeleteResult{testAssetID, "succeeded"})
