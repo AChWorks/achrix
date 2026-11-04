@@ -132,10 +132,17 @@ def validate(metadata, issuer, *, allow_refresh=False, auth_methods=("none",), a
     # This first OAuth-only profile makes no OIDC claims. An eventual separate
     # OIDC profile must get its own contract and real-client proof.
     for name in ("userinfo_endpoint", "id_token_signing_alg_values_supported",
+                 "jwks_uri", "subject_types_supported", "claims_supported",
                  "registration_endpoint", "device_authorization_endpoint",
-                 "end_session_endpoint"):
+                 "end_session_endpoint", "introspection_endpoint"):
         if name in metadata:
-            problems.append(name + ": unsupported OIDC capability advertised")
+            problems.append(name + ": unapproved first-profile capability advertised")
+    if "scopes_supported" in metadata:
+        scopes = metadata["scopes_supported"]
+        if (not isinstance(scopes, list) or
+                any(not isinstance(scope, str) or not scope for scope in scopes) or
+                len(set(scopes)) != len(scopes) or "openid" in scopes):
+            problems.append("scopes_supported: invalid or unapproved OIDC scope advertised")
     if "revocation_endpoint" in metadata:
         try:
             _parse_url(metadata["revocation_endpoint"], allow_local_http=allow_local_http, allow_query=True)

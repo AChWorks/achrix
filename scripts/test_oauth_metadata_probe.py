@@ -124,11 +124,22 @@ class MetadataContract(unittest.TestCase):
 
     def test_unsupported_oidc_and_extension_advertisement(self):
         for field in ("userinfo_endpoint", "id_token_signing_alg_values_supported",
+                      "jwks_uri", "subject_types_supported", "claims_supported",
                       "registration_endpoint", "device_authorization_endpoint",
-                      "end_session_endpoint"):
+                      "end_session_endpoint", "introspection_endpoint"):
             doc = valid()
             doc[field] = "https://identity.example.test/unused"
             self.assertTrue(any(field in x for x in probe.validate(doc, ISSUER)))
+
+    def test_scopes_supported_excludes_oidc_claims(self):
+        doc = valid()
+        doc["scopes_supported"] = ["read", "write"]
+        self.assertEqual(probe.validate(doc, ISSUER), [])
+        for value in (["openid", "read"], ["read", "read"], "read", [123]):
+            with self.subTest(value=value):
+                doc["scopes_supported"] = value
+                self.assertTrue(any("scopes_supported" in issue for issue in
+                                    probe.validate(doc, ISSUER)))
 
     def test_fixed_query_parameters_on_authorization_and_token_endpoints(self):
         # RFC 6749 permits fixed query components on endpoint URLs. They are
