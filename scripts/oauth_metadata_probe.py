@@ -121,7 +121,10 @@ def read_json(data):
     if len(data) > MAX_BYTES:
         raise ProbeError("metadata response exceeds 64 KiB")
     try:
-        result = json.loads(data, object_pairs_hook=_unique_object,
+        # RFC 8259 requires UTF-8 for network JSON. Parse decoded text so
+        # Python cannot auto-detect and accept UTF-16/UTF-32 byte streams.
+        result = json.loads(data.decode("utf-8", errors="strict"),
+                            object_pairs_hook=_unique_object,
                             parse_constant=_reject_nonfinite, parse_float=_finite_float)
     except ProbeError:
         raise

@@ -22,55 +22,13 @@ go 1.27.3
 
 require github.com/zitadel/oidc/v3 v3.51.17
 EOF
-cat > "$scratch/main.go" <<'EOF'
-package main
-
-import (
-    "fmt"
-    "net/http"
-    "net/http/httptest"
-    "os"
-    "net/url"
-
-    "github.com/zitadel/oidc/v3/example/server/exampleop"
-    "github.com/zitadel/oidc/v3/example/server/storage"
-)
-
-func main() {
-    const issuer = "https://auth.example.test"
-    storage.RegisterClients(storage.NativeClient("test", "https://client.example.test/callback"))
-    handler := exampleop.SetupServer(issuer, storage.NewStorage(storage.NewUserStore(issuer)), nil, false)
-    for _, path := range []string{"/.well-known/oauth-authorization-server", "/.well-known/openid-configuration"} {
-        response := httptest.NewRecorder()
-        handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, issuer+path, nil))
-        fmt.Fprintf(os.Stderr, "DISCOVERY path=%s status=%d content_type=%q\n", path, response.Code, response.Header().Get("Content-Type"))
-        if path == "/.well-known/openid-configuration" {
-            if _, err := os.Stdout.Write(response.Body.Bytes()); err != nil { panic(err) }
-        }
-    }
-    // The SDK demo config is intentionally not a product security profile.
-    // Observe whether its HTTP authorization boundary enforces AChrix-required
-    // S256 and resource presence before login, without completing a grant.
-    for _, withS256 := range []bool{false, true} {
-        args := url.Values{
-            "response_type": {"code"}, "client_id": {"test"},
-            "redirect_uri": {"https://client.example.test/callback"},
-            "scope": {"openid"}, "state": {"demo-state"},
-        }
-        if withS256 {
-            args.Set("code_challenge", "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
-            args.Set("code_challenge_method", "S256")
-        }
-        response := httptest.NewRecorder()
-        handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, issuer+"/auth?"+args.Encode(), nil))
-        location, err := url.Parse(response.Header().Get("Location"))
-        if err != nil { panic(err) }
-        fmt.Fprintf(os.Stderr, "AUTHORIZE with_s256=%v with_resource=false status=%d redirect_path=%s\n", withS256, response.Code, location.Path)
-    }
-}
-EOF
-(cd "$scratch" && GOWORK=off GOTOOLCHAIN=local go run -mod=mod .) > "$scratch/oidc.json" 2> "$scratch/provider.log"
-cat "$scratch/provider.log"
+cp "$repo/scripts/testdata/zitadel_oidc_runtime/main.go" "$scratch/main.go"
+if ! (cd "$scratch" && GOWORK=off GOTOOLCHAIN=local go run -mod=mod .) > "$scratch/oidc.json" 2> "$scratch/provider.log"; then
+  cat "$scratch/provider.log" >&2
+  echo "Live upstream probe failed; see diagnostics above" >&2
+  exit 1
+fi
+grep -E "^(DISCOVERY|AUTHORIZE|RESOURCE_MODEL|CODE_FLOW) " "$scratch/provider.log"
 if ! grep -q '^DISCOVERY path=/.well-known/oauth-authorization-server status=404 ' "$scratch/provider.log"; then
   echo 'The tested SDK discovery behavior changed; repeat the compatibility assessment' >&2
   exit 1
@@ -94,4 +52,6 @@ if python3 "$repo/scripts/oauth_metadata_probe.py" \
   exit 1
 fi
 echo 'PROOF PASS: SDK v3.51.17 example defaults fail the first-profile metadata contract and accept an authorization request without required S256/resource before login.'
-echo 'This only probes pre-login acceptance; it proves no issued grant, exchange, refresh, persistence or real-client interoperability.'
+echo 'Actual SDK example code exchange was exercised: S256 succeeds; missing PKCE and bad verifier/redirect fail; code replay fails in demo memory only.'
+echo 'Missing/mismatched RFC 8707 resource still results in token issuance; no RFC 9207 iss in the demo redirect. This is a NEGATIVE security-fit proof, not issuer approval.'
+echo 'Sample user/login/storage and tokens are disposable. No product Identity, durable PostgreSQL, consent CSRF, audience proof or real-client interoperability is established.'
