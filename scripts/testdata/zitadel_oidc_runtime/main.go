@@ -38,7 +38,7 @@ func main() {
 		args := url.Values{
 			"response_type": {"code"}, "client_id": {"test"},
 			"redirect_uri": {"https://client.example.test/callback"},
-			"scope":        {"openid"}, "state": {"demo-state"},
+			"scope":        {storage.CustomScope}, "state": {"demo-state"},
 		}
 		if withS256 {
 			args.Set("code_challenge", "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
@@ -111,7 +111,7 @@ func runCodeFlow(handler http.Handler, issuer, name string, withS256 bool, authR
 	const redirect = "https://client.example.test/callback"
 	args := url.Values{
 		"response_type": {"code"}, "client_id": {"test"}, "redirect_uri": {redirect},
-		"scope": {"openid"}, "state": {"demo-state"},
+		"scope": {storage.CustomScope}, "state": {"demo-state"},
 	}
 	if withS256 {
 		args.Set("code_challenge", "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
