@@ -2,7 +2,7 @@
 
 ## Supported reuse
 
-A suitable product consumes versioned Core and selected reusable component dependencies, while its thin composition shell and product/domain behavior remain independently owned. [ADR-0006](../decisions/ADR-0006-independent-components-and-lifecycle.md) owns the independent version units; [ADR-0005](../decisions/ADR-0005-initial-go-consumption.md) records the original Go consumption decision. Exact supported versions and APIs need executable evidence.
+A suitable product consumes versioned Core and selected reusable component dependencies **throughout its supported product lifecycle**, while its thin composition shell and product/domain behavior remain independently owned. AChrix remains the maintained Foundation dependency after initial installation: improvements ship in official Core/component releases and reach consumers through deliberately selected updates, not regenerated or manually copied runtime sources. [ADR-0006](../decisions/ADR-0006-independent-components-and-lifecycle.md) owns the independent version units; [ADR-0005](../decisions/ADR-0005-initial-go-consumption.md) records the original Go consumption decision. Exact supported versions and APIs need executable evidence.
 
 The consumer must identify/pin its Core and selected component versions, deliberately review updates and check the resolved compatible set and migrations before activation. Shared security and lifecycle fixes must be obtainable through this path. Products rebuild, validate and redeploy their binaries to receive dependency updates; changing the Foundation source does not update a deployed product automatically.
 
@@ -126,7 +126,7 @@ The attributed Identity workflow requires Audit's version-2 schema and a compati
 
 ### Extend and upgrade without losing product code
 
-Keep product/domain packages, schemas, roles, content/media relationships, configuration and deployment code in the product. Implement supported public interfaces or use typed public collaborators; request a Foundation contract extension when no public seam fits rather than patching dependency-cache files or importing private implementation. A deliberate fork has its own maintenance/merge obligations.
+Keep product/domain packages, schemas, roles, content/media relationships, configuration and deployment code in the product. Implement supported public interfaces or use typed public collaborators; request an upstream Foundation contract extension when no public seam fits rather than patching dependency-cache files, modifying the Foundation for one product, shadowing Modules or importing private implementation. A deliberate fork or product exit is permitted but explicitly transfers replacement/compatibility/security and any necessary data migration/operational obligations to the product; it no longer inherits automatic access to future shared fixes. Such an exit is an owned migration decision, not the normal product extension pattern.
 
 For an upgrade, choose an exact reviewed component version, inspect its release/migration notes and public/dependency/schema diff against the whole affected dependency set, then:
 
