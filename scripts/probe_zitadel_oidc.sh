@@ -3,6 +3,8 @@
 # Disposable, pinned non-production dependency/protocol compatibility proof.
 # Imports the upstream *example* only in a private temporary Go module.
 # The example's in-memory storage and demo credentials are not product code.
+# Only the private source/scratch directory is deleted: standard Go module/build
+# caches may persist and are shared, so this is not cache-isolated execution.
 set -Eeuo pipefail
 umask 077
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)

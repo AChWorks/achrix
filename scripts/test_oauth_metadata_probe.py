@@ -7,8 +7,9 @@ import json
 import tempfile
 import threading
 import unittest
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
+from unittest import mock
 
 import oauth_metadata_probe as probe
 
@@ -131,6 +132,39 @@ class MetadataContract(unittest.TestCase):
             doc[field] = "https://identity.example.test/unused"
             self.assertTrue(any(field in x for x in probe.validate(doc, ISSUER)))
 
+    def test_unapproved_par_and_signed_metadata_are_rejected(self):
+        for field, value in (
+            ("pushed_authorization_request_endpoint", "https://identity.example.test/par"),
+            ("require_pushed_authorization_requests", True),
+            ("signed_metadata", "header.claims.signature"),
+            ("signed_metadata", None),
+        ):
+            with self.subTest(field=field, value=value):
+                doc = valid()
+                doc[field] = value
+                self.assertTrue(any(field in issue for issue in probe.validate(doc, ISSUER)))
+
+    def test_security_relevant_optional_capabilities_fail_closed(self):
+        for field in probe.UNAPPROVED_CAPABILITIES:
+            with self.subTest(field=field):
+                doc = valid()
+                doc[field] = "https://identity.example.test/extra"
+                self.assertTrue(any(field in issue for issue in probe.validate(doc, ISSUER)))
+        for field in probe.UNAPPROVED_BOOLEAN_EXTENSIONS:
+            for value in (True, "false", 0, None, 1):
+                with self.subTest(field=field, value=value):
+                    doc = valid()
+                    doc[field] = value
+                    self.assertTrue(any(field in issue for issue in probe.validate(doc, ISSUER)))
+
+    def test_explicit_false_and_harmless_extensions_do_not_cause_false_positive(self):
+        doc = valid()
+        doc.update({field: False for field in probe.UNAPPROVED_BOOLEAN_EXTENSIONS})
+        doc["service_documentation"] = "https://identity.example.test/help"
+        doc["x_vendor_informational_note"] = "optional metadata"
+        doc["scopes_supported"] = ["read"]
+        self.assertEqual(probe.validate(doc, ISSUER), [])
+
     def test_scopes_supported_excludes_oidc_claims(self):
         doc = valid()
         doc["scopes_supported"] = ["read", "write"]
@@ -169,6 +203,38 @@ class MetadataContract(unittest.TestCase):
         with self.assertRaises(probe.ProbeError):
             probe.read_json(b'{"a": [not-json]}')
 
+    def test_nonstandard_json_numbers_and_overflow_fail(self):
+        for literal in ("NaN", "Infinity", "-Infinity", "1e9999"):
+            with self.subTest(literal=literal), self.assertRaisesRegex(probe.ProbeError, "non-finite"):
+                probe.read_json(("{\"x_info\":" + literal + "}").encode())
+
+    def test_offline_file_read_is_bounded_before_allocation(self):
+        payload = b"x" * (probe.MAX_BYTES + 2)
+        class CountingReader(BytesIO):
+            def read(self, size=-1):
+                self.requested_size = size
+                return super().read(size)
+        stream = CountingReader(payload)
+        with mock.patch.object(Path, "open", return_value=stream) as open_file:
+            with self.assertRaisesRegex(probe.ProbeError, "64 KiB"):
+                probe.read_metadata_file(Path("unused.json"))
+            open_file.assert_called_once_with("rb")
+            self.assertEqual(stream.requested_size, probe.MAX_BYTES + 1)
+        with tempfile.TemporaryDirectory() as directory:
+            file = Path(directory) / "oversized.json"
+            file.write_bytes(payload)
+            with contextlib.redirect_stderr(StringIO()):
+                self.assertEqual(probe.main(["--issuer", ISSUER, "--metadata-file", str(file)]), 1)
+
+    def test_duplicate_json_key_error_does_not_echo_untrusted_text(self):
+        key = "sensitive-control-" + chr(10)
+        encoded = json.dumps({key: 1})
+        malformed = encoded[:-1] + "," + encoded[1:]
+        with self.assertRaises(probe.ProbeError) as context:
+            probe.read_json(malformed.encode())
+        self.assertEqual(str(context.exception), "duplicate JSON property")
+        self.assertNotIn("sensitive-control", str(context.exception))
+
     def test_rfc8414_discovery_issuer_path(self):
         self.assertEqual(probe.discovery_url(ISSUER),
                          "https://identity.example.test/.well-known/oauth-authorization-server/tenant")
@@ -182,6 +248,24 @@ class MetadataContract(unittest.TestCase):
                       "https://identity.example.test//x", "ftp://identity.example.test", "bad"):
             with self.subTest(value=value), self.assertRaises(probe.ProbeError):
                 probe.discovery_url(value)
+
+    def test_raw_controls_whitespace_and_empty_delimiters_are_rejected(self):
+        for value in ("\n" + ISSUER, "\t" + ISSUER, " " + ISSUER,
+                      ISSUER + "\r", ISSUER + "\x00", ISSUER + "\x7f",
+                      ISSUER + "\u0085", ISSUER + "\u00a0", ISSUER + "?", ISSUER + "#"):
+            with self.subTest(issuer=repr(value)), self.assertRaises(probe.ProbeError):
+                probe.discovery_url(value)
+        for field in ("authorization_endpoint", "token_endpoint", "revocation_endpoint"):
+            for suffix in ("?", "#", "?tenant=one#", "\n", "\t", "\x00", "\u00a0"):
+                with self.subTest(field=field, suffix=repr(suffix)):
+                    doc = valid()
+                    doc[field] = "https://identity.example.test/path" + suffix
+                    if field == "revocation_endpoint":
+                        doc["revocation_endpoint_auth_methods_supported"] = ["none"]
+                    self.assertTrue(any(field in issue for issue in probe.validate(doc, ISSUER)))
+        doc = valid()
+        doc["authorization_endpoint"] += "?tenant=one&encoded=%20"
+        self.assertEqual(probe.validate(doc, ISSUER), [])
 
     def test_client_auth_selection_must_be_explicit(self):
         for methods in ((), ("none", "none"), ("none", "client_secret_post")):

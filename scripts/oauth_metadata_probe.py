@@ -19,7 +19,9 @@ only for a disposable local HTTP fixture, never as a deployment configuration.
 
 import argparse
 import json
+import math
 import sys
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -27,6 +29,30 @@ from pathlib import Path
 
 MAX_BYTES = 65536
 MAX_ISSUER_LENGTH = 2048
+
+# Only recognized extensions that would alter the first supported OAuth
+# profile are excluded. Informational and unknown vendor metadata are allowed.
+UNAPPROVED_CAPABILITIES = (
+    "userinfo_endpoint", "id_token_signing_alg_values_supported",
+    "jwks_uri", "subject_types_supported", "claims_supported",
+    "registration_endpoint", "device_authorization_endpoint",
+    "end_session_endpoint", "introspection_endpoint",
+    "pushed_authorization_request_endpoint", "signed_metadata",
+    "request_object_signing_alg_values_supported",
+    "authorization_details_types_supported", "dpop_signing_alg_values_supported",
+    "mtls_endpoint_aliases", "token_endpoint_auth_signing_alg_values_supported",
+    "revocation_endpoint_auth_signing_alg_values_supported",
+    "introspection_endpoint_auth_methods_supported", "backchannel_authentication_endpoint",
+)
+
+# An explicit False states that an extension is unavailable; it is not itself
+# an additional capability. True or non-Boolean values fail closed.
+UNAPPROVED_BOOLEAN_EXTENSIONS = (
+    "require_pushed_authorization_requests", "request_parameter_supported",
+    "request_uri_parameter_supported", "require_signed_request_object",
+    "tls_client_certificate_bound_access_tokens", "frontchannel_logout_supported",
+    "backchannel_logout_supported", "backchannel_logout_session_supported",
+)
 
 
 class ProbeError(ValueError):
@@ -36,6 +62,15 @@ class ProbeError(ValueError):
 def _parse_url(value, *, allow_local_http=False, allow_query=False):
     if not isinstance(value, str) or not value or len(value) > MAX_ISSUER_LENGTH:
         raise ProbeError("URL must be a bounded nonempty string")
+    # urlsplit strips raw C0/space prefixes and CR/LF/TAB anywhere. Check the
+    # original string first so different inputs never normalize to one URL.
+    if any(unicodedata.category(char) == "Cc" or char.isspace() for char in value):
+        raise ProbeError("raw control or whitespace character in URL")
+    # urlsplit does not preserve bare '?' and '#' delimiters in .query/.fragment.
+    # An issuer has neither; an endpoint may have a nonempty fixed query but
+    # never a fragment (including a bare '#').
+    if "#" in value or ("?" in value and (not allow_query or value.split("?", 1)[1] == "")):
+        raise ProbeError("URL contains a forbidden query or fragment delimiter")
     try:
         parsed = urllib.parse.urlsplit(value)
         port = parsed.port
@@ -43,8 +78,8 @@ def _parse_url(value, *, allow_local_http=False, allow_query=False):
         raise ProbeError("invalid URL") from error
     if parsed.username is not None or parsed.password is not None:
         raise ProbeError("URL userinfo is forbidden")
-    if (parsed.query and not allow_query) or parsed.fragment or not parsed.hostname or (port is not None and port == 0):
-        raise ProbeError("URL must have a host, without a forbidden query or fragment")
+    if not parsed.hostname or (port is not None and port == 0):
+        raise ProbeError("URL must have a host and a valid port")
     if parsed.scheme == "https":
         return parsed
     if parsed.scheme == "http" and allow_local_http and parsed.hostname in ("localhost", "127.0.0.1", "::1"):
@@ -66,21 +101,39 @@ def _unique_object(pairs):
     result = {}
     for key, value in pairs:
         if key in result:
-            raise ProbeError("duplicate JSON property: " + key)
+            raise ProbeError("duplicate JSON property")
         result[key] = value
     return result
+
+
+def _reject_nonfinite(_):
+    raise ProbeError("non-finite JSON number")
+
+
+def _finite_float(value):
+    number = float(value)
+    if not math.isfinite(number):
+        raise ProbeError("non-finite JSON number")
+    return number
 
 
 def read_json(data):
     if len(data) > MAX_BYTES:
         raise ProbeError("metadata response exceeds 64 KiB")
     try:
-        result = json.loads(data, object_pairs_hook=_unique_object)
+        result = json.loads(data, object_pairs_hook=_unique_object,
+                            parse_constant=_reject_nonfinite, parse_float=_finite_float)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ProbeError("invalid metadata JSON") from error
     if not isinstance(result, dict):
         raise ProbeError("metadata must be a JSON object")
     return result
+
+
+def read_metadata_file(path):
+    # Bound the read before allocation, exactly like the HTTPS response path.
+    with path.open("rb") as metadata_file:
+        return read_json(metadata_file.read(MAX_BYTES + 1))
 
 
 def _array(metadata, key, expected):
@@ -129,14 +182,16 @@ def validate(metadata, issuer, *, allow_refresh=False, auth_methods=("none",), a
             problems.append(issue)
     if metadata.get("authorization_response_iss_parameter_supported") is not True:
         problems.append("authorization_response_iss_parameter_supported: explicit true required")
-    # This first OAuth-only profile makes no OIDC claims. An eventual separate
-    # OIDC profile must get its own contract and real-client proof.
-    for name in ("userinfo_endpoint", "id_token_signing_alg_values_supported",
-                 "jwks_uri", "subject_types_supported", "claims_supported",
-                 "registration_endpoint", "device_authorization_endpoint",
-                 "end_session_endpoint", "introspection_endpoint"):
+    # RFC 8414 signed_metadata may override plain JSON values for clients that
+    # process it; this first-profile proof cannot validate those signed claims.
+    # Reject specifically known, materially different OAuth/OIDC capabilities
+    # without incorrectly rejecting harmless or informational vendor fields.
+    for name in UNAPPROVED_CAPABILITIES:
         if name in metadata:
             problems.append(name + ": unapproved first-profile capability advertised")
+    for name in UNAPPROVED_BOOLEAN_EXTENSIONS:
+        if name in metadata and metadata[name] is not False:
+            problems.append(name + ": unapproved extension required or invalid Boolean")
     if "scopes_supported" in metadata:
         scopes = metadata["scopes_supported"]
         if (not isinstance(scopes, list) or
@@ -194,7 +249,7 @@ def main(argv=None):
     try:
         url = discovery_url(args.issuer, allow_local_http=args.allow_loopback_http)
         metadata = (fetch(url, allow_local_http=args.allow_loopback_http) if args.fetch else
-                    read_json(args.metadata_file.read_bytes()))
+                    read_metadata_file(args.metadata_file))
         problems = validate(metadata, args.issuer,
                             auth_methods=tuple(args.auth_method or ("none",)),
                             allow_refresh=args.allow_refresh,
