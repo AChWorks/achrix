@@ -39,12 +39,13 @@ const adminBrowserLogin = "browser-administrator"
 const adminBrowserPassword = "Synthetic browser administrator password 123!"
 const adminBrowserDeniedLogin = "browser-denied"
 const adminBrowserViewerLogin = "browser-viewer"
+const adminBrowserIdentityOnlyLogin = "browser-identity-only"
 const adminBrowserBootstrap achrix.Principal = "browser-fixture-bootstrap"
 
 // Product policy is deliberately separate from Identity authentication. The
 // viewer can enter both real surfaces, but cannot invoke a mutation or login
 // discovery. Presentation visibility is not the domain authorization proof.
-type adminBrowserPolicy struct{ administrator, viewer atomic.Value }
+type adminBrowserPolicy struct{ administrator, viewer, identityOnly atomic.Value }
 
 func (p *adminBrowserPolicy) Authorize(_ context.Context, actor achrix.Principal, capability, target string) error {
 	if actor == identity.PublicPrincipal {
@@ -66,6 +67,9 @@ func (p *adminBrowserPolicy) Authorize(_ context.Context, actor achrix.Principal
 			return nil
 		}
 	}
+	if selected, ok := p.identityOnly.Load().(string); ok && string(actor) == selected && capability == identity.AccountRead {
+		return nil
+	}
 	return achrix.ErrDenied
 }
 
@@ -79,13 +83,14 @@ type adminBrowserImages struct {
 	JPEG string `json:"jpeg"`
 }
 type adminBrowserMetadata struct {
-	Images      adminBrowserImages     `json:"images"`
-	Files       map[string]string      `json:"files"`
-	Endpoints   []adminBrowserEndpoint `json:"endpoints"`
-	Login       string                 `json:"login"`
-	Password    string                 `json:"password"`
-	DeniedLogin string                 `json:"deniedLogin"`
-	ViewerLogin string                 `json:"viewerLogin"`
+	Images            adminBrowserImages     `json:"images"`
+	Files             map[string]string      `json:"files"`
+	Endpoints         []adminBrowserEndpoint `json:"endpoints"`
+	Login             string                 `json:"login"`
+	Password          string                 `json:"password"`
+	DeniedLogin       string                 `json:"deniedLogin"`
+	ViewerLogin       string                 `json:"viewerLogin"`
+	IdentityOnlyLogin string                 `json:"identityOnlyLogin"`
 }
 type adminBrowserProbe struct {
 	ID            int    `json:"id"`
@@ -260,10 +265,19 @@ func TestAdminBrowserFixture(t *testing.T) {
 		browserFixtureFatal(t, "create viewer account failed", err)
 	}
 	policy.viewer.Store(account.ID)
+	account, err = ids.CreateAccount(ctx, adminBrowserBootstrap, adminBrowserIdentityOnlyLogin, adminBrowserPassword)
+	if err != nil {
+		browserFixtureFatal(t, "create identity-only account failed", err)
+	}
+	policy.identityOnly.Store(account.ID)
 	if _, err = ids.CreateAccount(ctx, adminBrowserBootstrap, adminBrowserDeniedLogin, adminBrowserPassword); err != nil {
 		browserFixtureFatal(t, "create denied account failed", err)
 	}
-	metadata := adminBrowserMetadata{Login: adminBrowserLogin, Password: adminBrowserPassword, DeniedLogin: adminBrowserDeniedLogin, ViewerLogin: adminBrowserViewerLogin}
+	metadata := adminBrowserMetadata{
+		Login: adminBrowserLogin, Password: adminBrowserPassword,
+		DeniedLogin: adminBrowserDeniedLogin, ViewerLogin: adminBrowserViewerLogin,
+		IdentityOnlyLogin: adminBrowserIdentityOnlyLogin,
+	}
 	image := image.NewNRGBA(image.Rect(0, 0, 2, 1))
 	image.SetNRGBA(0, 0, color.NRGBA{R: 23, G: 117, B: 194, A: 255})
 	image.SetNRGBA(1, 0, color.NRGBA{R: 194, G: 117, B: 23, A: 255})

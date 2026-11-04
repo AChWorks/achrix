@@ -346,6 +346,9 @@ async function main() {
       // Missing CSRF and crafted privileged calls are checked against the real
       // cookie-bound handler, then independent persisted state is compared.
       await navigate("/admin/identity");
+      // The Identity page intentionally has no browser 'media' message domain.
+      // A reusable Media picker must obtain its owning translations safely.
+      await pickerProof({page,endpoint,asset:retained,probe,selectable:true,nonMedia:true,recovery:true});
       const beforeCSRF=await probe();
       assert.equal((await request("/admin/identity/create",{login:"csrf-denied-"+endpoint.language,password:metadata.password},null)).status,401);
       sameState(beforeCSRF,await probe(),"missing CSRF has no effects");
@@ -361,6 +364,7 @@ async function main() {
       await signIn(metadata.viewerLogin);
       await navigate("/admin/identity");
       assert.equal(await page.locator('form[data-operation="create"]').count(),0,"presentation reflects viewer permission");
+      await pickerProof({page,endpoint,asset:retained,probe,selectable:false,nonMedia:true});
       const viewerToken=await csrf();
       const beforeDenied=await probe();
       assert.equal((await request("/admin/identity/create",{login:"viewer-denied-"+endpoint.language,password:metadata.password},viewerToken)).status,403);
@@ -380,6 +384,24 @@ async function main() {
       assert.equal(deniedRead.status,403); assert.match(deniedRead.type,/application\/json/);
       assert(!deniedRead.text.includes(retained.filename),"denial leaks no metadata/bytes");
       sameState(beforeMediaDenied,await probe(),"denied exact Media operations leave ready bytes and state unchanged");
+      await page.locator("#logout").click(); await page.waitForURL(endpoint.origin+"/admin/login");
+      await signIn(metadata.identityOnlyLogin);
+      await navigate("/admin/identity");
+      assert.equal(await page.locator('nav a[href="/admin/media"]').count(),0,"Identity-only role has no Media access");
+      const beforeNoMedia=await probe();
+      const blockedMedia=await page.evaluate(async ()=>{
+        const results=[];
+        for (const path of ["/admin/media/picker.js", "/admin/media/picker/messages", "/admin/media/picker/page"]) {
+          const response=await fetch(path,{method:"GET",credentials:"same-origin",cache:"no-store"});
+          results.push({path,status:response.status,body:await response.text()});
+        }
+        return results;
+      });
+      for (const result of blockedMedia) {
+        assert.equal(result.status,403,"no Media List must deny "+result.path);
+        assert(!result.body.includes(retained.id) && !result.body.includes(retained.filename),"no Media content leaks");
+      }
+      sameState(beforeNoMedia,await probe(),"Identity-only browsing did not read or mutate Media");
       await page.locator("#logout").click(); await page.waitForURL(endpoint.origin+"/admin/login");
       await signIn(metadata.deniedLogin);
       assert.equal(await page.locator("nav a").count(),0,"authenticated principal has no implicit grants");
@@ -414,8 +436,14 @@ async function main() {
 // Exercise the real optional picker source through the actual authenticated
 // HTTPS Admin shell, version-pinned consumer and persisted Media database.
 // The editor host is synthetic composition only; no product domain writes.
-async function pickerProof({page,endpoint,asset,probe,selectable}) {
+async function pickerProof({page,endpoint,asset,probe,selectable,nonMedia=false,recovery=false}) {
   const before=await probe();
+  if(nonMedia) {
+    assert.equal(new URL(page.url()).pathname,"/admin/identity","picker mounted on the separate Identity surface");
+    const bootstrap=JSON.parse(await page.locator("#admin-messages").textContent());
+    assert("identity" in bootstrap.domains && !("media" in bootstrap.domains),
+      "cross-surface proof must not rely on bundled Media browser messages");
+  }
   await page.evaluate(()=>{
     const target=document.createElement("achrix-media-picker");
     target.id="achrix-picker-browser-fixture";
@@ -423,16 +451,42 @@ async function pickerProof({page,endpoint,asset,probe,selectable}) {
     window.__achrixPickerEvents=[];
     target.addEventListener("achrix:media-selected",event=>window.__achrixPickerEvents.push(event.detail));
   });
-  await page.addScriptTag({url:endpoint.origin+"/admin/media/picker.js"});
   const root=page.locator("#achrix-picker-browser-fixture");
-  assert.equal(await root.locator("summary").count(),1,"picker script registered custom element");
+  if(recovery) {
+    let once=true;
+    await page.route("**/admin/media/picker/messages",async route=>{
+      if(once) {
+        once=false;
+        await route.fulfill({status:503,contentType:"application/json",body:'{"code":"unavailable"}'});
+      } else await route.continue();
+    });
+  }
+  const firstMessages=page.waitForResponse(response=>new URL(response.url()).pathname==="/admin/media/picker/messages");
+  await page.addScriptTag({url:endpoint.origin+"/admin/media/picker.js"});
+  const first=await firstMessages;
+  if(recovery) {
+    assert.equal(first.status(),503,"test must prove failed initial localization load");
+    const alert=root.locator('p[role="alert"]');
+    await alert.waitFor({state:"visible"});
+    assert.equal(await alert.innerText(),await page.evaluate(()=>window.AChrixI18n.text("admin","service_unavailable")));
+    assert.equal(await root.evaluate(node=>node.initialized===true),false,"failed initialization must be retryable");
+    const retry=page.waitForResponse(response=>new URL(response.url()).pathname==="/admin/media/picker/messages");
+    await root.evaluate(node=>{node.remove();document.body.append(node);});
+    assert.equal((await retry).status(),200,"reconnected picker loads its own current locale");
+    await page.unroute("**/admin/media/picker/messages");
+  } else assert.equal(first.status(),200,"authenticated Media catalog load");
+  await root.locator("summary").waitFor({state:"visible"});
+  assert.equal(await root.locator("summary").innerText(),
+    endpoint.language==="fa"?"انتخاب فایل موجود":"Choose an existing file",
+    "composed picker label must use active EN/FA request locale");
+  assert.equal(await root.locator("details").getAttribute("dir"),null,"picker inherits product document direction");
   const listed=page.waitForResponse(response=>new URL(response.url()).pathname==="/admin/media/picker/page");
   await root.locator("summary").press("Enter");
   const response=await listed;
   assert.equal(response.status(),200,"picker list must be real authenticated Service.List response");
   await page.waitForFunction(()=>{const p=document.querySelector("#achrix-picker-browser-fixture");return p && !p.busy && p.notice && p.notice.textContent!=="";
   });
-  if (selectable) {
+  if(selectable) {
     const choose=root.locator("li button").filter({hasText:asset.filename});
     await choose.waitFor({state:"visible",timeout:10000});
     assert.equal(await choose.count(),1,"exact selectable item was not shown");
@@ -447,6 +501,10 @@ async function pickerProof({page,endpoint,asset,probe,selectable}) {
     assert.equal(selections[0].mime,asset.mime);
     assert.equal(selections[0].filename,asset.filename);
     assert(!("sha256" in selections[0]) && !("content" in selections[0]),"picker emits only safe reference metadata");
+    const confirmation=await root.locator('p[role="status"]').last().innerText();
+    assert(confirmation.includes(asset.filename),"localized selection result preserves filename");
+    assert(confirmation.includes(endpoint.language==="fa"?"انتخاب شد":"Selected"),
+      "result translated through Media's request-selected locale");
     assert.equal(await root.locator("summary").evaluate(node=>node===document.activeElement),true,"selection restores keyboard focus");
   } else {
     await page.waitForFunction(()=>{const p=document.querySelector("#achrix-picker-browser-fixture");return p && !p.busy && p.list && p.list.childElementCount===0 && p.notice && p.notice.textContent!=="";
@@ -454,6 +512,15 @@ async function pickerProof({page,endpoint,asset,probe,selectable}) {
     assert.equal(await root.locator("li").count(),0,"List-only viewer cannot Select any asset");
     assert.deepEqual(await page.evaluate(()=>window.__achrixPickerEvents),[],"viewer selection event must not fire");
   }
+  if(selectable) {
+    const listedAgain=page.waitForResponse(response=>new URL(response.url()).pathname==="/admin/media/picker/page");
+    await root.locator("summary").press("Enter");
+    assert.equal((await listedAgain).status(),200);
+    await root.locator("li button").first().waitFor({state:"visible"});
+  }
+  await root.locator("summary").press("Escape");
+  assert.equal(await root.locator("details").evaluate(node=>node.open),false,"Escape closes picker");
+  assert.equal(await root.locator("summary").evaluate(node=>node===document.activeElement),true,"Escape restores trigger focus");
   sameState(before,await probe(),"picker view/choice has no product or Media state mutation");
   await root.evaluate(node=>node.remove());
 }
