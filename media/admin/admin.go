@@ -184,6 +184,36 @@ func (h *handler) pickerPage(w http.ResponseWriter, r *http.Request, view shell.
 	reply(w, view, result)
 }
 
+// Picker strings are resolved by Media's existing composed, request-local
+// catalog. The Shell intentionally sends only the active page's browser domain;
+// other trusted Admin surfaces cannot assume the Media domain is present there.
+var pickerMessageKeys = [...]string{
+	"open", "results", "refresh", "next", "select", "loading",
+	"ready", "empty", "stale", "denied", "unavailable",
+}
+
+func (h *handler) pickerMessages(w http.ResponseWriter, _ *http.Request, view shell.Request) {
+	if view.Localizer == nil {
+		view.Diagnose("media", "picker_localizer_missing", shell.ErrConfiguration)
+		fail(w, view, shell.ErrConfiguration, "")
+		return
+	}
+	messages := make(map[string]string, len(pickerMessageKeys))
+	for _, key := range pickerMessageKeys {
+		value, err := view.Localizer.Text("media", "picker."+key, nil)
+		if err != nil {
+			view.Diagnose("media", "picker_localization", err)
+			fail(w, view, shell.ErrConfiguration, "")
+			return
+		}
+		messages[key] = value
+	}
+	reply(w, view, struct {
+		Locale   string            `json:"locale"`
+		Messages map[string]string `json:"messages"`
+	}{view.Language, messages})
+}
+
 // A stale/deleted asset and a revoked exact Select grant cannot be selected
 // from an earlier page. There is no original-byte transfer or product write.
 func (h *handler) pickerSelect(w http.ResponseWriter, r *http.Request, view shell.Request, id string) {
@@ -196,9 +226,21 @@ func (h *handler) pickerSelect(w http.ResponseWriter, r *http.Request, view shel
 		fail(w, view, media.ErrNotFound, "")
 		return
 	}
+	if view.Localizer == nil {
+		view.Diagnose("media", "picker_selection_localizer_missing", shell.ErrConfiguration)
+		fail(w, view, shell.ErrConfiguration, "")
+		return
+	}
+	message, err := view.Localizer.Text("media", "picker.selected", map[string]string{"Filename": a.Filename})
+	if err != nil {
+		view.Diagnose("media", "picker_selection_localization", err)
+		fail(w, view, shell.ErrConfiguration, "")
+		return
+	}
 	reply(w, view, struct {
-		Asset asset `json:"asset"`
-	}{selectedMetadata(a)})
+		Asset   asset  `json:"asset"`
+		Message string `json:"message"`
+	}{selectedMetadata(a), message})
 }
 
 func (h *handler) serve(w http.ResponseWriter, r *http.Request, view shell.Request) {
@@ -245,6 +287,8 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, view shell.Reque
 				view.Diagnose("media", "render", err)
 				fail(w, view, shell.ErrConfiguration, "")
 			}
+		case r.URL.Path == "/picker/messages":
+			h.pickerMessages(w, r, view)
 		case r.URL.Path == "/picker/page":
 			h.pickerPage(w, r, view, "")
 		case strings.HasPrefix(r.URL.Path, "/picker/page/"):

@@ -40,36 +40,89 @@ func TestPickerPageFiltersCurrentExactSelectionRights(t *testing.T) {
 
 func TestPickerExactSelectionRechecksReadyAndRights(t *testing.T) {
 	s := &libraryStub{asset: sample()}
+	view := requestView()
+	view.Localizer = presentationLocalizer(t, "fa")
 	target := "/picker/asset/" + testID
 	w := httptest.NewRecorder()
-	handlerFor(s).serve(w, httptest.NewRequest(http.MethodGet, target, nil), requestView())
+	handlerFor(s).serve(w, httptest.NewRequest(http.MethodGet, target, nil), view)
 	var result struct {
-		Asset asset `json:"asset"`
+		Asset   asset  `json:"asset"`
+		Message string `json:"message"`
 	}
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &result) != nil ||
 		s.target != testID || s.actor != "operator" || strings.Join(s.calls, ",") != "select" ||
 		result.Asset.Revision != 2 || result.Asset.State != "ready" ||
+		!strings.Contains(result.Message, s.asset.Filename) ||
 		!strings.Contains(w.Body.String(), `"revision":"2"`) || strings.Contains(w.Body.String(), "sha256") || strings.Contains(w.Body.String(), "content") {
 		t.Fatal("picker did not return a current typed reference without private bytes", w.Code, w.Body.String())
 	}
 	s.asset.State = "deleted"
 	w = httptest.NewRecorder()
-	handlerFor(s).serve(w, httptest.NewRequest(http.MethodGet, target, nil), requestView())
+	handlerFor(s).serve(w, httptest.NewRequest(http.MethodGet, target, nil), view)
 	if w.Code != 404 || strings.Contains(w.Body.String(), s.asset.Filename) {
 		t.Fatal("deleted asset was selectable", w.Code, w.Body.String())
 	}
 	s.asset.State = "ready"
 	s.err = achrix.ErrDenied
 	w = httptest.NewRecorder()
-	handlerFor(s).serve(w, httptest.NewRequest(http.MethodGet, target, nil), requestView())
+	handlerFor(s).serve(w, httptest.NewRequest(http.MethodGet, target, nil), view)
 	if w.Code != 403 || !strings.Contains(w.Body.String(), "permission_denied") {
 		t.Fatal("revoked selection permission was bypassed", w.Code, w.Body.String())
 	}
 	s.err = media.ErrNotFound
 	w = httptest.NewRecorder()
-	handlerFor(s).serve(w, httptest.NewRequest(http.MethodGet, target, nil), requestView())
+	handlerFor(s).serve(w, httptest.NewRequest(http.MethodGet, target, nil), view)
 	if w.Code != 404 {
 		t.Fatal("stale selection must not succeed", w.Code)
+	}
+}
+
+func TestPickerCatalogFromComposedMediaLocale(t *testing.T) {
+	for _, language := range []string{"en", "fa"} {
+		t.Run(language, func(t *testing.T) {
+			v := requestView()
+			v.Language = language
+			v.Localizer = presentationLocalizer(t, language)
+			w := httptest.NewRecorder()
+			handlerFor(&libraryStub{}).serve(w, httptest.NewRequest(http.MethodGet, "/picker/messages", nil), v)
+			var body struct {
+				Locale   string            `json:"locale"`
+				Messages map[string]string `json:"messages"`
+			}
+			if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &body) != nil ||
+				body.Locale != language || len(body.Messages) != len(pickerMessageKeys) ||
+				w.Header().Get("Content-Type") != "application/json; charset=utf-8" {
+				t.Fatal("picker-only selected-locale catalog contract", w.Code, w.Body.String())
+			}
+			for _, key := range pickerMessageKeys {
+				expected, err := v.Localizer.Text("media", "picker."+key, nil)
+				if err != nil || body.Messages[key] != expected {
+					t.Fatal("picker message is not catalog-backed", language, key, body.Messages[key], err)
+				}
+			}
+			if _, leaked := body.Messages["selected"]; leaked {
+				t.Fatal("parameterized selection message belongs to exact selection response")
+			}
+			s := &libraryStub{asset: sample()}
+			w = httptest.NewRecorder()
+			handlerFor(s).serve(w, httptest.NewRequest(http.MethodGet, "/picker/asset/"+s.asset.ID, nil), v)
+			var chosen struct {
+				Asset   asset  `json:"asset"`
+				Message string `json:"message"`
+			}
+			expected, err := v.Localizer.Text("media", "picker.selected", map[string]string{"Filename": s.asset.Filename})
+			if err != nil || w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &chosen) != nil ||
+				chosen.Message != expected || chosen.Asset.ID != s.asset.ID || !strings.Contains(chosen.Message, s.asset.Filename) {
+				t.Fatal("exact choice lost request-selected locale", w.Code, w.Body.String(), err)
+			}
+		})
+	}
+
+	// Failure to compose an installed locale must not fall back to the wrong language.
+	w := httptest.NewRecorder()
+	handlerFor(&libraryStub{}).serve(w, httptest.NewRequest(http.MethodGet, "/picker/messages", nil), requestView())
+	if w.Code != http.StatusServiceUnavailable || strings.Contains(w.Body.String(), "picker.open") {
+		t.Fatal("missing localizer must fail closed, not manufacture English text", w.Code, w.Body.String())
 	}
 }
 

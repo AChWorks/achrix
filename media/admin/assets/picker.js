@@ -7,7 +7,8 @@
   const cursorPattern = /^[A-Za-z0-9_-]{36}$/;
   const mimePattern = /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/;
   const revisionPattern = /^[1-9][0-9]{0,18}$/;
-  const text = (key, params) => window.AChrixI18n.text("media", "picker." + key, params);
+  const messageKeys = ["open", "results", "refresh", "next", "select", "loading",
+    "ready", "empty", "stale", "denied", "unavailable"];
   const make = (tag, content) => {
     const node = document.createElement(tag);
     if (content !== undefined) node.textContent = content;
@@ -24,23 +25,60 @@
 
   class MediaPicker extends HTMLElement {
     connectedCallback() {
-      if (this.initialized) return;
-      this.initialized = true;
+      if (this.initialized || this.initializing) return;
+      this.initializing = true;
+      this.initialize().finally(() => { this.initializing = false; });
+    }
+    async initialize() {
+      try {
+        // The Admin shell only sends the active surface's browser domain.
+        // Get Media-owned messages through its authenticated, request-local
+        // catalog rather than assuming a product page embeds that domain.
+        const response = await fetch(root + "/messages", {
+          method: "GET", credentials: "same-origin", mode: "same-origin", redirect: "error",
+          referrerPolicy: "no-referrer", cache: "no-store", headers: {Accept: "application/json"}
+        });
+        if (!response.ok) throw new Error(response.status === 403 ? "denied" : "unavailable");
+        const payload = await response.json();
+        if (!this.isConnected) return;
+        if (!payload || payload.locale !== document.documentElement.lang ||
+            !payload.messages || typeof payload.messages !== "object" ||
+            messageKeys.some(key => typeof payload.messages[key] !== "string" ||
+              payload.messages[key].length === 0 || payload.messages[key].length > 4096)) {
+          throw new Error("locale");
+        }
+        this.words = Object.freeze(Object.fromEntries(messageKeys.map(key => [key, payload.messages[key]])));
+        this.mount();
+        this.initialized = true;
+      } catch (error) {
+        if (!this.isConnected) return;
+        // This fallback exists in every Admin surface, including non-Media
+        // pages. Never silently substitute English for the selected locale.
+        const key = error.message === "denied" ? "permission_denied" :
+          error.message === "locale" ? "locale_unavailable" : "service_unavailable";
+        const notice = make("p", window.AChrixI18n.text("admin", key));
+        notice.setAttribute("role", "alert");
+        this.replaceChildren(notice);
+      }
+    }
+    text(key) { return this.words[key]; }
+    mount() {
+      this.replaceChildren();
       const raw = this.getAttribute("accept");
       const types = raw ? raw.split(",").map(value => value.trim()) : [];
       this.accepts = !raw ? null : new Set(types.length <= 32 && types.every(type => mimePattern.test(type)) ? types : []);
       this.details = make("details");
-      this.summary = make("summary", text("open"));
+      this.summary = make("summary", this.text("open"));
       this.details.append(this.summary);
       const controls = make("div");
-      this.refresh = make("button", text("refresh"));
+      this.refresh = make("button", this.text("refresh"));
       this.refresh.type = "button";
-      this.next = make("button", text("next"));
+      this.next = make("button", this.text("next"));
       this.next.type = "button";
       this.next.hidden = true;
       controls.append(this.refresh, this.next);
       this.list = make("ul");
-      this.list.setAttribute("aria-label", text("results"));
+      this.list.setAttribute("aria-label", this.text("results"));
       this.notice = make("p");
       this.notice.setAttribute("role", "status");
       this.notice.setAttribute("aria-live", "polite");
@@ -90,7 +128,7 @@
       }
     }
     message(key) {
-      this.notice.textContent = text(key);
+      this.notice.textContent = this.text(key);
       this.notice.setAttribute("role", key === "unavailable" || key === "denied" || key === "stale" ? "alert" : "status");
     }
     async page(cursor) {
@@ -114,7 +152,7 @@
           const item = make("li");
           const select = make("button");
           select.type = "button";
-          select.append(document.createTextNode(text("select") + " "));
+          select.append(document.createTextNode(this.text("select") + " "));
           const name = make("bdi", asset.filename);
           name.dir = "auto";
           select.append(name);
@@ -151,8 +189,11 @@
         // Metadata is only a choice, not a capability token or a product write.
         const selection = Object.freeze({id:asset.id, filename:asset.filename, mime:asset.mime,
           size:asset.size, width:asset.width, height:asset.height, revision:asset.revision});
+        if (typeof data.message !== "string" || !data.message.length || data.message.length > 8192) {
+          throw new Error("unavailable");
+        }
         this.details.open = false;
-        this.result.textContent = text("selected", {Filename:asset.filename});
+        this.result.textContent = data.message;
         this.dispatchEvent(new CustomEvent("achrix:media-selected", {detail:selection, bubbles:true}));
         this.summary.focus();
       } catch (error) {
