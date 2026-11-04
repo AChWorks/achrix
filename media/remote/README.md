@@ -2,13 +2,13 @@
 
 `github.com/AChWorks/achrix/media/remote` is an optional package in the existing
 Media module. It binds a product-composed `*media.Service` to explicit HTTP routes
-and four typed MCP tools. The Service remains the owner of authorization, format
+and five typed MCP tools. The Service remains the owner of authorization, format
 validation, byte integrity, revision preconditions and durable file lifecycle.
 Direct in-process Service use remains available.
 
 `NewHTTP(service, httpConfig)` returns a `*bridge.Endpoint` using the bounded
 streaming HTTP profile. `NewMCP(service, mcpConfig, httpResourceURL)` composes the
-four tools; `Register(registrar, service, httpResourceURL)` is available inside a
+five tools; `Register(registrar, service, httpResourceURL)` is available inside a
 product's fixed Bridge registration callback. Constructors start no listeners,
 sessions, storage work or background reconciliation.
 
@@ -29,6 +29,7 @@ HTTP paths are relative to `httpConfig.ResourceURL`.
 | `GET /assets?cursor&limit` | `achrix.media.list` | List on `library` |
 | `POST /assets` with raw original bytes | Companion HTTP upload | Create on `library` |
 | `GET /assets/{asset_id}` | `achrix.media.status` | Read on the exact ID |
+| `GET /assets/{asset_id}/selection` | `achrix.media.select` | Select on the exact ID; ready metadata only |
 | `GET /assets/{asset_id}/content` | Authenticated HTTP reference from ready Status | Read on the exact ID, freshly checked |
 | `POST /assets/{asset_id}/delete` | `achrix.media.delete` | Delete on the exact ID |
 | `POST /reconcile` | `achrix.media.reconcile` | Reconcile on `library` |
@@ -43,6 +44,8 @@ filenames. It does not filter by per-asset Read permission or add content
 references. The optional limit defaults to 20 and must be 1 through 100. Use the
 unchanged cursor for the next page; traversal uses generated IDs, reauthorizes
 each page and provides no multi-page snapshot. Empty `assets` is `[]`.
+
+Selection uses a distinct exact-target `Select` permission rather than `Read`. It returns an authorized ready asset with stable typed metadata and an exact decimal-string revision, without an HTTP content reference, source bytes, publication grant or product relationship. If an asset is no longer ready or the principal's grant changes, selection is denied or missing. The consuming product must separately check the chosen reference when applying its own business operation. Broad `List` is whole-library discovery and cannot safely be granted just to browse a narrower product/site library.
 
 Status preserves `pending`, `ready`, `deleting` and `deleted`. A deleted asset is
 a minimal tombstone containing only `id`, `state`, `revision` and `created_at`.

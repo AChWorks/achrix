@@ -493,6 +493,38 @@ func TestPublicMediaRemotePrivateWorkflowAndCurrentAuthority(t *testing.T) {
 	if fault := mediaRemoteHTTPFault(t, denied); fault.Code != "denied" {
 		t.Fatal("uploader acquired byte authority", fault)
 	}
+	// A deliberately separate exact Select grant is honored in both real
+	// authenticated channels without leaking Read or original fingerprints.
+	mediaRemoteExpectFault(t, alice, mediaremote.SelectOperation, mediaremote.StatusInput{AssetID: asset.ID}, "denied")
+	deniedSelection := f.request(t, f.tokens["http/alice"], http.MethodGet, "/assets/"+asset.ID+"/selection", "", nil, "")
+	if fault := mediaRemoteHTTPFault(t, deniedSelection); fault.Code != "denied" {
+		t.Fatal("initial Select denial lost exact resource policy", fault)
+	}
+	readCallsBeforeSelect := f.countCalls(media.Read)
+	f.grant("alice", media.Select, asset.ID, true)
+	selected := mediaRemoteSuccess[mediaremote.SelectionInfo](t, alice, mediaremote.SelectOperation, mediaremote.StatusInput{AssetID: asset.ID})
+	if selected.ID != asset.ID || selected.Filename != filename || selected.Revision != asset.Revision ||
+		selected.State != "ready" || selected.MIME != asset.MIME || selected.Size != asset.Size {
+		t.Fatal("MCP selection is not typed current metadata", selected)
+	}
+	selectedBytes, err := json.Marshal(selected)
+	if err != nil || bytes.Contains(selectedBytes, []byte("sha256")) ||
+		bytes.Contains(selectedBytes, []byte("content")) || bytes.Contains(selectedBytes, []byte("created_at")) {
+		t.Fatal("MCP selection disclosed private content metadata", string(selectedBytes), err)
+	}
+	httpSelected := f.request(t, f.tokens["http/alice"], http.MethodGet, "/assets/"+asset.ID+"/selection", "", nil, "")
+	if httpSelected.status != http.StatusOK {
+		t.Fatal("HTTP Select not admitted through exact resource", httpSelected.status, string(httpSelected.data))
+	}
+	fromHTTP := mediaRemoteDecode[mediaremote.SelectionInfo](t, httpSelected.data)
+	if fromHTTP != selected || f.countCalls(media.Read) != readCallsBeforeSelect {
+		t.Fatal("HTTP/MCP selected different metadata or acquired Read permission", fromHTTP, selected)
+	}
+	f.grant("alice", media.Select, asset.ID, false)
+	mediaRemoteExpectFault(t, alice, mediaremote.SelectOperation, mediaremote.StatusInput{AssetID: asset.ID}, "denied")
+	if fault := mediaRemoteHTTPFault(t, f.request(t, f.tokens["http/alice"], http.MethodGet, "/assets/"+asset.ID+"/selection", "", nil, "")); fault.Code != "denied" {
+		t.Fatal("revoked exact selection remained authorized", fault)
+	}
 	f.grant("alice", media.Read, asset.ID, true)
 	status := mediaRemoteSuccess[mediaremote.AssetInfo](t, alice, mediaremote.StatusOperation, mediaremote.StatusInput{AssetID: asset.ID})
 	if status.Content == nil || status.Content.URL != f.httpURL+"/assets/"+asset.ID+"/content" || status.Content.Resource != f.httpURL {

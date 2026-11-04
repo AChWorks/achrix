@@ -27,6 +27,7 @@ type library interface {
 	Formats() []media.Format
 	Create(context.Context, achrix.Principal, string, io.Reader) (media.Asset, error)
 	List(context.Context, achrix.Principal, string, int) (media.Page, error)
+	Select(context.Context, achrix.Principal, string) (media.Selection, error)
 	Status(context.Context, achrix.Principal, string) (media.Asset, error)
 	Read(context.Context, achrix.Principal, string, io.Writer) (media.Asset, error)
 	Delete(context.Context, achrix.Principal, string, int64) error
@@ -69,6 +70,10 @@ type page struct {
 	NextCursor string `json:"next_cursor"`
 	Warning    string `json:"warning,omitempty"`
 }
+type pickerPage struct {
+	Assets     []asset `json:"assets"`
+	NextCursor string  `json:"next_cursor"`
+}
 type screen struct {
 	Locale            *localize.Localizer
 	CanCreate         bool
@@ -103,8 +108,15 @@ var supportedMIMEs = func() map[string]bool {
 	return result
 }()
 
+func metadata(a media.Asset) asset {
+	return asset{a.ID, a.Filename, a.MIME, a.Size, a.Width, a.Height, a.Revision, a.State}
+}
+func selectedMetadata(a media.Selection) asset {
+	return asset{a.ID, a.Filename, a.MIME, a.Size, a.Width, a.Height, a.Revision, a.State}
+}
+
 func present(a media.Asset, view shell.Request) item {
-	result := item{Asset: asset{a.ID, a.Filename, a.MIME, a.Size, a.Width, a.Height, a.Revision, a.State}, Permissions: map[string]bool{"read": false, "delete": false}}
+	result := item{Asset: metadata(a), Permissions: map[string]bool{"read": false, "delete": false}}
 	read, err := permission(view, media.Read, a.ID)
 	if err == nil {
 		var remove bool
@@ -146,6 +158,91 @@ func reply(w http.ResponseWriter, view shell.Request, value any) {
 		panic(http.ErrAbortHandler)
 	}
 }
+
+// Picker collection visibility is deliberately no broader than Media.List:
+// this first Admin profile is for actors already entitled to whole-library
+// metadata. Exact Select rights narrow the presented items. Products needing
+// tenant-scoped discovery must not grant whole-library List to those actors.
+func (h *handler) pickerPage(w http.ResponseWriter, r *http.Request, view shell.Request, cursor string) {
+	p, err := h.service.List(r.Context(), view.Principal, cursor, 25)
+	if err != nil {
+		fail(w, view, err, "")
+		return
+	}
+	result := pickerPage{Assets: make([]asset, 0, len(p.Assets)), NextCursor: p.NextCursor}
+	for _, a := range p.Assets {
+		allowed, checkErr := permission(view, media.Select, a.ID)
+		if checkErr != nil {
+			view.Diagnose("media", "picker_permission", checkErr)
+			fail(w, view, achrix.ErrAuthorizationUnavailable, "")
+			return
+		}
+		if allowed && a.State == "ready" {
+			result.Assets = append(result.Assets, metadata(a))
+		}
+	}
+	reply(w, view, result)
+}
+
+// Picker strings are resolved by Media's existing composed, request-local
+// catalog. The Shell intentionally sends only the active page's browser domain;
+// other trusted Admin surfaces cannot assume the Media domain is present there.
+var pickerMessageKeys = [...]string{
+	"open", "results", "refresh", "next", "select", "loading",
+	"ready", "empty", "stale", "denied", "unavailable",
+}
+
+func (h *handler) pickerMessages(w http.ResponseWriter, _ *http.Request, view shell.Request) {
+	if view.Localizer == nil {
+		view.Diagnose("media", "picker_localizer_missing", shell.ErrConfiguration)
+		fail(w, view, shell.ErrConfiguration, "")
+		return
+	}
+	messages := make(map[string]string, len(pickerMessageKeys))
+	for _, key := range pickerMessageKeys {
+		value, err := view.Localizer.Text("media", "picker."+key, nil)
+		if err != nil {
+			view.Diagnose("media", "picker_localization", err)
+			fail(w, view, shell.ErrConfiguration, "")
+			return
+		}
+		messages[key] = value
+	}
+	reply(w, view, struct {
+		Locale   string            `json:"locale"`
+		Messages map[string]string `json:"messages"`
+	}{view.Language, messages})
+}
+
+// A stale/deleted asset and a revoked exact Select grant cannot be selected
+// from an earlier page. There is no original-byte transfer or product write.
+func (h *handler) pickerSelect(w http.ResponseWriter, r *http.Request, view shell.Request, id string) {
+	a, err := h.service.Select(r.Context(), view.Principal, id)
+	if err != nil {
+		fail(w, view, err, "")
+		return
+	}
+	if a.State != "ready" {
+		fail(w, view, media.ErrNotFound, "")
+		return
+	}
+	if view.Localizer == nil {
+		view.Diagnose("media", "picker_selection_localizer_missing", shell.ErrConfiguration)
+		fail(w, view, shell.ErrConfiguration, "")
+		return
+	}
+	message, err := view.Localizer.Text("media", "picker.selected", map[string]string{"Filename": a.Filename})
+	if err != nil {
+		view.Diagnose("media", "picker_selection_localization", err)
+		fail(w, view, shell.ErrConfiguration, "")
+		return
+	}
+	reply(w, view, struct {
+		Asset   asset  `json:"asset"`
+		Message string `json:"message"`
+	}{selectedMetadata(a), message})
+}
+
 func (h *handler) serve(w http.ResponseWriter, r *http.Request, view shell.Request) {
 	if r.Method == http.MethodGet {
 		switch {
@@ -189,6 +286,20 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, view shell.Reque
 				}
 				view.Diagnose("media", "render", err)
 				fail(w, view, shell.ErrConfiguration, "")
+			}
+		case r.URL.Path == "/picker/messages":
+			h.pickerMessages(w, r, view)
+		case r.URL.Path == "/picker/page":
+			h.pickerPage(w, r, view, "")
+		case strings.HasPrefix(r.URL.Path, "/picker/page/"):
+			h.pickerPage(w, r, view, strings.TrimPrefix(r.URL.Path, "/picker/page/"))
+		case strings.HasPrefix(r.URL.Path, "/picker/asset/"):
+			h.pickerSelect(w, r, view, strings.TrimPrefix(r.URL.Path, "/picker/asset/"))
+		case r.URL.Path == "/picker.js":
+			data, _ := assets.ReadFile("assets/picker.js")
+			w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+			if _, err := w.Write(data); err != nil {
+				view.Diagnose("media", "picker_asset_write", err)
 			}
 		case r.URL.Path == "/media.js":
 			data, _ := assets.ReadFile("assets/media.js")

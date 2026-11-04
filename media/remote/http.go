@@ -68,6 +68,18 @@ func NewHTTP(service *media.Service, config bridge.Config) (*bridge.Endpoint, er
 	if err != nil {
 		return nil, err
 	}
+	selectHandler, err := bridge.JSONHandler(SelectOperation, func(r *http.Request) (StatusInput, error) {
+		if err := readInput(r); err != nil {
+			return StatusInput{}, err
+		}
+		if _, err := queryFields(r); err != nil {
+			return StatusInput{}, err
+		}
+		return StatusInput{AssetID: strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, collection+"/"), "/selection")}, nil
+	}, selectAsset(service))
+	if err != nil {
+		return nil, err
+	}
 	deleteHandler, err := bridge.JSONHandler(DeleteOperation, func(r *http.Request) (DeleteInput, error) {
 		return decodeDelete(r, strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, collection+"/"), "/delete"))
 	}, deleteAsset(service))
@@ -110,6 +122,10 @@ func NewHTTP(service *media.Service, config bridge.Config) (*bridge.Endpoint, er
 				case !slash:
 					w.Header().Set("Allow", http.MethodGet)
 					statusHandler.ServeHTTP(w, r)
+					return
+				case suffix == "selection":
+					w.Header().Set("Allow", http.MethodGet)
+					selectHandler.ServeHTTP(w, r)
 					return
 				case suffix == "content":
 					w.Header().Set("Allow", http.MethodGet)

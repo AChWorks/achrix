@@ -22,7 +22,7 @@ func NewMCP(service *media.Service, config bridge.Config, httpResourceURL string
 	return bridge.New(config, func(registrar *bridge.Registrar) error { return Register(registrar, service, httpResourceURL) })
 }
 
-// Register adds only List, Status, Delete and Reconcile during Bridge's fixed
+// Register adds List, Status, Select, Delete and Reconcile during Bridge's fixed
 // registration callback. It adds no MCP attachment upload, resource fetch,
 // subscription, public URL, permission registry or background work.
 func Register(registrar *bridge.Registrar, service *media.Service, httpResourceURL string) error {
@@ -52,6 +52,13 @@ func Register(registrar *bridge.Registrar, service *media.Service, httpResourceU
 		Description: "Read the durable pending/ready/deleting/deleted state of one exact asset using current Read permission. A ready result includes a canonical companion HTTP content reference requiring its own resource-specific credential and fresh authorization; it is not a bearer URL. Deleted state retains only ID, time, state and revision. Revision is an exact decimal string. Status is used to inspect uncertain mutations, not to justify automatic replay.",
 		InputSchema: schemas["StatusInput"], OutputSchema: schemas["AssetInfo"], Annotations: readOnly,
 	}, status(service, resource)); err != nil {
+		return err
+	}
+	if err := bridge.AddTool(registrar, &mcp.Tool{
+		Name:        SelectOperation,
+		Description: "Recheck current exact-asset Select authorization and return ready metadata only. Selection grants no original Read, download, publication or product-content link; the product must recheck the chosen reference when applying its own authorized operation. Never a bearer URL.",
+		InputSchema: schemas["StatusInput"], OutputSchema: schemas["SelectionInfo"], Annotations: readOnly,
+	}, selectAsset(service)); err != nil {
 		return err
 	}
 	if err := bridge.AddTool(registrar, &mcp.Tool{

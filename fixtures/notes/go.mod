@@ -9,7 +9,7 @@ require (
 	github.com/AChWorks/achrix/bridge v0.0.0-20261030171359-75121b059dde
 	github.com/AChWorks/achrix/identity v0.3.1-0.20261030172815-cd8b9e7a1d7e
 	github.com/AChWorks/achrix/installation v0.1.1-0.20261030060024-21c529040722
-	github.com/AChWorks/achrix/media v0.3.1-0.20261030171415-469d74f4db85
+	github.com/AChWorks/achrix/media v0.4.1-0.20261104111959-ac82e31e4d72
 	github.com/AChWorks/achrix/multisite v0.1.2-0.20261030163915-c0df7f4bf362
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0

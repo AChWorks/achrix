@@ -123,7 +123,7 @@ func TestPublishedSchemasMatchActualSDKCatalogAndHTTPBindings(t *testing.T) {
 			}
 		} `json:"paths"`
 	}
-	if err := json.Unmarshal(OpenAPI(), &document); err != nil || document.OpenAPI != "3.1.1" || len(document.Paths) != 5 {
+	if err := json.Unmarshal(OpenAPI(), &document); err != nil || document.OpenAPI != "3.1.1" || len(document.Paths) != 6 {
 		t.Fatal("invalid OpenAPI surface", err)
 	}
 	copy := OpenAPI()
@@ -152,10 +152,10 @@ func TestPublishedSchemasMatchActualSDKCatalogAndHTTPBindings(t *testing.T) {
 			}
 		}
 	}
-	if err := json.Unmarshal(catalogRPC(t, endpoint, "tools/list", map[string]any{}), &catalog); err != nil || len(catalog.Tools) != 4 {
+	if err := json.Unmarshal(catalogRPC(t, endpoint, "tools/list", map[string]any{}), &catalog); err != nil || len(catalog.Tools) != 5 {
 		t.Fatal("unexpected Media tool catalog", err)
 	}
-	mapping := map[string][2]string{ListOperation: {"ListInput", "Page"}, StatusOperation: {"StatusInput", "AssetInfo"}, DeleteOperation: {"DeleteInput", "DeleteResult"}, ReconcileOperation: {"ReconcileInput", "ReconcileResult"}}
+	mapping := map[string][2]string{ListOperation: {"ListInput", "Page"}, StatusOperation: {"StatusInput", "AssetInfo"}, SelectOperation: {"StatusInput", "SelectionInfo"}, DeleteOperation: {"DeleteInput", "DeleteResult"}, ReconcileOperation: {"ReconcileInput", "ReconcileResult"}}
 	seen := map[string]bool{}
 	for _, tool := range catalog.Tools {
 		pair, known := mapping[tool.Name]
@@ -166,17 +166,18 @@ func TestPublishedSchemasMatchActualSDKCatalogAndHTTPBindings(t *testing.T) {
 		if !equalJSON(t, tool.InputSchema, document.Components.Schemas[pair[0]]) || !equalJSON(t, tool.OutputSchema, document.Components.Schemas[pair[1]]) {
 			t.Fatal("actual SDK schema drifted from publication", tool.Name)
 		}
-		read := tool.Name == ListOperation || tool.Name == StatusOperation
+		read := tool.Name == ListOperation || tool.Name == StatusOperation || tool.Name == SelectOperation
 		if tool.Annotations.ReadOnly != read || tool.Annotations.Idempotent != read || tool.Annotations.Destructive == read || tool.Annotations.OpenWorld {
 			t.Fatal("tool effect metadata overclaimed", tool.Name, tool.Annotations)
 		}
 	}
 	bindings := map[string]map[string]string{
-		"/assets":                    {"get": ListOperation, "post": CreateOperation},
-		"/assets/{asset_id}":         {"get": StatusOperation},
-		"/assets/{asset_id}/content": {"get": ReadOperation},
-		"/assets/{asset_id}/delete":  {"post": DeleteOperation},
-		"/reconcile":                 {"post": ReconcileOperation},
+		"/assets":                      {"get": ListOperation, "post": CreateOperation},
+		"/assets/{asset_id}":           {"get": StatusOperation},
+		"/assets/{asset_id}/content":   {"get": ReadOperation},
+		"/assets/{asset_id}/selection": {"get": SelectOperation},
+		"/assets/{asset_id}/delete":    {"post": DeleteOperation},
+		"/reconcile":                   {"post": ReconcileOperation},
 	}
 	for route, methods := range bindings {
 		if len(document.Paths[route]) != len(methods) {
@@ -188,7 +189,7 @@ func TestPublishedSchemasMatchActualSDKCatalogAndHTTPBindings(t *testing.T) {
 			}
 		}
 	}
-	for route, input := range map[string]string{"/assets": "ListInput", "/assets/{asset_id}": "StatusInput", "/assets/{asset_id}/content": "StatusInput"} {
+	for route, input := range map[string]string{"/assets": "ListInput", "/assets/{asset_id}": "StatusInput", "/assets/{asset_id}/content": "StatusInput", "/assets/{asset_id}/selection": "StatusInput"} {
 		var shape struct{ Properties map[string]json.RawMessage }
 		if err := json.Unmarshal(document.Components.Schemas[input], &shape); err != nil {
 			t.Fatal(err)
@@ -213,6 +214,7 @@ func TestPublishedSchemasMatchActualSDKCatalogAndHTTPBindings(t *testing.T) {
 		validateSchema(t, document.Components.Schemas["AssetInfo"], present(asset, resource, true))
 	}
 	asset.State = "ready"
+	validateSchema(t, document.Components.Schemas["SelectionInfo"], presentSelection(media.Selection{ID: asset.ID, Filename: asset.Filename, MIME: asset.MIME, Size: asset.Size, Width: asset.Width, Height: asset.Height, Revision: asset.Revision, State: asset.State}))
 	validateSchema(t, document.Components.Schemas["Page"], Page{Assets: []AssetInfo{present(asset, nil, false)}})
 	validateSchema(t, document.Components.Schemas["Page"], Page{Assets: []AssetInfo{}})
 	validateSchema(t, document.Components.Schemas["DeleteResult"], DeleteResult{testAssetID, "succeeded"})
@@ -246,6 +248,8 @@ func TestSDKRejectsUnpublishedArgumentsBeforeGate(t *testing.T) {
 		{ListOperation, map[string]any{"limit": 101}},
 		{ListOperation, map[string]any{"limit": nil}},
 		{StatusOperation, map[string]any{"asset_id": "PRIVATE_INVALID_ID"}},
+		{SelectOperation, map[string]any{"asset_id": "PRIVATE_INVALID_ID"}},
+		{SelectOperation, map[string]any{"asset_id": testAssetID, "actor": "admin"}},
 		{StatusOperation, map[string]any{"asset_id": testAssetID, "actor": "admin"}},
 		{DeleteOperation, map[string]any{"asset_id": testAssetID, "expected_revision": int64(9007199254740993)}},
 		{DeleteOperation, map[string]any{"asset_id": testAssetID, "expected_revision": "01"}},
@@ -289,6 +293,8 @@ func TestHTTPFixedRoutesAndKnownEmptyBodyFailBeforeGate(t *testing.T) {
 	}{
 		{"GET", "/outside", "", "", "", 404},
 		{"GET", "/assets/", "", "", "", 400},
+		{"PUT", "/assets/" + testAssetID + "/selection", "", "", "", 405},
+		{"GET", "/assets/" + testAssetID + "/selection?actor=admin", "", "", "", 400},
 		{"PUT", "/assets", "", "", "", 405},
 		{"POST", "/assets", "", "application/octet-stream", `attachment; filename="empty.txt"`, 400},
 		{"GET", "/assets?cursor=&cursor=", "", "", "", 400},
@@ -313,7 +319,11 @@ func TestHTTPFixedRoutesAndKnownEmptyBodyFailBeforeGate(t *testing.T) {
 		if w.Code != tc.status || json.Unmarshal(w.Body.Bytes(), &failure) != nil || failure.Outcome != bridge.NotExecuted || failure.Code == "" {
 			t.Fatal("fixed route/parser rejection changed", tc.path, w.Code, w.Body.String())
 		}
-		if tc.status == 405 && w.Header().Get("Allow") != "GET, POST" {
+		allow := "GET, POST"
+		if strings.HasSuffix(tc.path, "/selection") {
+			allow = "GET"
+		}
+		if tc.status == 405 && w.Header().Get("Allow") != allow {
 			t.Fatal("wrong method lost useful Allow", w.Header())
 		}
 	}
