@@ -190,6 +190,28 @@ func (w *bodyDeadlineRecorder) SetReadDeadline(deadline time.Time) error {
 	return nil
 }
 
+func TestAuthorizeFormReferrerPreservesCSRFOriginWithoutQueryLeak(t *testing.T) {
+	s, err := New(publicTestConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		path, want string
+	}{
+		{s.AuthorizePath(), "origin"},
+		{s.MetadataPath(), "no-referrer"},
+	} {
+		r := httptest.NewRequest(http.MethodGet, testIssuer+tc.path, nil)
+		r.TLS = &tls.ConnectionState{}
+		r.URL.Host, r.URL.Scheme = "", ""
+		recorder := httptest.NewRecorder()
+		s.ServeHTTP(recorder, r)
+		if policy := recorder.Header().Get("Referrer-Policy"); policy != tc.want {
+			t.Fatalf("GET %s referrer policy %q want %q", tc.path, policy, tc.want)
+		}
+	}
+}
+
 func TestPOSTBodyDeadlineRequired(t *testing.T) {
 	s, err := New(publicTestConfig())
 	if err != nil {

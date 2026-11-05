@@ -126,6 +126,14 @@ callback and a protected Diagnostic sink. The caller owns pool.Close() and schem
   grant to bridge.ErrInvalidCredential. It retains Bridge Admit and
   operation Gate, and invokes the normal typed Application service with the
   verified user. A token's client_id is not the product principal.
+- The Authorization GET response sets `Referrer-Policy: origin` for the
+  same-origin HTML consent form: modern browsers otherwise set the POST
+  `Origin` header to `null` under `no-referrer`, causing the strict CSRF
+  Origin check to reject genuine consent. `origin` discloses no request
+  path/query, PKCE state, or code; Token and other endpoints retain
+  `no-referrer`. Product renderers must not override this policy to
+  `no-referrer` unless they implement a separately reviewed, same-origin
+  fetch-based consent submission with a valid Origin.
 - RenderConsent receives a bounded ConsentView (the authenticated user,
   client, resource, scope, exact redirect, form action, CSRF and short-lived
   transaction). It must safely HTML-escape every untrusted display value,
