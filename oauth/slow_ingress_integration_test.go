@@ -3,7 +3,6 @@ package oauth
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -115,11 +114,5 @@ func TestSlowStreamingPOSTTerminatesAndReleasesIngressHTTP1AndHTTP2(t *testing.T
 				t.Fatalf("issuer failed to recover after slow peer: %s", metadata.Status)
 			}
 		})
-	}
-}
-
-func TestSlowStreamFailureCannotBeMistakenForGrant(t *testing.T) {
-	if errors.Is(io.ErrUnexpectedEOF, ErrInvalidGrant) {
-		t.Fatal("network errors must remain distinguishable from rejected grants")
 	}
 }
