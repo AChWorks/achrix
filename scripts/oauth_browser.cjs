@@ -38,7 +38,8 @@ async function main() {
         const seen = [];
         page.on("response", response => {
           const parsed = new URL(response.url());
-          seen.push({origin: parsed.origin, path: parsed.pathname, status: response.status()});
+          seen.push({origin: parsed.origin, path: parsed.pathname, status: response.status(),
+            csp: response.headers()["content-security-policy"], referrer: response.headers()["referrer-policy"]});
         });
         const start = await page.goto(fixture.client + "/start");
         assert.equal(start.status(), 200);
@@ -63,6 +64,11 @@ async function main() {
         assert.equal(await page.locator("html").getAttribute("lang"), fa ? "fa" : "en");
         assert.equal(await page.locator("html").getAttribute("dir"), fa ? "rtl" : "ltr");
         assert.equal(await page.locator("h1").innerText(), fa ? "تأیید دسترسی" : "Authorize access");
+        const consentPage = seen.find(r => r.origin === fixture.issuer && r.path === "/authorize" && r.status === 200);
+        assert(consentPage, "actual authorization GET response must be seen");
+        assert.equal(consentPage.referrer, "origin", "the browser needs its exact Origin for native form POST");
+        assert.equal(consentPage.csp, "frame-ancestors 'none'; base-uri 'none'; form-action 'self' " + fixture.client,
+          "native consent redirect must allow only its pre-registered client origin");
         assert((await page.locator("main p").innerText()).includes("Browser & Notes Client"));
         assert((await page.locator("main p").innerText()).includes("notes.read"));
         assert.equal(await page.locator("button[name=decision]").count(), 2);

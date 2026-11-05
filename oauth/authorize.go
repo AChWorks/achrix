@@ -155,6 +155,13 @@ func (s *Server) beginAuthorize(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		name = client.ID
 	}
+	// Chromium applies form-action to the entire POST redirect chain,
+	// including the RFC 9700-safe 303 to the OAuth client's redirect URI.
+	// Permit only the exact selected, previously registered HTTPS callback
+	// origin; never trust an arbitrary request URL or grant all HTTPS hosts.
+	// The server still validates Origin and the one-use CSRF transaction.
+	callbackURL, _ := url.Parse(redirect) // exact validated pre-enrollment match
+	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'; base-uri 'none'; form-action 'self' "+callbackURL.Scheme+"://"+callbackURL.Host)
 	// Products own language, branding, accessibility and consent presentation.
 	// The issuer retains transaction/CSRF verification and grant authority.
 	s.config.RenderConsent(w, r, ConsentView{
