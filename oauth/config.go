@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -108,11 +109,11 @@ type Server struct {
 
 func New(config Config) (*Server, error) {
 	u, err := url.Parse(config.Issuer)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" || (u.Path != "" && (strings.HasSuffix(u.Path, "/") || strings.Contains(u.EscapedPath(), "%"))) || u.String() != config.Issuer || !validHTTPHost(u) {
+	if err != nil || len(config.Issuer) > 2048 || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" || u.String() != config.Issuer || !validHTTPHost(u) || !validURLPath(u, false) {
 		return nil, fmt.Errorf("%w: canonical HTTPS issuer required", ErrConfiguration)
 	}
 	resource, err := url.Parse(config.Resource)
-	if err != nil || resource.Scheme != "https" || resource.Host == "" || resource.User != nil || resource.Fragment != "" || resource.RawQuery != "" || resource.Opaque != "" || resource.String() != config.Resource || !validHTTPHost(resource) {
+	if err != nil || len(config.Resource) > 2048 || resource.Scheme != "https" || resource.Host == "" || resource.User != nil || resource.Fragment != "" || resource.RawQuery != "" || resource.Opaque != "" || resource.String() != config.Resource || !validHTTPHost(resource) || !validURLPath(resource, true) {
 		return nil, fmt.Errorf("%w: canonical HTTPS resource required", ErrConfiguration)
 	}
 	if config.Pool == nil || config.Session == nil || config.Permit == nil || config.RenderConsent == nil || config.Diagnostic == nil || len(config.Clients) == 0 || len(config.Clients) > 128 {
@@ -131,7 +132,7 @@ func New(config Config) (*Server, error) {
 		}
 		for _, redirect := range c.RedirectURIs {
 			ru, e := url.Parse(redirect)
-			if e != nil || ru.Scheme != "https" || ru.Host == "" || ru.User != nil || ru.Fragment != "" || ru.Opaque != "" || ru.String() != redirect || strings.Contains(ru.EscapedPath(), "%") || !validHTTPHost(ru) {
+			if e != nil || len(redirect) > 2048 || ru.Scheme != "https" || ru.Host == "" || ru.User != nil || ru.Fragment != "" || ru.Opaque != "" || ru.String() != redirect || !validHTTPHost(ru) || !validURLPath(ru, true) {
 				return nil, fmt.Errorf("%w: registered redirect must be exact HTTPS", ErrConfiguration)
 			}
 			query, e := url.ParseQuery(ru.RawQuery)
@@ -164,6 +165,22 @@ func New(config Config) (*Server, error) {
 func SecretDigest(randomSecret string) [32]byte { return sha256.Sum256([]byte(randomSecret)) }
 
 func (s *Server) client(id string) (Client, bool) { c, ok := s.clients[id]; return c, ok && c.Enabled }
+
+// validURLPath forbids dot segments, doubled separators and encoded paths
+// that a mux, proxy or resource server could canonicalize differently.
+func validURLPath(u *url.URL, allowTrailing bool) bool {
+	if u.RawPath != "" || strings.Contains(u.EscapedPath(), "%") || strings.Contains(u.Path, "//") {
+		return false
+	}
+	if u.Path == "" {
+		return true
+	}
+	cleaned := path.Clean(u.Path)
+	if u.Path == cleaned {
+		return true
+	}
+	return allowTrailing && u.Path == cleaned+"/"
+}
 
 // validHTTPHost rejects wildcard, ambiguous, noncanonical and invalid DNS
 // or port syntax. HTTPS still remains required by each caller.
