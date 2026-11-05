@@ -40,6 +40,12 @@
       "name": "bridge",
       "directory": "bridge",
       "path": "github.com/AChWorks/achrix/bridge"
+    },
+    {
+      "name": "oauth",
+      "directory": "oauth",
+      "path": "github.com/AChWorks/achrix/oauth",
+      "status": "candidate"
     }
   ]
 }
