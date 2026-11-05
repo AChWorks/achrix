@@ -203,7 +203,7 @@ func TestOAuthBrowserFixture(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'none'; form-action 'self'")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'none'; form-action 'self'")
 		fmt.Fprintf(w, "<!doctype html><html lang='%s' dir='%s'><meta charset='utf-8'><title>%s</title><main><h1>%s</h1><p id='message' role='status'></p><form><label for='login'>Username</label><input id='login' name='login' autocomplete='username' required><label for='password'>Password</label><input id='password' name='password' type='password' autocomplete='current-password' required><button type='submit'>%s</button></form></main><script src='/login.js'></script></html>", lang, direction, title, title, goButton)
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
