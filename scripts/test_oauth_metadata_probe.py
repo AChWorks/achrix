@@ -204,6 +204,19 @@ class MetadataContract(unittest.TestCase):
         with self.assertRaises(probe.ProbeError):
             probe.read_json(b'{"a": [not-json]}')
 
+    def test_rfc8259_utf8_metadata_encoding(self):
+        doc = valid()
+        doc["service_documentation"] = "https://identity.example.test/راهنما"
+        self.assertEqual(probe.read_json(json.dumps(doc, ensure_ascii=False).encode("utf-8")), doc)
+        for encoding in ("utf-16", "utf-16-le", "utf-16-be", "utf-32", "utf-32-le", "utf-32-be"):
+            with self.subTest(encoding=encoding), self.assertRaisesRegex(probe.ProbeError, "invalid metadata JSON"):
+                probe.read_json(json.dumps(valid()).encode(encoding))
+        for invalid in (b'"' + bytes([0xff]) + b'"',
+                        b'"' + bytes([0xc3, 0x28]) + b'"',
+                        bytes([0xef, 0xbb, 0xbf]) + b'{"issuer":"x"}'):
+            with self.subTest(value=repr(invalid)), self.assertRaisesRegex(probe.ProbeError, "invalid metadata JSON"):
+                probe.read_json(invalid)
+
     def test_nonstandard_json_numbers_and_overflow_fail(self):
         for literal in ("NaN", "Infinity", "-Infinity", "1e9999"):
             with self.subTest(literal=literal), self.assertRaisesRegex(probe.ProbeError, "non-finite"):
@@ -303,6 +316,8 @@ class MetadataContract(unittest.TestCase):
             self.assertEqual(probe.fetch(url, allow_local_http=True), valid())
         for config in ({"status": 404}, {"ctype": "text/html"},
                        {"status": 302, "location": "http://127.0.0.1:1/"},
+                       {"data": json.dumps(valid()).encode("utf-16")},
+                       {"data": json.dumps(valid()).encode("utf-32")},
                        {"data": b"x" * (probe.MAX_BYTES + 1)}):
             with self.subTest(config=config.keys()), serve(**config) as url:
                 with self.assertRaises(probe.ProbeError):
