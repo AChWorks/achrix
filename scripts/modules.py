@@ -21,8 +21,11 @@ def inventory(root=ROOT):
         raise ValueError("module inventory is empty")
     names, directories, paths = set(), set(), set()
     for module in modules:
-        if set(module) != {"name", "directory", "path"}:
+        fields=set(module)
+        if fields not in ({"name","directory","path"},{"name","directory","path","status"}):
             raise ValueError("invalid module entry")
+        if "status" in module and module["status"]!="candidate":
+            raise ValueError("unsupported component lifecycle status")
         name, directory, path = (module[k] for k in ("name", "directory", "path"))
         if not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError("invalid component name")
@@ -50,6 +53,8 @@ def release_identity(name, version, root=ROOT):
     if not re.fullmatch(r"v0\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version):
         raise ValueError("version must be an unpublished v0.MINOR.PATCH")
     module = component(name, root)
+    if module.get("status")=="candidate":
+        raise ValueError("unreviewed candidate component cannot be released")
     prefix = "" if module["directory"] == "." else module["directory"] + "/"
     return module, prefix + version, "achrix-" + name + "-" + version
 

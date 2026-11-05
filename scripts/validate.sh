@@ -125,6 +125,8 @@ createdb -T template0 achrix_test_notes
 createdb -T template0 achrix_test_bridge
 createdb -T template0 achrix_test_restore
 createdb -T template0 achrix_identity_test
+createdb -T template0 achrix_oauth_test
+createdb -T template0 achrix_oauth_restore
 createdb -T template0 achrix_audit_test
 createdb -T template0 achrix_identity_consumer
 createdb -T template0 achrix_identity_restore
@@ -143,6 +145,8 @@ stage=component_tests
 # Module tests use distinct private databases: Go can run packages concurrently.
 # Full scope runs their unit and real persisted tests once with explicit DSNs.
 export ACHRIX_IDENTITY_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_identity_test sslmode=disable"
+export ACHRIX_OAUTH_TEST_ROOT="$validation_root"
+export ACHRIX_OAUTH_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_oauth_test sslmode=disable"
 export ACHRIX_AUDIT_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_audit_test sslmode=disable"
 export ACHRIX_MEDIA_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_media_test sslmode=disable"
 export ACHRIX_ADMIN_TEST_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_admin_test sslmode=disable"
@@ -151,7 +155,26 @@ for module_directory in "${module_directories[@]}"; do
   [[ $module_directory == . ]] && continue
   (cd "$repository/$module_directory" && go test -race -count=1 -timeout=90s ./...)
 done
-unset ACHRIX_IDENTITY_TEST_DSN ACHRIX_AUDIT_TEST_DSN ACHRIX_MEDIA_TEST_DSN ACHRIX_MEDIA_TEST_ROOT ACHRIX_ADMIN_TEST_DSN
+# An independent final fixture leaves durable OAuth grants, hashed tokens and
+# revocation evidence for the exact native database restore below.
+(cd "$repository/oauth" && go test -race -count=1 -timeout=90s -run '^TestSeedOAuthRetainedStateForRestore$' ./...)
+unset ACHRIX_IDENTITY_TEST_DSN ACHRIX_AUDIT_TEST_DSN ACHRIX_MEDIA_TEST_DSN ACHRIX_MEDIA_TEST_ROOT ACHRIX_ADMIN_TEST_DSN ACHRIX_OAUTH_TEST_DSN
+
+stage=oauth_restore
+# Native trusted whole-schema capture after OAuth ingress/tests stop. Never
+# export raw client secrets, browser cookies, codes or refresh credentials.
+pg_dump -Fc -Z0 --no-owner --no-acl -f "$validation_root/oauth.dump" achrix_oauth_test
+(cd "$validation_root" && sha256sum oauth.dump > oauth.dump.sha256 && sha256sum -c oauth.dump.sha256)
+pg_restore --exit-on-error --no-owner --no-acl -d achrix_oauth_restore "$validation_root/oauth.dump"
+for table in grants ceremonies codes access_tokens refresh_tokens schema_migrations; do
+  for database in achrix_oauth_test achrix_oauth_restore; do
+    PGTZ=UTC psql -XAt -d "$database" -c "SELECT row_to_json(t) FROM oauth.$table t ORDER BY row_to_json(t)::text" > "$validation_root/$database-$table.jsonl"
+  done
+  cmp "$validation_root/achrix_oauth_test-$table.jsonl" "$validation_root/achrix_oauth_restore-$table.jsonl"
+done
+export ACHRIX_OAUTH_RESTORE_DSN="host=$PGHOST port=$PGPORT user=$PGUSER dbname=achrix_oauth_restore sslmode=disable"
+(cd "$repository/oauth" && go test -race -count=1 -timeout=60s -run '^TestVerifiedOAuthRestore$' ./...)
+unset ACHRIX_OAUTH_RESTORE_DSN ACHRIX_OAUTH_TEST_ROOT
 
 stage=isolated_consumer
 # Copy consumer-owned source only. Foundation source is downloaded as a pinned
