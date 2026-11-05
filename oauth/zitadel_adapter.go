@@ -9,8 +9,12 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
@@ -242,3 +246,127 @@ func (*sdkEngine) GrantTypeDeviceCodeSupported() bool                          {
 func (*sdkEngine) AccessTokenVerifier(context.Context) *op.AccessTokenVerifier { return nil }
 func (*sdkEngine) IDTokenHintVerifier(context.Context) *op.IDTokenHintVerifier { return nil }
 func (*sdkEngine) Logger() *slog.Logger                                        { return nil }
+
+var errSDKClientMethod = errors.New("oauth registered client authentication method mismatch")
+
+// sdkRequest supplies the already size-bounded, duplicate-free HTTP form to
+// the upstream protocol parser. AChrix's RFC 8707 resource and request-shape
+// guards run before these calls; no opaque client body is parsed twice.
+func sdkRequest(r *http.Request, fields url.Values) *http.Request {
+	req := r.Clone(r.Context())
+	req.Body = io.NopCloser(strings.NewReader(fields.Encode()))
+	req.Form = nil
+	req.PostForm = nil
+	return req
+}
+
+// The upstream validator handles credential checking but permits client_secret
+// form authentication and (for public clients) ignores stray Basic credentials.
+// Our first profile only advertises client_secret_basic or none. Enforce that
+// method boundary here without duplicating secret or PKCE verification.
+func strictSDKClientMethod(r *http.Request, fields url.Values, client Client) error {
+	auth := r.Header.Values("Authorization")
+	if len(auth) > 1 || fields.Has("client_secret") {
+		return errSDKClientMethod
+	}
+	hasBasic := false
+	if len(auth) == 1 {
+		_, _, hasBasic = r.BasicAuth()
+		if !hasBasic {
+			return errSDKClientMethod
+		}
+		id, err := single(fields, "client_id", false)
+		if err != nil || id != "" && id != client.ID {
+			return errSDKClientMethod
+		}
+	}
+	if hasBasic != client.Confidential {
+		return errSDKClientMethod
+	}
+	return nil
+}
+
+func isSDKClientAuthError(err error) bool {
+	return errors.Is(err, errSDKClientMethod) || errors.Is(err, oidc.ErrInvalidClient())
+}
+
+// sdkValidateCode is the sole registered-client, redirect and S256 exchange
+// authority. Its immutable code model is later compared to a locked row to
+// defend against concurrent revocation/replacement before token issuance.
+func (s *Server) sdkValidateCode(r *http.Request, fields url.Values) (Client, sdkCode, error) {
+	req := sdkRequest(r, fields)
+	parsed, err := op.ParseAccessTokenRequest(req, s.sdk.Decoder())
+	if err != nil {
+		return Client{}, sdkCode{}, err
+	}
+	checked, registered, err := op.ValidateAccessTokenRequest(req.Context(), parsed, s.sdk)
+	if err != nil {
+		return Client{}, sdkCode{}, err
+	}
+	client, ok := registered.(sdkClient)
+	if !ok {
+		return Client{}, sdkCode{}, fmt.Errorf("%w: unexpected upstream client contract", ErrUnavailable)
+	}
+	if err = strictSDKClientMethod(r, fields, client.Client); err != nil {
+		return Client{}, sdkCode{}, err
+	}
+	code, ok := checked.(sdkCode)
+	if !ok {
+		return Client{}, sdkCode{}, fmt.Errorf("%w: unexpected upstream code contract", ErrUnavailable)
+	}
+	return client.Client, code, nil
+}
+
+func (s *Server) sdkValidateRefresh(r *http.Request, fields url.Values) (Client, *sdkRefresh, error) {
+	req := sdkRequest(r, fields)
+	parsed, err := op.ParseRefreshTokenRequest(req, s.sdk.Decoder())
+	if err != nil {
+		return Client{}, nil, err
+	}
+	checked, registered, err := op.ValidateRefreshTokenRequest(req.Context(), parsed, s.sdk)
+	if err != nil {
+		// Unlike its code validator, ZITADEL's refresh validator returns
+		// client lookup failures directly. Distinguish an inactive current
+		// client (invalid_client) from a bad/replayed refresh credential
+		// (invalid_grant), without implementing a second auth algorithm.
+		if errors.Is(err, ErrInvalidGrant) {
+			if _, lookupErr := s.client(req.Context(), parsed.ClientID); lookupErr != nil {
+				if errors.Is(lookupErr, ErrUnavailable) {
+					return Client{}, nil, lookupErr
+				}
+				return Client{}, nil, errSDKClientMethod
+			}
+		}
+		return Client{}, nil, err
+	}
+	client, ok := registered.(sdkClient)
+	if !ok {
+		return Client{}, nil, fmt.Errorf("%w: unexpected upstream client contract", ErrUnavailable)
+	}
+	if err = strictSDKClientMethod(r, fields, client.Client); err != nil {
+		return Client{}, nil, err
+	}
+	refresh, ok := checked.(*sdkRefresh)
+	if !ok {
+		return Client{}, nil, fmt.Errorf("%w: unexpected upstream refresh contract", ErrUnavailable)
+	}
+	return client.Client, refresh, nil
+}
+
+// RFC 7009 client authentication is handled by ZITADEL's revocation parser.
+// Opaque-token revocation itself is owned by the atomic PostgreSQL grant store.
+func (s *Server) sdkRevocationClient(r *http.Request, fields url.Values) (Client, error) {
+	req := sdkRequest(r, fields)
+	_, _, clientID, err := op.ParseTokenRevocationRequest(req, s.sdk)
+	if err != nil {
+		return Client{}, err
+	}
+	client, err := s.client(r.Context(), clientID)
+	if err != nil {
+		return Client{}, err
+	}
+	if err := strictSDKClientMethod(r, fields, client); err != nil {
+		return Client{}, err
+	}
+	return client, nil
+}

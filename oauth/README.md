@@ -9,7 +9,12 @@ independently approve the security review. The owning decision remains
 and [Issue #125](https://github.com/AChWorks/achrix/issues/125).
 
 The optional AChrix component owns authorization mechanics and its separate
-PostgreSQL oauth schema. It does **not** own product users, their passwords,
+PostgreSQL oauth schema. Multiple explicitly configured issuers may share this
+schema: pending sessions are unique per (issuer, resource, session binding),
+and Disconnect, token revocation and cleanup are issuer/resource-scoped.
+The schema migration ledger and native backup/restore cover **all** issuer rows;
+operators must protect and restore the shared state as one consistent unit.
+There is no automatic discovery, routing or token fallback between issuers. It does **not** own product users, their passwords,
 interactive sessions, business policy, resource or site authorization, or the
 deployment. It does not import Identity, Bridge or Core into production code, and never
 starts a hosted identity service. Its private adapter imports pinned
@@ -57,6 +62,40 @@ registration, automatic consent, central login or mandatory hosted IdP. Local
 product authentication remains independent. This implementation deliberately
 does not claim production protocol compliance or full real-world AI-client
 onboarding from compilation, metadata or a fixture.
+
+
+## Concrete protocol/engine responsibility map (candidate, not a public contract)
+
+| Operation | ZITADEL v3.51.17 is authoritative for | AChrix/product remains responsible for |
+| --- | --- | --- |
+| Authorization request | `op.ValidateAuthRequestClient`: registered callback, response type, client scope eligibility, code challenge method | Exact RFC 8707 resource, mandatory S256 (SDK also permits `plain`), reject unknown/duplicate parameters and unsupported OIDC scopes, current Identity session/Permit, product consent UI and one-use CSRF |
+| Client authentication | SDK request parsing and Code/Refresh validators, RFC 6749 Basic decoding and `AuthorizeClientIDSecret` with live `ClientLookup` and AChrix-supplied constant-time digest check | Restrict methods to the *advertised* Basic-or-none profile: reject credential-in-form, public Basic, confidential missing Basic and mixed identity; apply immutable registration ceiling |
+| Code exchange | `op.ParseAccessTokenRequest` + `op.ValidateAccessTokenRequest`: client, stored code, redirect and S256 verification **once** | Short-lived opaque code minting at consent; inside a PostgreSQL row lock, compare the already validated code snapshot against the durable record, recheck live Permit and atomically consume/issue |
+| Refresh | `op.ParseRefreshTokenRequest` + `op.ValidateRefreshTokenRequest`: registered client and scopes | Original issuer/resource/grant/user binding; PostgreSQL row locks, replay-family revocation, absolute lifetime, live rights and hashed opaque token rotation |
+| Revocation | `op.ParseTokenRevocationRequest`: authentication and form decoding | RFC 7009 undisclosing response, exact issuer/resource/client grant update and explicit user-owned Disconnect |
+| Discovery, transport, tokens | No full provider routes or ID token/JWKS/CORS behavior enabled | Exact RFC 8414/9207/8707/9728 contract; own opaque access-token verification and ten-minute expiry, HTTP bounded ingress and protected diagnostics |
+
+ZITADEL's `op.CreateTokenResponse` unconditionally enters OIDC ID-token
+creation, so neither its full OIDC provider nor token-response helper is safe
+for this explicitly OAuth-only, opaque-token profile. The SDK validators
+currently require `op.Exchanger`/`op.Storage`; the private adapter implements
+the interface and makes all unsupported signing/provider methods fail closed.
+They are not product APIs or a second runtime-selectable engine.
+
+This is deliberately one protocol validation authority and one AChrix-owned
+durable grant/token state machine, **not** two competing client/PKCE engines.
+Whether the resulting bounded library integration sufficiently meets the
+Owner's Option B architecture must still be determined by the independent
+security/architecture review. It does not imply approval of a validator-only
+deviation, public OAuth compatibility or production deployment.
+
+The adapter is pinned to one upstream version. A future SDK upgrade must
+re-evaluate `Parse*Request`, `Validate*Request`, client-method restrictions,
+OAuth Basic decoding and the required interface stubs against the executable
+contract suite. Persistent issuer/resource/grant semantics are AChrix-owned;
+a different engine may require deliberate token expiry, re-consent and client
+re-enrollment, not seamless token migration. Do not create a generic engine
+registry without evidence of an actual second supported implementation.
 
 ## Private proof composition
 

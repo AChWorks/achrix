@@ -138,13 +138,15 @@ func (s *Server) Prune(ctx context.Context) error {
 		return fmt.Errorf("%w: prune begin: %v", ErrUnavailable, err)
 	}
 	defer tx.Rollback(ctx)
+	// Multiple issuers can share the schema, but cleanup by one Server must
+	// never touch another issuer's pending consent, credential or audit trail.
 	for _, q := range []string{
-		"DELETE FROM oauth.ceremonies WHERE expires_at < $1",
-		"DELETE FROM oauth.codes WHERE expires_at < $1",
-		"DELETE FROM oauth.access_tokens WHERE expires_at < $1",
-		"DELETE FROM oauth.refresh_tokens WHERE expires_at < $1",
+		"DELETE FROM oauth.ceremonies WHERE expires_at < $1 AND issuer=$2 AND resource=$3",
+		"DELETE FROM oauth.codes c USING oauth.grants g WHERE c.grant_id=g.id AND c.expires_at < $1 AND g.issuer=$2 AND g.resource=$3",
+		"DELETE FROM oauth.access_tokens a USING oauth.grants g WHERE a.grant_id=g.id AND a.expires_at < $1 AND g.issuer=$2 AND g.resource=$3",
+		"DELETE FROM oauth.refresh_tokens r USING oauth.grants g WHERE r.grant_id=g.id AND r.expires_at < $1 AND g.issuer=$2 AND g.resource=$3",
 	} {
-		if _, err = tx.Exec(ctx, q, now); err != nil {
+		if _, err = tx.Exec(ctx, q, now, s.config.Issuer, s.config.Resource); err != nil {
 			return fmt.Errorf("%w: prune: %v", ErrUnavailable, err)
 		}
 	}
@@ -153,9 +155,10 @@ func (s *Server) Prune(ctx context.Context) error {
 	// rows are gone; no outstanding credential can be reanimated by cleanup.
 	_, err = tx.Exec(ctx, `DELETE FROM oauth.grants g WHERE
        COALESCE(g.revoked_at,g.created_at) < $1
+       AND g.issuer=$2 AND g.resource=$3
        AND NOT EXISTS(SELECT 1 FROM oauth.codes c WHERE c.grant_id=g.id)
        AND NOT EXISTS(SELECT 1 FROM oauth.access_tokens a WHERE a.grant_id=g.id)
-       AND NOT EXISTS(SELECT 1 FROM oauth.refresh_tokens r WHERE r.grant_id=g.id)`, now.Add(-30*24*time.Hour))
+       AND NOT EXISTS(SELECT 1 FROM oauth.refresh_tokens r WHERE r.grant_id=g.id)`, now.Add(-30*24*time.Hour), s.config.Issuer, s.config.Resource)
 	if err != nil {
 		return fmt.Errorf("%w: prune orphan grants: %v", ErrUnavailable, err)
 	}

@@ -126,20 +126,20 @@ func TestConfidentialBasicRFC6749FormDecoding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	values := url.Values{"grant_type": {"authorization_code"}}
-	good := httptest.NewRequest(http.MethodPost, testIssuer+"/token", nil)
-	good.SetBasicAuth(url.QueryEscape("confidential"), url.QueryEscape(secret))
-	if _, err := server.authenticateClient(good, values); err != nil {
-		t.Fatal("compliant RFC6749 Basic encoding rejected")
+	values := url.Values{"client_id": {"confidential"}, "token": {"opaque-test-token"}}
+	makeRequest := func(id, pass string) *http.Request {
+		req := httptest.NewRequest(http.MethodPost, testIssuer+"/revoke", strings.NewReader(values.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.SetBasicAuth(id, pass)
+		return req
 	}
-	invalid := httptest.NewRequest(http.MethodPost, testIssuer+"/token", nil)
-	invalid.SetBasicAuth("confidential", "%invalid%")
-	if _, err := server.authenticateClient(invalid, values); err == nil {
+	if _, err := server.sdkRevocationClient(makeRequest(url.QueryEscape("confidential"), url.QueryEscape(secret)), values); err != nil {
+		t.Fatal("compliant RFC6749 Basic encoding rejected: ", err)
+	}
+	if _, err := server.sdkRevocationClient(makeRequest("confidential", "%invalid%"), values); err == nil {
 		t.Fatal("malformed percent encoding accepted")
 	}
-	raw := httptest.NewRequest(http.MethodPost, testIssuer+"/token", nil)
-	raw.SetBasicAuth("confidential", secret)
-	if _, err := server.authenticateClient(raw, values); err == nil {
+	if _, err := server.sdkRevocationClient(makeRequest("confidential", secret), values); err == nil {
 		t.Fatal("unescaped reserved Basic secret accepted")
 	}
 }

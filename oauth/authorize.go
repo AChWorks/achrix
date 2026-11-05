@@ -145,7 +145,7 @@ func (s *Server) beginAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := s.now()
-	_, err = s.config.Pool.Exec(r.Context(), "INSERT INTO oauth.ceremonies (id_hash,csrf_hash,session_hash,subject,client_id,redirect_uri,issuer,resource,scopes,client_state,challenge,expires_at,state_present) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT(session_hash) DO UPDATE SET id_hash=EXCLUDED.id_hash,csrf_hash=EXCLUDED.csrf_hash,subject=EXCLUDED.subject,client_id=EXCLUDED.client_id,redirect_uri=EXCLUDED.redirect_uri,issuer=EXCLUDED.issuer,resource=EXCLUDED.resource,scopes=EXCLUDED.scopes,client_state=EXCLUDED.client_state,challenge=EXCLUDED.challenge,expires_at=EXCLUDED.expires_at,state_present=EXCLUDED.state_present",
+	_, err = s.config.Pool.Exec(r.Context(), "INSERT INTO oauth.ceremonies (id_hash,csrf_hash,session_hash,subject,client_id,redirect_uri,issuer,resource,scopes,client_state,challenge,expires_at,state_present) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT(issuer,resource,session_hash) DO UPDATE SET id_hash=EXCLUDED.id_hash,csrf_hash=EXCLUDED.csrf_hash,subject=EXCLUDED.subject,client_id=EXCLUDED.client_id,redirect_uri=EXCLUDED.redirect_uri,issuer=EXCLUDED.issuer,resource=EXCLUDED.resource,scopes=EXCLUDED.scopes,client_state=EXCLUDED.client_state,challenge=EXCLUDED.challenge,expires_at=EXCLUDED.expires_at,state_present=EXCLUDED.state_present",
 		hash(txID), hash(csrf), session.Binding[:], session.Subject, client.ID, redirect, s.config.Issuer, s.config.Resource, scopes, state, get("code_challenge"), now.Add(5*time.Minute), hasState)
 	if err != nil {
 		s.problem(w, r, "consent_insert", err)

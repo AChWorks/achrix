@@ -24,7 +24,7 @@ CREATE TABLE oauth.ceremonies (
   state_present boolean NOT NULL,
   challenge text NOT NULL,
   expires_at timestamptz NOT NULL,
-  UNIQUE(session_hash)
+  UNIQUE(issuer,resource,session_hash)
 );
 CREATE TABLE oauth.codes (
   code_hash bytea PRIMARY KEY CHECK(octet_length(code_hash) = 32),

@@ -3,19 +3,12 @@ package oauth
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/zitadel/oidc/v3/pkg/op"
-	"io"
 	"net/http"
-	"net/url"
 	"regexp"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -35,44 +28,6 @@ type TokenResponse struct {
 func (t TokenResponse) String() string   { return "oauth.TokenResponse[redacted]" }
 func (t TokenResponse) GoString() string { return t.String() }
 
-func (s *Server) authenticateClient(r *http.Request, v url.Values) (Client, error) {
-	basic := r.Header.Values("Authorization")
-	if len(basic) > 1 {
-		return Client{}, ErrInvalidGrant
-	}
-	id, err := single(v, "client_id", false)
-	if err != nil {
-		return Client{}, ErrInvalidGrant
-	}
-	if len(basic) == 1 {
-		username, secret, ok := r.BasicAuth()
-		username, nameErr := url.QueryUnescape(username)
-		secret, secretErr := url.QueryUnescape(secret)
-		if !ok || nameErr != nil || secretErr != nil || username == "" || id != "" && id != username {
-			return Client{}, ErrInvalidGrant
-		}
-		c, lookupErr := s.client(r.Context(), username)
-		if lookupErr != nil {
-			return Client{}, lookupErr
-		}
-		if !c.Confidential || len(secret) < 32 {
-			return Client{}, ErrInvalidGrant
-		}
-		digest := sha256.Sum256([]byte(secret))
-		if subtle.ConstantTimeCompare(digest[:], c.SecretDigest[:]) != 1 {
-			return Client{}, ErrInvalidGrant
-		}
-		return c, nil
-	}
-	c, lookupErr := s.client(r.Context(), id)
-	if lookupErr != nil {
-		return Client{}, lookupErr
-	}
-	if c.Confidential {
-		return Client{}, ErrInvalidGrant
-	}
-	return c, nil
-}
 func (s *Server) tokenHTTP(w http.ResponseWriter, r *http.Request) {
 	v, err := requestForm(r)
 	if err != nil {
@@ -87,15 +42,6 @@ func (s *Server) tokenHTTP(w http.ResponseWriter, r *http.Request) {
 			s.oauthError(w, "invalid_request", http.StatusBadRequest)
 			return
 		}
-	}
-	c, clientErr := s.authenticateClient(r, v)
-	if clientErr != nil {
-		if errors.Is(clientErr, ErrUnavailable) {
-			s.problem(w, r, "token_client_registry", clientErr)
-		} else {
-			s.oauthError(w, "invalid_client", http.StatusUnauthorized)
-		}
-		return
 	}
 	kind, err := single(v, "grant_type", true)
 	if err != nil || kind != "authorization_code" && kind != "refresh_token" {
@@ -114,14 +60,20 @@ func (s *Server) tokenHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		code, e1 := single(v, "code", true)
-		redirect, e2 := single(v, "redirect_uri", true)
+		_, e2 := single(v, "redirect_uri", true)
 		verifier, e3 := single(v, "code_verifier", true)
 		if e1 != nil || e2 != nil || e3 != nil {
 			s.oauthError(w, "invalid_request", http.StatusBadRequest)
 			return
 		}
-		if err = s.sdkValidate(r, v, false); err == nil {
-			result, err = s.exchange(r.Context(), c, code, redirect, verifier)
+		if !verifierSyntax.MatchString(verifier) {
+			s.oauthError(w, "invalid_grant", http.StatusBadRequest)
+			return
+		}
+		var client Client
+		var validated sdkCode
+		if client, validated, err = s.sdkValidateCode(r, v); err == nil {
+			result, err = s.exchange(r.Context(), client, code, validated)
 		}
 	} else {
 		if v.Has("code") || v.Has("redirect_uri") || v.Has("code_verifier") {
@@ -133,15 +85,19 @@ func (s *Server) tokenHTTP(w http.ResponseWriter, r *http.Request) {
 			s.oauthError(w, "invalid_request", http.StatusBadRequest)
 			return
 		}
-		if err = s.sdkValidate(r, v, true); err == nil {
-			result, err = s.refresh(r.Context(), c, refresh)
+		var client Client
+		var validated *sdkRefresh
+		if client, validated, err = s.sdkValidateRefresh(r, v); err == nil {
+			result, err = s.refresh(r.Context(), client, refresh, validated)
 		}
 	}
 	if err != nil {
-		if errors.Is(err, ErrInvalidGrant) {
-			s.oauthError(w, "invalid_grant", http.StatusBadRequest)
-		} else {
+		if errors.Is(err, ErrUnavailable) {
 			s.problem(w, r, "token_exchange", err)
+		} else if isSDKClientAuthError(err) {
+			s.oauthError(w, "invalid_client", http.StatusUnauthorized)
+		} else {
+			s.oauthError(w, "invalid_grant", http.StatusBadRequest)
 		}
 		return
 	}
@@ -175,8 +131,12 @@ func joinScopes(scopes []string) string {
 	}
 	return result
 }
-func (s *Server) exchange(ctx context.Context, client Client, code, redirect, verifier string) (TokenResponse, error) {
-	if !validToken(code) || !verifierSyntax.MatchString(verifier) || !slices.Contains(client.RedirectURIs, redirect) {
+
+// ZITADEL already authenticated the client and checked the registered redirect
+// and S256 challenge. This transaction confirms that the validated immutable
+// code snapshot still matches the locked durable row before consuming it.
+func (s *Server) exchange(ctx context.Context, client Client, code string, checked sdkCode) (TokenResponse, error) {
+	if !validToken(code) {
 		return TokenResponse{}, ErrInvalidGrant
 	}
 	tx, err := s.config.Pool.BeginTx(ctx, pgx.TxOptions{})
@@ -197,10 +157,9 @@ func (s *Server) exchange(ctx context.Context, client Client, code, redirect, ve
 		return TokenResponse{}, fmt.Errorf("%w: code read: %v", ErrUnavailable, err)
 	}
 	now := s.now()
-	actual := sha256.Sum256([]byte(verifier))
-	expected := base64.RawURLEncoding.EncodeToString(actual[:])
-	if !now.Before(expires) || revoked != nil || g.ClientID != client.ID || storedClient != client.ID || storedRedirect != redirect ||
-		subtle.ConstantTimeCompare([]byte(expected), []byte(challenge)) != 1 {
+	if !now.Before(expires) || revoked != nil || g.ID != checked.g.ID || g.Subject != checked.g.Subject ||
+		g.ClientID != client.ID || storedClient != client.ID || g.Issuer != s.config.Issuer || g.Resource != s.config.Resource ||
+		storedRedirect != checked.redirect || challenge != checked.challenge || !slices.Equal(g.Scopes, checked.g.Scopes) {
 		return TokenResponse{}, ErrInvalidGrant
 	}
 	if err = s.active(ctx, g); err != nil {
@@ -218,7 +177,7 @@ func (s *Server) exchange(ctx context.Context, client Client, code, redirect, ve
 	}
 	return result, nil
 }
-func (s *Server) refresh(ctx context.Context, client Client, old string) (TokenResponse, error) {
+func (s *Server) refresh(ctx context.Context, client Client, old string, checked *sdkRefresh) (TokenResponse, error) {
 	if !validToken(old) {
 		return TokenResponse{}, ErrInvalidGrant
 	}
@@ -239,7 +198,9 @@ func (s *Server) refresh(ctx context.Context, client Client, old string) (TokenR
 		return TokenResponse{}, fmt.Errorf("%w: refresh read: %v", ErrUnavailable, err)
 	}
 	now := s.now()
-	if g.ClientID != client.ID || g.Resource != s.config.Resource || g.Issuer != s.config.Issuer {
+	if checked == nil || g.ID != checked.g.ID || g.Subject != checked.g.Subject ||
+		g.ClientID != client.ID || g.Resource != s.config.Resource || g.Issuer != s.config.Issuer ||
+		!slices.Equal(g.Scopes, checked.g.Scopes) {
 		return TokenResponse{}, ErrInvalidGrant
 	}
 	if used != nil {
@@ -306,7 +267,7 @@ func (s *Server) Disconnect(ctx context.Context, subject, grantID string) error 
 	if subject == "" || !validToken(grantID) {
 		return ErrInvalidGrant
 	}
-	tag, err := s.config.Pool.Exec(ctx, "UPDATE oauth.grants SET revoked_at=COALESCE(revoked_at,$3) WHERE id=$1 AND subject=$2", grantID, subject, s.now())
+	tag, err := s.config.Pool.Exec(ctx, "UPDATE oauth.grants SET revoked_at=COALESCE(revoked_at,$5) WHERE id=$1 AND subject=$2 AND issuer=$3 AND resource=$4", grantID, subject, s.config.Issuer, s.config.Resource, s.now())
 	if err != nil {
 		return fmt.Errorf("%w: disconnect: %v", ErrUnavailable, err)
 	}
@@ -330,7 +291,7 @@ func (s *Server) revokeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	client, clientErr := s.authenticateClient(r, v)
+	client, clientErr := s.sdkRevocationClient(r, v)
 	if clientErr != nil {
 		if errors.Is(clientErr, ErrUnavailable) {
 			s.problem(w, r, "revoke_client_registry", clientErr)
@@ -349,48 +310,11 @@ func (s *Server) revokeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if validToken(value) {
-		query := "UPDATE oauth.grants SET revoked_at=COALESCE(revoked_at,$3) WHERE client_id=$1 AND (id IN (SELECT grant_id FROM oauth.access_tokens WHERE token_hash=$2) OR id IN (SELECT grant_id FROM oauth.refresh_tokens WHERE token_hash=$2))"
-		if _, err = s.config.Pool.Exec(r.Context(), query, client.ID, hash(value), s.now()); err != nil {
+		query := "UPDATE oauth.grants SET revoked_at=COALESCE(revoked_at,$5) WHERE client_id=$1 AND issuer=$3 AND resource=$4 AND (id IN (SELECT grant_id FROM oauth.access_tokens WHERE token_hash=$2) OR id IN (SELECT grant_id FROM oauth.refresh_tokens WHERE token_hash=$2))"
+		if _, err = s.config.Pool.Exec(r.Context(), query, client.ID, hash(value), s.config.Issuer, s.config.Resource, s.now()); err != nil {
 			s.problem(w, r, "revoke", err)
 			return
 		}
 	}
 	w.WriteHeader(http.StatusOK) // RFC 7009: do not disclose token existence.
-}
-
-// sdkValidate uses the maintained in-process Go library for auth-code,
-// registered redirect, confidential client authentication, PKCE S256,
-// refresh client and scope validation. Resource binding and atomic grant
-// state remain the explicit AChrix protocol profile/storage obligations.
-func (s *Server) sdkValidate(r *http.Request, values url.Values, isRefresh bool) error {
-	req := r.Clone(r.Context())
-	req.Body = io.NopCloser(strings.NewReader(values.Encode()))
-	req.Form = nil
-	req.PostForm = nil
-	if isRefresh {
-		parsed, err := op.ParseRefreshTokenRequest(req, s.sdk.Decoder())
-		if err != nil {
-			return ErrInvalidGrant
-		}
-		_, _, err = op.ValidateRefreshTokenRequest(req.Context(), parsed, s.sdk)
-		if err != nil {
-			if errors.Is(err, ErrUnavailable) {
-				return err
-			}
-			return ErrInvalidGrant
-		}
-		return nil
-	}
-	parsed, err := op.ParseAccessTokenRequest(req, s.sdk.Decoder())
-	if err != nil {
-		return ErrInvalidGrant
-	}
-	_, _, err = op.ValidateAccessTokenRequest(req.Context(), parsed, s.sdk)
-	if err != nil {
-		if errors.Is(err, ErrUnavailable) {
-			return err
-		}
-		return ErrInvalidGrant
-	}
-	return nil
 }
