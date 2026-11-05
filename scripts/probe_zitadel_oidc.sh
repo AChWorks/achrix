@@ -22,7 +22,7 @@ go 1.27.3
 
 require github.com/zitadel/oidc/v3 v3.51.17
 EOF
-cp "$repo/scripts/testdata/zitadel_oidc_runtime/main.go" "$scratch/main.go"
+cp "$repo/fixtures/testdata/zitadel_oidc_runtime/main.go" "$scratch/main.go"
 if ! (cd "$scratch" && GOWORK=off GOTOOLCHAIN=local go run -mod=mod .) > "$scratch/oidc.json" 2> "$scratch/provider.log"; then
   cat "$scratch/provider.log" >&2
   echo "Live upstream probe failed; see diagnostics above" >&2
