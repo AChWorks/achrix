@@ -66,6 +66,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.metadata(w)
 	case s.AuthorizePath():
 		if r.Method == http.MethodGet {
+			// The product's same-origin consent form POST must carry the exact
+			// Origin for CSRF protection. Referrer-Policy: no-referrer makes
+			// Chromium send Origin: null for HTML form POSTs. Origin-only
+			// referrers never disclose authorization request query/state.
+			w.Header().Set("Referrer-Policy", "origin")
 			s.beginAuthorize(w, r)
 		} else if r.Method == http.MethodPost {
 			s.finishAuthorize(w, r)

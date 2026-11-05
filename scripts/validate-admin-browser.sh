@@ -25,11 +25,12 @@ done
 validation_root=$(mktemp -d /tmp/achrix-admin-browser.XXXXXXXX)
 start_attempted=0
 fixture_pid=''
+fixture_done=done
 cleanup() {
  result=$?
  keep_resources=0
  if [[ -n $fixture_pid ]]; then
-  if [[ ! -f $validation_root/done ]]; then printf 'FAIL\n' > "$validation_root/done"; fi
+  if [[ ! -f $validation_root/$fixture_done ]]; then printf 'FAIL\n' > "$validation_root/$fixture_done"; fi
   if ! wait "$fixture_pid"; then
    if [[ $result == 0 ]]; then result=1; stage=browser_fixture_exit; fi
   fi
@@ -83,6 +84,7 @@ initdb -D "$validation_root/database" -A trust --no-locale -E UTF8 >/dev/null
 start_attempted=1
 pg_ctl -D "$validation_root/database" -l "$validation_root/postgres.log" -o "-k $validation_root/socket -h ''" -w start >/dev/null
 PGHOST="$validation_root/socket" PGPORT=5432 PGUSER=$(id -un) createdb -T template0 achrix_admin_test
+PGHOST="$validation_root/socket" PGPORT=5432 PGUSER=$(id -un) createdb -T template0 achrix_oauth_test
 stage=isolated_consumer
 # Consumer-owned fixture source only: the complete SDK comes from Go resolution.
 cp -R fixtures/notes "$validation_root/consumer"
@@ -110,3 +112,27 @@ wait "$fixture_pid"
 fixture_pid=''
 cat "$validation_root/fixture.log"
 echo 'Actual HTTPS browser/normal SDK/Identity/Media/Admin proof passed'
+
+# A separate product-composed OAuth issuer uses the same private PostgreSQL
+# cluster, but its own guarded database. The Chrome test does not weaken the
+# no-public-issuer release gate or add Node dependencies to runtime modules.
+stage=oauth_browser_fixture
+fixture_done=oauth-done
+export ACHRIX_OAUTH_BROWSER=1 ACHRIX_OAUTH_BROWSER_ROOT="$validation_root"
+export ACHRIX_OAUTH_TEST_ROOT="$validation_root"
+export ACHRIX_OAUTH_TEST_DSN="host=$validation_root/socket port=5432 user=$(id -un) dbname=achrix_oauth_test sslmode=disable"
+( cd "$repository/oauth" && go test -race -count=1 -timeout=220s -run '^TestOAuthBrowserFixture$' -v . ) > "$validation_root/oauth-fixture.log" 2>&1 &
+fixture_pid=$!
+for ((attempt=0; attempt<900; attempt++)); do
+ if [[ -f $validation_root/oauth-fixture.json ]]; then break; fi
+ if ! kill -0 "$fixture_pid" 2>/dev/null; then echo 'OAuth browser fixture exited before readiness; see private evidence' >&2; exit 1; fi
+ sleep 0.1
+done
+if [[ ! -f $validation_root/oauth-fixture.json ]]; then echo 'OAuth browser fixture startup deadline exceeded' >&2; exit 1; fi
+stage=oauth_https_browser
+"$node" "$repository/scripts/oauth_browser.cjs" "$validation_root/oauth-fixture.json"
+printf 'PASS\n' > "$validation_root/oauth-done"
+wait "$fixture_pid"
+fixture_pid=''
+cat "$validation_root/oauth-fixture.log"
+echo 'Actual HTTPS Chromium product login/consent/OAuth2/Bridge proof passed'
