@@ -102,6 +102,7 @@ func newFixture(t *testing.T) *fixture {
 			}
 			return nil
 		},
+		RenderConsent: testRenderConsent,
 		Diagnostic: func(ctx context.Context, phase, status string, err error) {
 			f.mu.Lock()
 			defer f.mu.Unlock()

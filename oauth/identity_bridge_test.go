@@ -167,7 +167,8 @@ func TestRealIdentityOauth2ClientBridgeAndLogout(t *testing.T) {
 	issuer, err := New(Config{
 		Issuer: issuerHTTP.URL, Resource: resource, Pool: pool,
 		Clients: []Client{{ID: "real-go-oauth2", Name: "Go OAuth2 Client", RedirectURIs: []string{testCallback}, Scopes: []string{"notes.read"}, Enabled: true}},
-		Session: sessionCallback, Permit: permit, Diagnostic: func(context.Context, string, string, error) {},
+		Session: sessionCallback, Permit: permit, RenderConsent: testRenderConsent,
+		Diagnostic: func(context.Context, string, string, error) {},
 	})
 	if err != nil {
 		t.Fatal(err)

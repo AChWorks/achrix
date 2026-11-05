@@ -23,7 +23,9 @@ golang.org/x/oauth2 client to exercise a real code exchange.
   resource; Authorization Code plus mandatory PKCE S256 and exact registered
   redirect URI.
 - Product-attested active Identity session and one-use, expiry-bounded consent
-  transaction with independent server-side CSRF and strict POST Origin checking.\n  A new transaction for the same authenticated session replaces its prior\n  pending transaction, bounding consent state per browser session.
+  transaction with independent server-side CSRF and strict POST Origin checking.
+  Product-provided RenderConsent displays the consent UI in its own language,
+  design and accessibility system. AChrix never renders its own HTML form.\n  A new transaction for the same authenticated session replaces its prior\n  pending transaction, bounding consent state per browser session.
   An authorization result includes the RFC 9207 iss and echoes the client's
   distinct state without treating it as server-side CSRF.
 - PostgreSQL atomic one-use code redemption; opaque SHA-256-at-rest access and
@@ -53,8 +55,8 @@ onboarding from compilation, metadata or a fixture.
 A product can create an explicitly owned connection pool and apply the
 schema with oauth.Migrate(ctx, pool), then compose oauth.New(oauth.Config{...}).
 The config must provide an exact canonical HTTPS issuer and resource, enrolled
-clients, a trusted product Session callback, a current Permit callback and a
-protected Diagnostic sink. The caller owns pool.Close() and schema backup.
+clients, a trusted product Session callback, a current Permit callback,
+a product-owned RenderConsent callback and a protected Diagnostic sink. The caller owns pool.Close() and schema backup.
 
 - Session must authenticate **one current** product Identity cookie/token
   using the actual Identity Service (Authenticate); its binding is the hash
@@ -76,6 +78,14 @@ protected Diagnostic sink. The caller owns pool.Close() and schema backup.
   grant to bridge.ErrInvalidCredential. It retains Bridge Admit and
   operation Gate, and invokes the normal typed Application service with the
   verified user. A token's client_id is not the product principal.
+- RenderConsent receives a bounded ConsentView (the authenticated user,
+  client, resource, scope, exact redirect, form action, CSRF and short-lived
+  transaction). It must safely HTML-escape every untrusted display value,
+  localize/accessibly render Approve/Deny without automatic grant, POST
+  transaction/csrf/decision to FormAction on the same HTTPS issuer origin,
+  and avoid caching/logging the opaque CSRF values. Rendering failures
+  must fail closed. The default issuer deliberately has **no built-in
+  HTML, login or branding**; the HTML fixture lives only in _test.go.
 - The issuer http.Handler must be explicitly mounted on a trusted HTTPS
   origin. There is no reverse-proxy trust of arbitrary Forwarded or
   X-Forwarded-* headers. The PostgreSQL role needs restricted access to the

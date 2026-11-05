@@ -5,8 +5,6 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
-	"fmt"
-	"html"
 	"net/http"
 	"net/url"
 	"slices"
@@ -138,13 +136,24 @@ func (s *Server) beginAuthorize(w http.ResponseWriter, r *http.Request) {
 		s.problem(w, r, "consent_insert", err)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	name := client.Name
 	if name == "" {
 		name = client.ID
 	}
-	fmt.Fprintf(w, "<!doctype html><html lang='en'><head><meta charset='utf-8'><title>Authorize access</title></head><body><main><h1>Authorize access</h1><p>Signed in as %s. %s requests %s on %s.</p><form method='post' action='%s'><input type='hidden' name='transaction' value='%s'><input type='hidden' name='csrf' value='%s'><button name='decision' value='allow' type='submit'>Approve</button><button name='decision' value='deny' type='submit'>Deny</button></form></main></body></html>",
-		html.EscapeString(session.Subject), html.EscapeString(name), html.EscapeString(strings.Join(scopes, ", ")), html.EscapeString(s.config.Resource), html.EscapeString(s.AuthorizePath()), html.EscapeString(txID), html.EscapeString(csrf))
+	// Products own language, branding, accessibility and consent presentation.
+	// The issuer retains transaction/CSRF verification and grant authority.
+	s.config.RenderConsent(w, r, ConsentView{
+		Subject:     session.Subject,
+		ClientID:    client.ID,
+		ClientName:  name,
+		RedirectURI: redirect,
+		Resource:    s.config.Resource,
+		Scopes:      append([]string(nil), scopes...),
+		FormAction:  s.AuthorizePath(),
+		Transaction: txID,
+		CSRF:        csrf,
+		ExpiresAt:   now.Add(5 * time.Minute),
+	})
 }
 func (s *Server) finishAuthorize(w http.ResponseWriter, r *http.Request) {
 	if len(r.Header.Values("Origin")) != 1 || r.Header.Get("Origin") != s.origin {

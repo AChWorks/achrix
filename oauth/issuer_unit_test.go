@@ -7,6 +7,8 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -22,6 +24,14 @@ const testIssuer = "https://issuer.example.test"
 const testResource = "https://product.example.test/mcp"
 const testCallback = "https://client.example.test/callback"
 
+// This HTML is deliberately test-only: real products own their UX,
+// localization, branding and accessibility. No HTML is compiled into OAuth.
+func testRenderConsent(w http.ResponseWriter, r *http.Request, v ConsentView) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, "<!doctype html><html lang='en'><head><meta charset='utf-8'><title>Authorize access</title></head><body><main><h1>Authorize access</h1><p>Signed in as %s. %s requests %s on %s.</p><form method='post' action='%s'><input type='hidden' name='transaction' value='%s'><input type='hidden' name='csrf' value='%s'><button name='decision' value='allow' type='submit'>Approve</button><button name='decision' value='deny' type='submit'>Deny</button></form></main></body></html>",
+		html.EscapeString(v.Subject), html.EscapeString(v.ClientName), html.EscapeString(strings.Join(v.Scopes, ", ")),
+		html.EscapeString(v.Resource), html.EscapeString(v.FormAction), html.EscapeString(v.Transaction), html.EscapeString(v.CSRF))
+}
 func publicTestConfig() Config {
 	return Config{
 		Issuer: testIssuer, Resource: testResource, Pool: &pgxpool.Pool{},
@@ -29,8 +39,9 @@ func publicTestConfig() Config {
 		Session: func(context.Context, *http.Request) (Session, error) {
 			return Session{Subject: "user-1", Binding: sha256.Sum256([]byte("session-1"))}, nil
 		},
-		Permit:     func(context.Context, Grant) error { return nil },
-		Diagnostic: func(context.Context, string, string, error) {},
+		Permit:        func(context.Context, Grant) error { return nil },
+		RenderConsent: testRenderConsent,
+		Diagnostic:    func(context.Context, string, string, error) {},
 	}
 }
 func TestConfigurationFailsClosed(t *testing.T) {
@@ -49,6 +60,7 @@ func TestConfigurationFailsClosed(t *testing.T) {
 		{"missing session adapter", func(c *Config) { c.Session = nil }},
 		{"missing permission adapter", func(c *Config) { c.Permit = nil }},
 		{"missing diagnostics", func(c *Config) { c.Diagnostic = nil }},
+		{"missing consent renderer", func(c *Config) { c.RenderConsent = nil }},
 		{"wildcard redirect", func(c *Config) { c.Clients[0].RedirectURIs = []string{"https://*.example.test/callback"} }},
 		{"redirect code conflict", func(c *Config) { c.Clients[0].RedirectURIs = []string{testCallback + "?code=leak"} }},
 		{"redirect fragment", func(c *Config) { c.Clients[0].RedirectURIs = []string{testCallback + "#part"} }},

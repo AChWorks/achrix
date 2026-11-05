@@ -56,8 +56,27 @@ type Grant struct {
 	CreatedAt                               time.Time
 }
 
+// ConsentView contains trusted product presentation inputs and opaque,
+// short-lived one-use transaction values. Never log or persist Transaction
+// or CSRF outside the issuer's protected in-flight consent response.
+// The product must render an escaped, accessible same-origin POST form to
+// FormAction with transaction, csrf and decision=allow|deny fields.
+type ConsentView struct {
+	Subject     string
+	ClientID    string
+	ClientName  string
+	RedirectURI string
+	Resource    string
+	Scopes      []string
+	FormAction  string
+	Transaction string
+	CSRF        string
+	ExpiresAt   time.Time
+}
+
 // Config contains no global mutable state. The caller owns DB initialization,
-// TLS, ingress and protected secrets. Callbacks must be safe for concurrent use.
+// TLS, ingress, the consent UI and protected secrets. Callbacks must be
+// safe for concurrent use.
 type Config struct {
 	Issuer   string
 	Resource string
@@ -67,6 +86,11 @@ type Config struct {
 	// Permit checks current product rights for this subject/client/resource/scope.
 	// Denial or unavailability must fail closed; HTTP does not expose its cause.
 	Permit func(context.Context, Grant) error
+	// RenderConsent is required, product-owned, and runs only after a
+	// valid authenticated session/permission and fresh one-use consent
+	// transaction exist. It must render on the issuer's same HTTPS origin.
+	// No default Foundation-hosted login or HTML UX is provided.
+	RenderConsent func(http.ResponseWriter, *http.Request, ConsentView)
 	// Diagnostic must preserve protected errors and correlation elsewhere.
 	Diagnostic func(context.Context, string, string, error)
 	Now        func() time.Time
@@ -91,8 +115,8 @@ func New(config Config) (*Server, error) {
 	if err != nil || resource.Scheme != "https" || resource.Host == "" || resource.User != nil || resource.Fragment != "" || resource.RawQuery != "" || resource.Opaque != "" || resource.String() != config.Resource || !validHTTPHost(resource) {
 		return nil, fmt.Errorf("%w: canonical HTTPS resource required", ErrConfiguration)
 	}
-	if config.Pool == nil || config.Session == nil || config.Permit == nil || config.Diagnostic == nil || len(config.Clients) == 0 || len(config.Clients) > 128 {
-		return nil, fmt.Errorf("%w: pool, callbacks and 1..128 clients required", ErrConfiguration)
+	if config.Pool == nil || config.Session == nil || config.Permit == nil || config.RenderConsent == nil || config.Diagnostic == nil || len(config.Clients) == 0 || len(config.Clients) > 128 {
+		return nil, fmt.Errorf("%w: pool, session, policy, consent presentation, diagnostic and 1..128 clients required", ErrConfiguration)
 	}
 	clients := make(map[string]Client, len(config.Clients))
 	for _, c := range config.Clients {
