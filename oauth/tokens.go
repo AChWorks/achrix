@@ -76,6 +76,9 @@ func (s *Server) authenticateClient(r *http.Request, v url.Values) (Client, erro
 func (s *Server) tokenHTTP(w http.ResponseWriter, r *http.Request) {
 	v, err := requestForm(r)
 	if err != nil {
+		if !errors.Is(err, ErrInvalidGrant) {
+			s.report(r.Context(), "token_form_read", "read_failed", err)
+		}
 		s.oauthError(w, "invalid_request", http.StatusBadRequest)
 		return
 	}
@@ -315,6 +318,9 @@ func (s *Server) Disconnect(ctx context.Context, subject, grantID string) error 
 func (s *Server) revokeHTTP(w http.ResponseWriter, r *http.Request) {
 	v, err := requestForm(r)
 	if err != nil {
+		if !errors.Is(err, ErrInvalidGrant) {
+			s.report(r.Context(), "revoke_form_read", "read_failed", err)
+		}
 		s.oauthError(w, "invalid_request", http.StatusBadRequest)
 		return
 	}

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -178,6 +179,102 @@ func TestServerMetadataAndHostBoundary(t *testing.T) {
 	}
 }
 func (c Config) IssuerOrigin() string { u, _ := url.Parse(c.Issuer); return u.Scheme + "://" + u.Host }
+
+type bodyDeadlineRecorder struct {
+	*httptest.ResponseRecorder
+	deadline time.Time
+}
+
+func (w *bodyDeadlineRecorder) SetReadDeadline(deadline time.Time) error {
+	w.deadline = deadline
+	return nil
+}
+
+func TestPOSTBodyDeadlineRequired(t *testing.T) {
+	s, err := New(publicTestConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	makeRequest := func() *http.Request {
+		r := httptest.NewRequest(http.MethodPost, testIssuer+s.TokenPath(), strings.NewReader("unexpected=x"))
+		r.TLS = &tls.ConnectionState{}
+		r.URL.Host = ""
+		r.URL.Scheme = ""
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		return r
+	}
+	before := time.Now()
+	writer := &bodyDeadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
+	s.ServeHTTP(writer, makeRequest())
+	if writer.Code != http.StatusBadRequest {
+		t.Fatalf("bounded POST status %d: %s", writer.Code, writer.Body)
+	}
+	if writer.deadline.Before(before.Add(4*time.Second)) || writer.deadline.After(time.Now().Add(6*time.Second)) {
+		t.Fatalf("missing or invalid request-body deadline: %v", writer.deadline)
+	}
+	unsupported := httptest.NewRecorder()
+	s.ServeHTTP(unsupported, makeRequest())
+	if unsupported.Code != http.StatusServiceUnavailable {
+		t.Fatalf("ingress without read-deadline support did not fail closed: %d", unsupported.Code)
+	}
+}
+
+type interruptedBody struct{}
+
+func (interruptedBody) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
+
+func TestPOSTBodyReadFailureDiagnostic(t *testing.T) {
+	var phase string
+	cfg := publicTestConfig()
+	cfg.Diagnostic = func(_ context.Context, p, _ string, err error) {
+		if errors.Is(err, io.ErrUnexpectedEOF) {
+			phase = p
+		}
+	}
+	s, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest(http.MethodPost, testIssuer+s.TokenPath(), nil)
+	r.TLS = &tls.ConnectionState{}
+	r.URL.Host = ""
+	r.URL.Scheme = ""
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.Body = io.NopCloser(interruptedBody{})
+	writer := &bodyDeadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
+	s.ServeHTTP(writer, r)
+	if writer.Code != http.StatusBadRequest || phase != "token_form_read" {
+		t.Fatalf("request body failure was not safely reported: status=%d phase=%q", writer.Code, phase)
+	}
+}
+
+func TestPOSTBodyDeadlineHTTP2(t *testing.T) {
+	s, err := New(publicTestConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstream := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// An isolated transport-only test: issuer origin validation is covered
+		// separately, so bind the loopback TLS request to the fixed test issuer.
+		r.Host = "issuer.example.test"
+		s.ServeHTTP(w, r)
+	}))
+	upstream.EnableHTTP2 = true
+	upstream.StartTLS()
+	defer upstream.Close()
+	response, err := upstream.Client().Post(upstream.URL+s.TokenPath(), "application/x-www-form-urlencoded", strings.NewReader("unexpected=x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.ProtoMajor != 2 {
+		t.Fatalf("transport was not HTTP/2: %s", response.Proto)
+	}
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("network POST deadline rejected valid HTTP/2 transport: %d", response.StatusCode)
+	}
+}
+
 func TestOpaqueTokenAndParserBounds(t *testing.T) {
 	a, err := token()
 	if err != nil {

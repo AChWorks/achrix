@@ -97,9 +97,16 @@ callback and a protected Diagnostic sink. The caller owns pool.Close() and schem
   HTML, login or branding**; the HTML fixture lives only in _test.go.
 - The issuer http.Handler must be explicitly mounted on a trusted HTTPS
   origin. There is no reverse-proxy trust of arbitrary Forwarded or
-  X-Forwarded-* headers. The PostgreSQL role needs restricted access to the
-  owned schema. Network and database availability are mandatory for protected
-  operations.
+  X-Forwarded-* headers. The product-owned `http.Server` or ingress must also
+  bound header reading (`ReadHeaderTimeout`, `MaxHeaderBytes`) and connection
+  resources; the handler cannot impose those limits before it is invoked.
+  For POST bodies, the handler sets a five-second network read deadline through
+  `http.ResponseController.SetReadDeadline`; middleware wrapping its
+  `ResponseWriter` must expose `Unwrap()` or the same deadline method. If the
+  deadline cannot be enforced, POST requests fail closed with HTTP 503 rather
+  than consuming an unbounded slow body. The PostgreSQL role needs restricted
+  access to the owned schema. Network and database availability are mandatory
+  for protected operations.
 
 The end-to-end regression in identity_bridge_test.go exercises **two real
 PostgreSQL-backed Identity users and the real Audit and Bridge modules**. A

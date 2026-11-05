@@ -177,6 +177,9 @@ func (s *Server) finishAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := requestForm(r)
 	if err != nil {
+		if !errors.Is(err, ErrInvalidGrant) {
+			s.report(r.Context(), "consent_form_read", "read_failed", err)
+		}
 		http.Error(w, "invalid consent", http.StatusBadRequest)
 		return
 	}

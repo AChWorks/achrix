@@ -4,6 +4,7 @@ package oauth
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -46,6 +47,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx = context.WithValue(ctx, requestIDKey{}, requestID)
 	w.Header().Set("X-Request-ID", requestID)
 	r = r.WithContext(ctx)
+	// Context cancellation alone does not interrupt a peer stalled while
+	// streaming the request body. Enforce a real network read deadline before
+	// consuming any POST body; unsupported ResponseWriter wrappers fail closed.
+	if r.Method == http.MethodPost {
+		deadline, _ := ctx.Deadline()
+		if err := http.NewResponseController(w).SetReadDeadline(deadline); err != nil {
+			s.problem(w, r, "request_read_deadline", err)
+			return
+		}
+	}
 	switch r.URL.Path {
 	case s.MetadataPath():
 		if r.Method != http.MethodGet || r.URL.RawQuery != "" {
@@ -132,7 +143,12 @@ func requestForm(r *http.Request) (url.Values, error) {
 		return nil, ErrInvalidGrant
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, 8193))
-	if err != nil || len(body) > 8192 {
+	if err != nil {
+		// Keep the transport failure in protected diagnostics. Do not send its
+		// potentially sensitive details back to the OAuth client.
+		return nil, fmt.Errorf("read OAuth request body: %w", err)
+	}
+	if len(body) > 8192 {
 		return nil, ErrInvalidGrant
 	}
 	values, err := url.ParseQuery(string(body))
