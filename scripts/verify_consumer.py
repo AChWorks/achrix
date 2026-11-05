@@ -36,6 +36,15 @@ def verify_sources(repository, destination):
     digest = hashlib.sha256()
     cache = Path(os.environ["GOMODCACHE"]).resolve()
     for module in modules:
+        if module.get("status") == "candidate":
+            # The candidate is compiled/tested with its source and real DB as
+            # an independent module, but has no approved public release to pin.
+            # An existing product MUST NOT silently consume its local source.
+            consumer = json.loads(subprocess.check_output(
+                ["go","mod","edit","-json"],text=True))
+            if any(item["Path"]==module["path"] for item in consumer.get("Require",[])):
+                raise ValueError("unreviewed component cannot be pinned by consumer")
+            continue
         value = json.loads(subprocess.check_output(
             ["go", "list", "-m", "-json", module["path"]], text=True))
         if (value["Path"] != module["path"] or not value.get("Version", "").startswith("v0.")
@@ -52,7 +61,22 @@ def verify_sources(repository, destination):
         if local_files.keys() != downloaded_files.keys():
             raise ValueError("normal consumer runtime file set drift: " + module["name"])
         for name, local in sorted(local_files.items()):
-            if local != downloaded_files[name]:
+            published = downloaded_files[name]
+            if module["directory"] == "." and name == "modules.json":
+                # Only exact, explicitly marked unreleased candidate entries
+                # may be absent from the pinned published Core inventory.
+                # All pre-existing entries/ordering and bytes remain identical.
+                candidate_inventory = json.loads(local)
+                candidate_inventory["modules"] = [
+                    item for item in candidate_inventory["modules"]
+                    if item.get("status") != "candidate"
+                ]
+                if (json.dumps(candidate_inventory, indent=2) + "\n").encode() != published:
+                    raise ValueError("published Core component inventory drift")
+                if (json.dumps(json.loads(local), indent=2) + "\n").encode() != local:
+                    raise ValueError("noncanonical candidate component inventory")
+                local = published
+            if local != published:
                 raise ValueError("normal consumer source drift: " + module["name"] + "/" + name)
             relative = name if module["directory"] == "." else module["directory"] + "/" + name
             digest.update(relative.encode() + b"\0" + local)

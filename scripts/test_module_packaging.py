@@ -15,6 +15,14 @@ import prepare_release
 import verify_consumer
 
 
+class CandidateReleaseGateTest(unittest.TestCase):
+    def test_candidate_cannot_be_released(self):
+        oauth = modules.component("oauth", modules.ROOT)
+        self.assertEqual(oauth.get("status"), "candidate")
+        with self.assertRaisesRegex(ValueError, "cannot be released"):
+            modules.release_identity("oauth", "v0.1.0", modules.ROOT)
+
+
 class InventoryTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="achrix-module-policy-")
