@@ -76,7 +76,12 @@ async function main() {
         assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
         const consent = page.waitForResponse(r => new URL(r.url()).pathname === "/authorize" && r.request().method() === "POST");
         await page.locator('button[name=decision][value="allow"]').click();
-        assert.equal((await consent).status(), 303);
+        const grantResult = await consent;
+        if (grantResult.status() !== 303) {
+          const headers = await grantResult.request().allHeaders();
+          const outward = (await grantResult.text()).trim().slice(0, 140);
+          throw new Error(`consent returned ${grantResult.status()}, publicReason=${JSON.stringify(outward)}, originIsExpected=${headers.origin === fixture.issuer}, sessionCookieSent=${Boolean(headers.cookie && headers.cookie.includes("__Host-AChrix-Session="))}`);
+        }
         await page.waitForURL(u => u.origin === fixture.client && u.pathname === "/callback");
         assert.equal(await page.locator("#outcome").innerText(), "Bridge authorized");
         assert.equal(await page.locator("#account").innerText(), fixture.login);
