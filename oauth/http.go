@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -124,6 +125,15 @@ func (s *Server) metadata(w http.ResponseWriter) {
 		"token_endpoint_auth_methods_supported":          methods,
 		"revocation_endpoint_auth_methods_supported":     methods,
 		"scopes_supported":                               scopes,
+	}
+	// CIMD URL identification is supported only for previously enrolled
+	// metadata-document URLs in the product's trusted client ceiling.
+	// There is no dynamic arbitrary URL fetch, DCR, or private_key_jwt.
+	for _, c := range s.clients {
+		if c.Enabled && strings.HasPrefix(c.ID, "https://") {
+			metadata["client_id_metadata_document_supported"] = true
+			break
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(metadata)

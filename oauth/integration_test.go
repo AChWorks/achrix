@@ -91,6 +91,7 @@ func newFixture(t *testing.T) *fixture {
 			{ID: "public.example", Name: "Notes Client", Enabled: true, RedirectURIs: []string{testCallback}, Scopes: []string{"notes.read", "notes.write"}},
 			{ID: "confidential.example", Enabled: true, Confidential: true, SecretDigest: SecretDigest(strings.Repeat("s", 40)), RedirectURIs: []string{testCallback}, Scopes: []string{"notes.read", "notes.write"}},
 			{ID: "confidential.reserved", Enabled: true, Confidential: true, SecretDigest: SecretDigest(strings.Repeat("C%:+&/", 7)), RedirectURIs: []string{testCallback}, Scopes: []string{"notes.read"}},
+			{ID: "https://chatgpt.com/oauth/client.json", Name: "Pre-enrolled URL client", Enabled: true, RedirectURIs: []string{testCallback}, Scopes: []string{"notes.read"}},
 		},
 		ClientLookup: func(ctx context.Context, id string) (Client, error) {
 			if f.clientFailure.Load() {
@@ -110,6 +111,8 @@ func newFixture(t *testing.T) *fixture {
 				c = Client{ID: id, Confidential: true, Enabled: true, SecretDigest: SecretDigest(strings.Repeat("s", 40)), RedirectURIs: []string{testCallback}, Scopes: []string{"notes.read", "notes.write"}}
 			case "confidential.reserved":
 				c = Client{ID: id, Confidential: true, Enabled: true, SecretDigest: SecretDigest(strings.Repeat("C%:+&/", 7)), RedirectURIs: []string{testCallback}, Scopes: []string{"notes.read"}}
+			case "https://chatgpt.com/oauth/client.json":
+				c = Client{ID: id, Name: "Pre-enrolled URL client", Enabled: true, RedirectURIs: []string{testCallback}, Scopes: []string{"notes.read"}}
 			default:
 				return Client{}, ErrInvalidGrant
 			}
@@ -265,6 +268,32 @@ func (f *fixture) tokens(client, secret, grantType, value string) TokenResponse 
 	}
 	return result
 }
+
+// A native CIMD URL is identified by its actual string, not aliased to a
+// second opaque client identity. No request-driven metadata fetch occurs.
+func TestPreEnrolledURLClientCodeRefreshAndIssuerBinding(t *testing.T) {
+	f := newFixture(t)
+	const id = "https://chatgpt.com/oauth/client.json"
+	code, _ := f.consent(id, "alice")
+	// A different, otherwise valid public client cannot redeem this code.
+	if other := f.tokenCall("public.example", "", "authorization_code", code); other.StatusCode != http.StatusBadRequest {
+		t.Fatalf("code redeemed for different client: %d", other.StatusCode)
+	}
+	tokens := f.tokens(id, "", "authorization_code", code)
+	g, expiry, err := f.srv.VerifyAccess(context.Background(), testResource, tokens.AccessToken)
+	if err != nil || g.ClientID != id || g.Subject != "alice" || g.Resource != testResource ||
+		!slices.Equal(g.Scopes, []string{"notes.read"}) || expiry.IsZero() {
+		t.Fatalf("client URL lost grant/expiry binding: %v", err)
+	}
+	fresh := f.tokens(id, "", "refresh_token", tokens.RefreshToken)
+	if _, _, err = f.srv.VerifyAccess(context.Background(), testResource, fresh.AccessToken); err != nil {
+		t.Fatalf("URL client refresh denied: %v", err)
+	}
+	if other := f.tokenCall("public.example", "", "refresh_token", fresh.RefreshToken); other.StatusCode != http.StatusBadRequest {
+		t.Fatalf("URL client refresh accepted by different client: %d", other.StatusCode)
+	}
+}
+
 func TestPostgresRealAuthorizationCodeAndTokenLifecycle(t *testing.T) {
 	f := newFixture(t)
 	code, _ := f.consent("public.example", "alice")

@@ -28,6 +28,8 @@ var (
 )
 
 // Client is registered by trusted product configuration, not by a user request.
+// A public client ID may be an operator-pre-enrolled canonical HTTPS metadata
+// URL. This profile never fetches arbitrary request-supplied metadata.
 // SecretDigest is SHA-256 of a randomly generated >= 32-byte client secret,
 // provisioned out-of-band. Never configure a human-memorable secret.
 type Client struct {
@@ -132,7 +134,10 @@ func New(config Config) (*Server, error) {
 		if _, exists := clients[c.ID]; exists {
 			return nil, fmt.Errorf("%w: duplicated client", ErrConfiguration)
 		}
-		if c.Confidential && c.SecretDigest == ([32]byte{}) || !c.Confidential && c.SecretDigest != ([32]byte{}) {
+		if c.Confidential && c.SecretDigest == ([32]byte{}) || !c.Confidential && c.SecretDigest != ([32]byte{}) ||
+			strings.HasPrefix(c.ID, "https://") && c.Confidential {
+			// The enrolled URL-client subset supports only the public
+			// "none" method; private_key_jwt is not implemented here.
 			return nil, fmt.Errorf("%w: invalid client authentication", ErrConfiguration)
 		}
 		for _, redirect := range c.RedirectURIs {
@@ -256,11 +261,32 @@ func validHTTPHost(u *url.URL) bool {
 	return true
 }
 
-// validClientID is deliberately narrower than all legal OAuth client IDs,
-// because this first profile allows client_secret_basic credentials and uses
-// an owner-enrolled ID. No URL-based client IDs are recognized yet.
+// validClientID accepts small owner-enrolled opaque IDs or canonical HTTPS
+// metadata document identifiers. The HTTPS form is a *pre-enrolled* public
+// client, not arbitrary URL-based dynamic registration: no request causes a
+// metadata fetch or enables an unknown client. A product must independently
+// verify the metadata document and pin its exact allowed callback(s) before
+// creating the Server (CIMD Internet-Draft, pre-registration mode).
 func validClientID(id string) bool {
-	if len(id) == 0 || len(id) > 200 {
+	if len(id) == 0 || len(id) > 256 {
+		return false
+	}
+	if strings.HasPrefix(id, "https://") {
+		u, err := url.Parse(id)
+		if err != nil || u.String() != id || u.Scheme != "https" ||
+			u.Host == "" || u.Port() != "" || u.User != nil ||
+			u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" ||
+			u.Path == "" || u.Path == "/" || !validURLPath(u, false) ||
+			!validHTTPHost(u) || net.ParseIP(u.Hostname()) != nil ||
+			!strings.Contains(u.Hostname(), ".") ||
+			strings.HasSuffix(u.Hostname(), ".localhost") ||
+			strings.HasSuffix(u.Hostname(), ".local") ||
+			strings.HasSuffix(u.Hostname(), ".internal") {
+			return false
+		}
+		return true
+	}
+	if len(id) > 200 {
 		return false
 	}
 	for i := 0; i < len(id); i++ {

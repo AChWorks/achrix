@@ -47,6 +47,12 @@ func (s *Server) report(ctx context.Context, phase, status string, err error) {
 	s.config.Diagnostic(ctx, phase, status, err)
 }
 
+// supportedPostgreSQL18 admits security/bugfix minor updates within the
+// verified major version. Major 19 needs a separate compatibility test.
+func supportedPostgreSQL18(version int, encoding string) bool {
+	return version >= 180006 && version < 190000 && encoding == "UTF8"
+}
+
 // Migrate explicitly installs a versioned transactional PostgreSQL schema.
 // Concurrent migration attempts serialize; unknown versions or changed source
 // hashes fail closed. Retained grants/revocations require product-wide backup.
@@ -70,8 +76,8 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	if err = tx.QueryRow(ctx, "SELECT current_setting('server_version_num')::integer, current_setting('server_encoding')").Scan(&serverVersion, &encoding); err != nil {
 		return fmt.Errorf("check OAuth PostgreSQL environment: %w", err)
 	}
-	if serverVersion != 180006 || encoding != "UTF8" {
-		return fmt.Errorf("%w: OAuth requires PostgreSQL 18.6 UTF8", ErrConfiguration)
+	if !supportedPostgreSQL18(serverVersion, encoding) {
+		return fmt.Errorf("%w: OAuth requires PostgreSQL 18.6+ (major 18) UTF8", ErrConfiguration)
 	}
 	if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(1929384711)"); err != nil {
 		return fmt.Errorf("lock oauth migration: %w", err)
