@@ -80,13 +80,11 @@ func (s *Server) beginAuthorize(w http.ResponseWriter, r *http.Request) {
 	deny := func(code string) {
 		s.redirect(w, r, redirect, url.Values{"error": {code}, "iss": {s.config.Issuer}, "state": {state}}, hasState)
 	}
-	fields := []string{"response_type", "client_id", "redirect_uri", "resource", "scope", "state", "code_challenge", "code_challenge_method"}
-	for key := range v {
-		if !slices.Contains(fields, key) {
-			deny("invalid_request")
-			return
-		}
-	}
+	// RFC 6749 section 3.1 requires ignoring unrecognized authorization
+	// parameters. Validate all supported inputs explicitly below: an
+	// extension hint must never override the registered redirect, resource,
+	// PKCE, state or consent policy. The bounded query and strict recognized
+	// parameter cardinality checks remain in effect.
 	get := func(k string) string { x, _ := single(v, k, true); return x }
 	for _, key := range []string{"response_type", "resource", "scope", "code_challenge", "code_challenge_method"} {
 		if _, err = single(v, key, true); err != nil {

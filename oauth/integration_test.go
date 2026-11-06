@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -395,6 +396,100 @@ func TestConsentCSRFSessionAndRedirectDenials(t *testing.T) {
 	}
 
 }
+
+// RFC 6749 section 3.1 requires ignoring unrecognized authorization
+// parameters; a client may include harmless extension hints without losing
+// the exact registered redirect, scope, resource, PKCE or consent boundary.
+func TestAuthorizationUnknownParametersIgnoredWithoutWeakeningBindings(t *testing.T) {
+	f := newFixture(t)
+	extras := url.Values{
+		"login_hint":     {"someone@example.invalid"},
+		"ui_locales":     {"fa en"},
+		"vendor_unknown": {"one", "two"},
+	}
+	u, err := url.Parse(authURL(f, "public.example"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := u.Query()
+	for k, values := range extras {
+		q[k] = values
+	}
+	resp := f.mustReq(http.MethodGet, f.srv.AuthorizePath()+"?"+q.Encode(), "", "alice")
+	body := mustBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unrecognized hint blocked valid authorization: HTTP %d", resp.StatusCode)
+	}
+	id, csrf := hiddenID.FindStringSubmatch(body), hiddenCSRF.FindStringSubmatch(body)
+	if len(id) != 2 || len(csrf) != 2 {
+		t.Fatal("authorization did not show fresh consent transaction")
+	}
+	granted := f.mustReq(http.MethodPost, f.srv.AuthorizePath(), consentForm(id[1], csrf[1], "allow"), "alice")
+	if granted.StatusCode != http.StatusSeeOther {
+		t.Fatalf("consent result HTTP %d", granted.StatusCode)
+	}
+	cb, err := url.Parse(granted.Header.Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cb.Scheme != "https" || cb.Host != "client.example.test" || cb.Path != "/callback" ||
+		cb.Query().Get("iss") != f.web.URL || cb.Query().Get("state") != "opaque-client-state" ||
+		!validToken(cb.Query().Get("code")) {
+		t.Fatal("unknown parameter changed callback, issuer, state or code issuance")
+	}
+	for key := range extras {
+		if cb.Query().Has(key) {
+			t.Fatal("unrecognized authorization hint leaked to callback: " + key)
+		}
+	}
+	issued := f.tokens("public.example", "", "authorization_code", cb.Query().Get("code"))
+	g, _, err := f.srv.VerifyAccess(context.Background(), testResource, issued.AccessToken)
+	if err != nil || g.Resource != testResource || g.ClientID != "public.example" || g.Subject != "alice" ||
+		!slices.Equal(g.Scopes, []string{"notes.read"}) {
+		t.Fatalf("grant bindings lost after unknown parameters: %v", err)
+	}
+	// Recognized fields, including audience and PKCE, remain strict even
+	// when an unrecognized hint is also present.
+	for _, tc := range []struct {
+		name      string
+		edit      func(url.Values)
+		status    int
+		wantError string
+	}{
+		{"wrong callback", func(v url.Values) { v.Set("redirect_uri", "https://other.invalid/callback") }, http.StatusBadRequest, ""},
+		{"duplicate resource", func(v url.Values) { v.Add("resource", testResource) }, http.StatusSeeOther, "invalid_request"},
+		{"wrong resource", func(v url.Values) { v.Set("resource", "https://other.invalid/mcp") }, http.StatusSeeOther, "invalid_target"},
+		{"duplicate scope", func(v url.Values) { v.Add("scope", "notes.read") }, http.StatusSeeOther, "invalid_request"},
+		{"invalid scope", func(v url.Values) { v.Set("scope", "admin.root") }, http.StatusSeeOther, "invalid_scope"},
+		{"missing PKCE", func(v url.Values) { v.Del("code_challenge") }, http.StatusSeeOther, "invalid_request"},
+		{"wrong PKCE method", func(v url.Values) { v.Set("code_challenge_method", "plain") }, http.StatusSeeOther, "invalid_request"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mod := url.Values{}
+			for key, values := range q {
+				mod[key] = append([]string(nil), values...)
+			}
+			tc.edit(mod)
+			response := f.mustReq(http.MethodGet, f.srv.AuthorizePath()+"?"+mod.Encode(), "", "alice")
+			if response.StatusCode != tc.status {
+				t.Fatalf("unexpected status: %d wanted %d", response.StatusCode, tc.status)
+			}
+			location := response.Header.Get("Location")
+			if tc.wantError == "" {
+				if location != "" {
+					t.Fatal("invalid registered callback received redirect")
+				}
+				return
+			}
+			target, err := url.Parse(location)
+			if err != nil || target.Host != "client.example.test" || target.Query().Get("error") != tc.wantError ||
+				target.Query().Get("iss") != f.web.URL {
+				t.Fatalf("incorrect safe error redirect: %v", err)
+			}
+		})
+	}
+}
+
 func TestConfidentialClientAuthenticationAndRefreshReplay(t *testing.T) {
 	f := newFixture(t)
 	code, _ := f.consent("confidential.example", "bob")
