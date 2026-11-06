@@ -15,7 +15,7 @@ Use AChrix when you want shared application capabilities that you can consume an
 | [Admin](admin/README.md) | A composable administration shell with Identity and Media screens, including file-based English/Persian localization and RTL/LTR presentation |
 | [Installation](installation/README.md) | Installation requirement assessment and safe re-entry planning |
 | [Bridge](bridge/README.md) | Optional MCP and JSON HTTP resource-server adapters for existing application operations and user permissions; products supply credential verification and connection admission |
-| [OAuth candidate](oauth/README.md) | Experimental optional authorization-server implementation for Issue #125; **not approved for release or production**, subject to the Owner protocol decision and independent security review |
+| [OAuth preview](oauth/README.md) | Opt-in authorization-code/PKCE and pre-enrolled clients for **non-production product integration**; published as a clearly labeled Pre-release, with no general OIDC, dynamic registration or production support |
 
 Components expose deliberate Go contracts and selected web/MCP adapters. HTTP API and MCP coverage for relevant internal and external consumers is part of [capability development](docs/architecture/contracts-and-interfaces.md#internal-and-external-programmatic-coverage); current coverage is documented by each component and its examples. This does not yet mean every component operation has a network endpoint or MCP binding.
 

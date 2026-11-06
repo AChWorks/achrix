@@ -1,12 +1,22 @@
-# Optional OAuth authorization — Issue #125 candidate
+# Optional OAuth authorization — Issue #125 preview
 
-**Status: experimental / not approved for release or production.** This Go module
-is a **non-production design and interoperability candidate**; it does not
-establish an accepted permanent protocol engine, a stable API, a deployable
-identity provider or a supported public OAuth endpoint. Its author must not
-independently approve the security review. The owning decision remains
+**Status: experimental Pre-release; non-production product integration only.**
+This independent Go module can be pinned by a product for development/staging
+acceptance after a reviewed Pre-release publication. Pre-release source
+availability does **not** approve public OAuth/OIDC interoperability, a stable
+API, hosted identity-provider operation or production activation. The adopting
+product owns users, Session/Permit/ClientLookup, safe metadata enrollment,
+consent UI, HTTPS ingress, credential custody, lifecycle and rollback. Its
+author cannot independently approve a high-assurance security review. See
 [ADR-0007](../docs/decisions/ADR-0007-optional-oauth-authorization-profile.md)
 and [Issue #125](https://github.com/AChWorks/achrix/issues/125).
+
+For an opted-in **test/staging** consumer, pin the exact published
+`github.com/AChWorks/achrix/oauth@v0.1.0` Go module after verifying the
+GitHub release's Pre-release status, tag/source SHA, signed provenance,
+SBOM and compatible Core/Identity/Bridge/Audit dependencies. The product must
+still implement and validate its real integration; `go get` alone is not
+an activated issuer. This version does not claim dynamic CIMD, DCR or OIDC.
 
 The optional AChrix component owns authorization mechanics and its separate
 PostgreSQL oauth schema. Multiple explicitly configured issuers may share this
@@ -285,8 +295,10 @@ Run the focused package tests with:
 go test -C oauth -race -count=1 -timeout=90s ./...
 ~~~
 
-modules.json enumerates this proposed optional unit; no release tags
-or production activation are permitted by this candidate. The final protocol
+modules.json marks this module as an explicitly opted-in `preview`:
+an official signed source **Pre-release** is permitted only for non-production
+product integration. Public production issuer activation is not permitted by
+this preview status. The final protocol
 contract, retained-state retention/privacy policy, client lifecycle,
 AS ceremony logout, user-facing UI and **first-class URL-client onboarding**
 still require independent evidence and **author-separated HIGH_ASSURANCE**

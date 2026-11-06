@@ -186,6 +186,17 @@ The owning [Audit integration tests](../../audit/attribution_integration_test.go
 
 `.github/workflows/release.yml` is a manually dispatched preparer on canonical trusted `main`. Select one component from [modules.json](../../modules.json) and an unpublished developer version. The preparer requires successful existing `baseline` evidence for the exact source, exports the selected Go-module scope with exact tracked bytes, and produces a source archive, SPDX source inventory, component/source/run metadata, checksums and signed build/SBOM bundles.
 
+A component explicitly marked `status: candidate` cannot be released. A
+component explicitly marked `status: preview` may be prepared only for an
+**opt-in, non-production GitHub Pre-release**; `release.json` records
+`release_channel: preview`, and the publisher must set GitHub's
+`prerelease=true` and describe supported/unsupported profiles. It is not
+production-qualified, and the existing product/security/public-contract
+acceptance remains open. An unmarked official component retains the normal
+release path. Promoting a preview to production requires a separately reviewed
+owner decision and compatible test evidence; publishing a source tag never
+activates the component or changes a product deployment.
+
 Core exports its owning root files while excluding nested component modules and the separate consumer. A child exports its owning subtree, including its `go.mod` and applicable `LICENSE`; internal packages remain with their component. These component archives contain no product executable or vendored dependency implementation and are not a whole-repository development checkout. The SPDX inventory covers the selected source/manifest scope, not a deployed-runtime SBOM or every possible compatible combination. Historical whole-repository source archives retain their original bytes and scope.
 
 Core uses a root `vMAJOR.MINOR.PATCH` tag; child tags use `<module-directory>/vMAJOR.MINOR.PATCH`. The Go dependency version is the semantic version alone. `release.json` binds component, module path/directory, version, tag and artifact prefix to the exact repository source commit/tree plus preparation/baseline runs. Preparation retains the pre-v1 version policy enforced by its script; a future major/path transition needs its own compatible tooling and migration.

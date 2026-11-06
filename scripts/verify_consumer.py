@@ -36,15 +36,18 @@ def verify_sources(repository, destination):
     digest = hashlib.sha256()
     cache = Path(os.environ["GOMODCACHE"]).resolve()
     for module in modules:
-        if module.get("status") == "candidate":
-            # The candidate is compiled/tested with its source and real DB as
-            # an independent module, but has no approved public release to pin.
-            # An existing product MUST NOT silently consume its local source.
+        if module.get("status") in {"candidate", "preview"}:
+            # The baseline Notes consumer must not gain new dependencies merely
+            # because a preview is available. Opt-in previews are separately
+            # pinned/tested by their actual adopting products.
             consumer = json.loads(subprocess.check_output(
-                ["go","mod","edit","-json"],text=True))
-            if any(item["Path"]==module["path"] for item in consumer.get("Require",[])):
+                ["go", "mod", "edit", "-json"], text=True))
+            explicitly_pinned = any(
+                item["Path"] == module["path"] for item in consumer.get("Require", []))
+            if module.get("status") == "candidate" and explicitly_pinned:
                 raise ValueError("unreviewed component cannot be pinned by consumer")
-            continue
+            if not explicitly_pinned:
+                continue
         value = json.loads(subprocess.check_output(
             ["go", "list", "-m", "-json", module["path"]], text=True))
         if (value["Path"] != module["path"] or not value.get("Version", "").startswith("v0.")
@@ -63,18 +66,19 @@ def verify_sources(repository, destination):
         for name, local in sorted(local_files.items()):
             published = downloaded_files[name]
             if module["directory"] == "." and name == "modules.json":
-                # Only exact, explicitly marked unreleased candidate entries
-                # may be absent from the pinned published Core inventory.
-                # All pre-existing entries/ordering and bytes remain identical.
-                candidate_inventory = json.loads(local)
-                candidate_inventory["modules"] = [
-                    item for item in candidate_inventory["modules"]
-                    if item.get("status") != "candidate"
+                # The independently pinned Core may precede optional candidate
+                # or preview entries. Do not waive ANY other inventory drift.
+                inventory_data = json.loads(local)
+                if (json.dumps(inventory_data, indent=2) + "\n").encode() != local:
+                    raise ValueError("noncanonical component inventory")
+                existing = dict(inventory_data)
+                existing["modules"] = [
+                    item for item in inventory_data["modules"]
+                    if item.get("status") not in {"candidate", "preview"}
                 ]
-                if (json.dumps(candidate_inventory, indent=2) + "\n").encode() != published:
+                without_opt_in = (json.dumps(existing, indent=2) + "\n").encode()
+                if published not in {local, without_opt_in}:
                     raise ValueError("published Core component inventory drift")
-                if (json.dumps(json.loads(local), indent=2) + "\n").encode() != local:
-                    raise ValueError("noncanonical candidate component inventory")
                 local = published
             if local != published:
                 raise ValueError("normal consumer source drift: " + module["name"] + "/" + name)

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 // Package oauth provides an experimental, optional in-process authorization
-// server. This initial protocol/API profile is not approved for production or
-// release. A product owns its users, sessions, policy, TLS and configuration.
+// server. This preview API may be consumed by an opt-in product for development
+// and staging only; it is not approved for production. Products own users,
+// sessions, policy, TLS, metadata enrollment and configuration.
 package oauth
 
 import (

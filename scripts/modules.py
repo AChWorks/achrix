@@ -24,7 +24,7 @@ def inventory(root=ROOT):
         fields=set(module)
         if fields not in ({"name","directory","path"},{"name","directory","path","status"}):
             raise ValueError("invalid module entry")
-        if "status" in module and module["status"]!="candidate":
+        if "status" in module and module["status"] not in {"candidate", "preview"}:
             raise ValueError("unsupported component lifecycle status")
         name, directory, path = (module[k] for k in ("name", "directory", "path"))
         if not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9-]*", name):
