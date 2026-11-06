@@ -16,11 +16,22 @@ import verify_consumer
 
 
 class CandidateReleaseGateTest(unittest.TestCase):
-    def test_candidate_cannot_be_released(self):
+    def test_opted_in_preview_can_be_prepared_for_release(self):
         oauth = modules.component("oauth", modules.ROOT)
-        self.assertEqual(oauth.get("status"), "candidate")
-        with self.assertRaisesRegex(ValueError, "cannot be released"):
-            modules.release_identity("oauth", "v0.1.0", modules.ROOT)
+        self.assertEqual(oauth.get("status"), "preview")
+        module, tag, artifact = modules.release_identity("oauth", "v0.1.0", modules.ROOT)
+        self.assertEqual(module["path"], oauth["path"])
+        self.assertEqual((tag, artifact), ("oauth/v0.1.0", "achrix-oauth-v0.1.0"))
+
+    def test_unapproved_candidate_remains_blocked(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "modules.json").write_text(json.dumps({"schemaVersion": 1, "modules": [
+                {"name": "core", "directory": ".", "path": modules.MODULE_PATH},
+                {"name": "oauth", "directory": "oauth", "path": modules.MODULE_PATH + "/oauth", "status": "candidate"},
+            ]}))
+            with self.assertRaisesRegex(ValueError, "cannot be released"):
+                modules.release_identity("oauth", "v0.1.0", root)
 
 
 class InventoryTests(unittest.TestCase):
@@ -58,6 +69,22 @@ class InventoryTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     modules.inventory(self.root)
                 self.data["modules"] = original
+
+    def test_explicit_preview_status_and_invalid_status(self):
+        module = self.data["modules"][1]
+        module["status"] = "preview"
+        self.write()
+        self.assertEqual(modules.release_identity("media", "v0.1.0", self.root)[1], "media/v0.1.0")
+        module["status"] = "candidate"
+        self.write()
+        with self.assertRaisesRegex(ValueError, "cannot be released"):
+            modules.release_identity("media", "v0.1.0", self.root)
+        module["status"] = "stable"
+        self.write()
+        with self.assertRaisesRegex(ValueError, "unsupported component lifecycle status"):
+            modules.inventory(self.root)
+        del module["status"]
+        self.write()
 
     def test_source_ownership_excludes_other_modules_and_consumer(self):
         inventory = modules.inventory(self.root)

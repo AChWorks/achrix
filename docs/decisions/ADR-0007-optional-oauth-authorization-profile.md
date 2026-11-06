@@ -1,6 +1,6 @@
 # ADR-0007 — Optional OAuth authorization: interoperable profile and security gate
 
-Status: **proposed for independent review**. No permanently selected protocol engine, approved public authorization contract, official release or production activation exists. The non-production, independently unreviewed candidate is documented in [OAuth](../../oauth/README.md); it is not adopted by this ADR.
+Status: **proposed protocol contract; non-production preview permitted**. A separately reviewed, opt-in OAuth source Pre-release may be published for product integration trials; this does not adopt this proposal as a stable public authorization/OIDC contract, approve a production issuer, or close the outstanding security/product acceptance. The current preview profile and limitations are documented in [OAuth](../../oauth/README.md); see Issue #125 for actual acceptance.
 Date: 2026-11-04.
 Outcome: [OAuth/OIDC #125](https://github.com/AChWorks/achrix/issues/125), prerequisite of [Bridge #5](https://github.com/AChWorks/achrix/issues/5).
 

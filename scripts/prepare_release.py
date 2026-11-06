@@ -163,6 +163,7 @@ def main():
         "component": args.component,
         "module_path": module["path"],
         "module_directory": module["directory"],
+        "release_channel": "preview" if module.get("status") == "preview" else "standard",
         "artifact_prefix": artifact,
         "repository": REPOSITORY,
         "source_sha": source,
