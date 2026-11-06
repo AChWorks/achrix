@@ -44,6 +44,8 @@ func TestPreEnrolledCIMDCompatibility(t *testing.T) {
 		{"chatgpt_method_intersection", nil},
 		{"other_published_callback_does_not_grant_privileges", map[string]any{"redirect_uris": []string{"https://chatgpt.com/connector_platform_oauth_redirect", "https://chatgpt.com/other"}}},
 		{"cimd_none_auth_default", map[string]any{"token_endpoint_auth_methods_supported": nil, "token_endpoint_auth_method": nil, "grant_types": nil, "response_types": nil}},
+		{"unselected_future_auth_method", map[string]any{"token_endpoint_auth_methods_supported": []string{"none", "future_asymmetric_method"}, "token_endpoint_auth_method": nil}},
+		{"future_auth_preferred_but_none_available", map[string]any{"token_endpoint_auth_methods_supported": []string{"none", "future_asymmetric_method"}, "token_endpoint_auth_method": "future_asymmetric_method"}},
 	}
 	for _, tc := range positives {
 		t.Run(tc.name, func(t *testing.T) {
@@ -68,6 +70,11 @@ func TestPreEnrolledCIMDCompatibility(t *testing.T) {
 		{"only_legacy_key_preference", map[string]any{"token_endpoint_auth_methods_supported": nil}},
 		{"legacy_preference_not_supported", map[string]any{"token_endpoint_auth_methods_supported": []string{"none"}}},
 		{"shared_secret_method", map[string]any{"token_endpoint_auth_method": nil, "token_endpoint_auth_methods_supported": []string{"none", "client_secret_basic"}}},
+		{"shared_secret_post_method", map[string]any{"token_endpoint_auth_method": nil, "token_endpoint_auth_methods_supported": []string{"none", "client_secret_post"}}},
+		{"shared_secret_jwt_method", map[string]any{"token_endpoint_auth_method": nil, "token_endpoint_auth_methods_supported": []string{"none", "client_secret_jwt"}}},
+		{"empty_method_string", map[string]any{"token_endpoint_auth_method": nil, "token_endpoint_auth_methods_supported": []string{"none", ""}}},
+		{"long_method_string", map[string]any{"token_endpoint_auth_method": nil, "token_endpoint_auth_methods_supported": []string{"none", strings.Repeat("x", 129)}}},
+		{"newline_method_string", map[string]any{"token_endpoint_auth_method": nil, "token_endpoint_auth_methods_supported": []string{"none", "future\nmethod"}}},
 		{"empty_methods", map[string]any{"token_endpoint_auth_methods_supported": []string{}}},
 		{"duplicate_methods", map[string]any{"token_endpoint_auth_method": nil, "token_endpoint_auth_methods_supported": []string{"none", "none"}}},
 		{"auth_wrong_type", map[string]any{"token_endpoint_auth_methods_supported": "none"}},
@@ -129,15 +136,26 @@ func TestPreEnrolledCIMDBadDocumentsAndRegistration(t *testing.T) {
 func TestPreEnrolledCIMDDriftFailClosedViaProductLookup(t *testing.T) {
 	client := checkedClient()
 	document := checkedMetadata(t, nil)
-	approved := true
+	approved := false
+
+	// The product performs verification out of band. ClientLookup only
+	// checks a locally authoritative enrollment decision on request paths.
+	// The production source of this decision must be durable product state.
+	verifyDocument := func() error {
+		err := ValidatePreEnrolledClientMetadata(client, document)
+		if err != nil {
+			approved = false // sticky disable until explicit new approval
+		}
+		return err
+	}
+	if err := verifyDocument(); err != nil {
+		t.Fatal(err)
+	}
+	approved = true // initial operator approval
 	config := publicTestConfig()
 	config.Clients = []Client{client}
 	config.ClientLookup = func(_ context.Context, id string) (Client, error) {
 		if id != client.ID || !approved {
-			return Client{}, ErrInvalidGrant
-		}
-		if err := ValidatePreEnrolledClientMetadata(client, document); err != nil {
-			approved = false // sticky disable is product-owned, not issuer-managed
 			return Client{}, ErrInvalidGrant
 		}
 		return client, nil
@@ -150,14 +168,20 @@ func TestPreEnrolledCIMDDriftFailClosedViaProductLookup(t *testing.T) {
 		t.Fatal(err)
 	}
 	document = checkedMetadata(t, map[string]any{"redirect_uris": []string{"https://attacker.example.com/cb"}})
+	if err := verifyDocument(); !errors.Is(err, ErrConfiguration) {
+		t.Fatalf("metadata drift not detected: %v", err)
+	}
 	if _, err = s.client(context.Background(), client.ID); !errors.Is(err, ErrInvalidGrant) {
-		t.Fatalf("metadata drift admitted: %v", err)
+		t.Fatalf("disabled client admitted: %v", err)
 	}
 	document = checkedMetadata(t, nil)
+	if err := verifyDocument(); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = s.client(context.Background(), client.ID); !errors.Is(err, ErrInvalidGrant) {
 		t.Fatalf("silent auto reactivation: %v", err)
 	}
-	approved = true // explicit operator action after metadata verification
+	approved = true // explicit operator action after new verification
 	if _, err = s.client(context.Background(), client.ID); err != nil {
 		t.Fatalf("reapproved client rejected: %v", err)
 	}

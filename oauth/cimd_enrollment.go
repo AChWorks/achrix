@@ -127,7 +127,7 @@ func compatibleCIMDAuth(fields map[string]json.RawMessage) error {
 	// default client_secret_basic must not be applied to CIMD documents.
 	preferred := ""
 	if raw, present := fields["token_endpoint_auth_method"]; present {
-		if err := json.Unmarshal(raw, &preferred); err != nil || !permittedCIMDMethod(preferred) {
+		if err := json.Unmarshal(raw, &preferred); err != nil || !validDeclaredCIMDMethod(preferred) {
 			return fmt.Errorf("invalid legacy client authentication preference")
 		}
 	}
@@ -144,8 +144,8 @@ func compatibleCIMDAuth(fields map[string]json.RawMessage) error {
 	}
 	seen := make(map[string]bool, len(supported))
 	for _, method := range supported {
-		if !permittedCIMDMethod(method) || seen[method] {
-			return fmt.Errorf("unrecognized, forbidden or duplicated client authentication method")
+		if !validDeclaredCIMDMethod(method) || seen[method] {
+			return fmt.Errorf("invalid, shared-secret or duplicated client authentication method")
 		}
 		seen[method] = true
 	}
@@ -158,16 +158,21 @@ func compatibleCIMDAuth(fields map[string]json.RawMessage) error {
 	return nil
 }
 
-// The subset deliberately excludes shared-secret authentication and other
-// methods not explicitly reviewed for this pre-enrolled public-client profile.
-// Unselected methods never cause the AChrix issuer to authenticate a client.
-func permittedCIMDMethod(method string) bool {
-	switch method {
-	case "none", "private_key_jwt", "tls_client_auth", "self_signed_tls_client_auth":
-		return true
-	default:
+// The selected method is always "none". Per the CIMD draft, additional
+// unselected, well-formed methods must not invalidate a client that also
+// offers "none": doing so would gratuitously reject future asymmetric
+// methods. Shared-secret client methods are invalid for CIMD, irrespective
+// of the selected method. Neither rule enables any new token auth method.
+func validDeclaredCIMDMethod(method string) bool {
+	if len(method) == 0 || len(method) > 128 || strings.HasPrefix(method, "client_secret_") {
 		return false
 	}
+	for i := 0; i < len(method); i++ {
+		if method[i] < 0x21 || method[i] > 0x7e {
+			return false
+		}
+	}
+	return true
 }
 
 func optionalCIMDMember(fields map[string]json.RawMessage, key, required string) error {

@@ -215,9 +215,10 @@ never expand the server's immutable approved callback ceiling. For public
 URL clients it requires `none` to be an available token-auth method; a legacy
 `private_key_jwt` preference is compatible when the plural supported-methods
 array **also** offers `none`. When both method properties are absent, the
-CIMD-specific default is `none`, not `client_secret_basic`. Shared-secret
-methods, unexamined embedded JWKS, software statements, malformed, duplicate
-or oversized JSON are refused by this intentionally narrow check. Other
+CIMD-specific default is `none`, not `client_secret_basic`. Other well-formed unselected authentication methods are not enabled by
+this helper; shared-secret methods, unexamined embedded JWKS, software
+statements, malformed, duplicate or oversized JSON are refused by this
+intentionally narrow check. Other
 metadata fields, such as display names, cannot grant product permissions.
 This is **not** a general CIMD conformance verifier or dynamic registration.
 
