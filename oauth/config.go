@@ -141,13 +141,8 @@ func New(config Config) (*Server, error) {
 			return nil, fmt.Errorf("%w: invalid client authentication", ErrConfiguration)
 		}
 		for _, redirect := range c.RedirectURIs {
-			ru, e := url.Parse(redirect)
-			if e != nil || len(redirect) > 2048 || ru.Scheme != "https" || ru.Host == "" || ru.User != nil || ru.Fragment != "" || ru.Opaque != "" || ru.String() != redirect || !validHTTPHost(ru) || !validURLPath(ru, true) {
-				return nil, fmt.Errorf("%w: registered redirect must be exact HTTPS", ErrConfiguration)
-			}
-			query, e := url.ParseQuery(ru.RawQuery)
-			if e != nil || query.Has("code") || query.Has("iss") || query.Has("state") || query.Has("error") || query.Has("error_description") {
-				return nil, fmt.Errorf("%w: callback query conflicts with protocol", ErrConfiguration)
+			if err := validateRegisteredRedirect(redirect); err != nil {
+				return nil, fmt.Errorf("%w: %w", ErrConfiguration, err)
 			}
 		}
 		if slices.Contains(c.Scopes, "") || slices.Contains(c.Scopes, "openid") {
@@ -211,6 +206,23 @@ func (s *Server) client(ctx context.Context, id string) (Client, error) {
 	current.RedirectURIs = slices.Clone(current.RedirectURIs)
 	current.Scopes = slices.Clone(current.Scopes)
 	return current, nil
+}
+
+// validateRegisteredRedirect is shared by issuer configuration and the
+// operator-side metadata check: their callback syntax must not drift apart.
+func validateRegisteredRedirect(redirect string) error {
+	ru, err := url.Parse(redirect)
+	if err != nil || len(redirect) > 2048 || ru.Scheme != "https" || ru.Host == "" ||
+		ru.User != nil || ru.Fragment != "" || ru.Opaque != "" ||
+		ru.String() != redirect || !validHTTPHost(ru) || !validURLPath(ru, true) {
+		return errors.New("registered redirect must be exact HTTPS")
+	}
+	query, err := url.ParseQuery(ru.RawQuery)
+	if err != nil || query.Has("code") || query.Has("iss") || query.Has("state") ||
+		query.Has("error") || query.Has("error_description") {
+		return errors.New("callback query conflicts with protocol")
+	}
+	return nil
 }
 
 // validURLPath forbids dot segments, doubled separators and encoded paths
