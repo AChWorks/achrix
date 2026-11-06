@@ -29,7 +29,11 @@ golang.org/x/oauth2 client to exercise a real code exchange.
 - RFC 8414 issuer metadata; pre-enrolled public or client_secret_basic
   confidential clients; single HTTPS issuer and sole configured RFC 8707
   resource; Authorization Code plus mandatory PKCE S256 and exact registered
-  redirect URI.
+  redirect URI. A **pre-enrolled public URL client ID** (e.g. the operator-approved
+  `https://chatgpt.com/oauth/client.json`) may be used directly without a
+  staging alias, but only if the product has already verified and enrolled its
+  canonical metadata document and precise callback. This is the
+  *pre-registration* mode of the CIMD Internet-Draft, not dynamic discovery.
 - Product-attested active Identity session and one-use, expiry-bounded consent
   transaction with independent server-side CSRF and strict POST Origin checking.
   Product-provided RenderConsent displays the consent UI in its own language,
@@ -57,18 +61,20 @@ golang.org/x/oauth2 client to exercise a real code exchange.
   database backups, privilege controls, TLS ingress and secrets belong to
   the product/operator.
 
-There is **no** OIDC, ID token, JWT/JWKS, userinfo, CIMD/DCR, dynamic client
-registration, automatic consent, central login or mandatory hosted IdP. Local
-product authentication remains independent. This implementation deliberately
-does not claim production protocol compliance or full real-world AI-client
-onboarding from compilation, metadata or a fixture.
+There is **no** OIDC, ID token, JWT/JWKS, userinfo, **automatic/unregistered**
+CIMD client discovery, DCR, dynamic client registration, `private_key_jwt`,
+automatic consent, central login or mandatory hosted IdP. Only explicitly
+pre-enrolled URL identifiers are supported; the issuer **never fetches a URL
+supplied by an OAuth request**. Local product authentication remains independent.
+This implementation deliberately does not claim production protocol compliance
+or full real-world AI-client onboarding from compilation, metadata or a fixture.
 
 
 ## Concrete protocol/engine responsibility map (candidate, not a public contract)
 
 | Operation | ZITADEL v3.51.17 is authoritative for | AChrix/product remains responsible for |
 | --- | --- | --- |
-| Authorization request | `op.ValidateAuthRequestClient`: registered callback, response type, client scope eligibility, code challenge method | Exact RFC 8707 resource, mandatory S256 (SDK also permits `plain`), reject unknown/duplicate parameters and unsupported OIDC scopes, current Identity session/Permit, product consent UI and one-use CSRF |
+| Authorization request | `op.ValidateAuthRequestClient`: registered callback, response type, client scope eligibility, code challenge method | Exact RFC 8707 resource, mandatory S256 (SDK also permits `plain`), ignore unrecognized authorization parameters (RFC 6749 §3.1), reject duplicate supported parameters and unsupported OIDC scopes, current Identity session/Permit, product consent UI and one-use CSRF |
 | Client authentication | SDK request parsing and Code/Refresh validators, RFC 6749 Basic decoding and `AuthorizeClientIDSecret` with live `ClientLookup` and AChrix-supplied constant-time digest check | Restrict methods to the *advertised* Basic-or-none profile: reject credential-in-form, public Basic, confidential missing Basic and mixed identity; apply immutable registration ceiling |
 | Code exchange | `op.ParseAccessTokenRequest` + `op.ValidateAccessTokenRequest`: client, stored code, redirect and S256 verification **once** | Short-lived opaque code minting at consent; inside a PostgreSQL row lock, compare the already validated code snapshot against the durable record, recheck live Permit and atomically consume/issue |
 | Refresh | `op.ParseRefreshTokenRequest` + `op.ValidateRefreshTokenRequest`: registered client and scopes | Original issuer/resource/grant/user binding; PostgreSQL row locks, replay-family revocation, absolute lifetime, live rights and hashed opaque token rotation |
@@ -121,6 +127,23 @@ callback and a protected Diagnostic sink. The caller owns pool.Close() and schem
   reductions are checked on every request. It must not return sensitive causes
   into an HTTP response. Product access rights remain narrower than OAuth
   grants even when the token is cryptographically valid.
+- **Pre-enrolled CIMD URL clients** must use a canonical HTTPS `Client.ID`
+  naming a metadata document on a publicly named DNS host, without userinfo,
+  query, fragment, port or encoded/dot-segment path. Only public-client `none`
+  authentication is implemented for this subset. The trusted product/operator
+  must obtain the document over validated HTTPS **before enrollment** and
+  verify its exact `client_id`, declared `redirect_uris`, public authentication
+  method (`none`), response/grant compatibility and current owner approval;
+  configure only the exact checked callback(s) and allowed scope ceiling.
+  It must periodically revalidate this external metadata out of band and
+  disable/re-enroll the client on incompatible changes. The issuer will not
+  dynamically fetch metadata, follow redirects, crawl arbitrary URLs, trust
+  metadata from the OAuth request, or grant privileges beyond the immutable
+  enrollment ceiling. When at least one such client is enrolled, issuer
+  metadata advertises `client_id_metadata_document_supported: true`; it
+  means **trusted pre-registration only**, not open CIMD enrollment. This
+  limited mode intentionally avoids request-driven SSRF and DNS rebinding.
+  See [CIMD draft §9.2](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-03).
 - The consumer implements Bridge Verify through
   issuer.VerifyAccess(ctx, exactResourceURL, bearer) and maps an invalid
   grant to bridge.ErrInvalidCredential. It retains Bridge Admit and
@@ -174,8 +197,11 @@ and SameSite cookie behavior.
 
 ## Development verification
 
-Use an isolated **PostgreSQL 18.6** database named achrix_oauth_test,
-configured as ACHRIX_OAUTH_TEST_DSN. Set ACHRIX_OAUTH_TEST_ROOT to the
+Production migration accepts UTF8 PostgreSQL **18.6 or later patch releases
+within major 18**; newer majors require separate qualification, and older 18.x
+releases are rejected. Production does not lock an exact minor patch number.
+CI remains reproducibly pinned to 18.6. Use an isolated **PostgreSQL 18.6**
+database named achrix_oauth_test, configured as ACHRIX_OAUTH_TEST_DSN. Set ACHRIX_OAUTH_TEST_ROOT to the
 absolute task-owned private (mode 0700) cluster directory containing its
 mode 0700 socket subdirectory; only this root's Unix socket and the exact
 test database name/version may be used for destructive fixtures. Running
@@ -193,8 +219,12 @@ go test -C oauth -race -count=1 -timeout=90s ./...
 modules.json enumerates this proposed optional unit; no release tags
 or production activation are permitted by this candidate. The final protocol
 contract, retained-state retention/privacy policy, client lifecycle,
-AS ceremony logout, user-facing UI and real client onboarding still require
-independent evidence and **author-separated HIGH_ASSURANCE** review.
+AS ceremony logout, user-facing UI and **first-class URL-client onboarding**
+still require independent evidence and **author-separated HIGH_ASSURANCE**
+review. Actual ChatGPT and Claude OAuth/MCP tests on a disposable QA endpoint
+used an explicitly pinned test-only CIMD alias before the first-class
+pre-enrolled URL client candidate existed; those tests **do not yet prove**
+native ChatGPT onboarding with the first-class URL client registration.
 
 ## Unfinished acceptance boundaries
 

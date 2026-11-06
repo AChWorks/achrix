@@ -227,7 +227,7 @@ type sdkEngine struct {
 
 func newSDKEngine(s *Server) *sdkEngine {
 	decoder := schema.NewDecoder()
-	decoder.IgnoreUnknownKeys(true) // Ingress first rejects unsupported wire parameters.
+	decoder.IgnoreUnknownKeys(true) // OAuth form ingress validates its recognized token parameters separately.
 	return &sdkEngine{store: &sdkStorage{s: s}, decoder: decoder}
 }
 
