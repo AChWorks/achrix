@@ -195,6 +195,67 @@ onboarding implementation. A product still needs an independently reviewed
 interactive login/continuation and consent UI, including cross-site navigation
 and SameSite cookie behavior.
 
+## Operator-managed CIMD metadata compatibility and drift
+
+Products enrolling pre-approved URL clients may call
+`oauth.ValidatePreEnrolledClientMetadata(client, trustedJSON)` on the
+**operator-controlled intake/revalidation path**, *before* constructing the
+configured Server. The input is an already-approved `oauth.Client` and at most
+64 KiB of UTF-8 JSON from that client's exact metadata-document URL. The
+helper performs **no network requests**, no DNS lookup or redirects, no
+registration, no durable writes and no operator approval. It returns
+`oauth.ErrConfiguration` (with a safe operator-oriented explanation) when
+the document is incompatible. It is not a substitute for `oauth.New` client
+configuration validation or the product's authenticated operator approval.
+
+The compatibility check requires the exact `client_id`, every **operator
+enrolled** callback in the document's declared redirect set, and the
+first-profile authorization-code capabilities. Extra published callbacks
+never expand the server's immutable approved callback ceiling. For public
+URL clients it requires `none` to be an available token-auth method; a legacy
+`private_key_jwt` preference is compatible when the plural supported-methods
+array **also** offers `none`. When both method properties are absent, the
+CIMD-specific default is `none`, not `client_secret_basic`. Other well-formed unselected authentication methods are not enabled by
+this helper; shared-secret methods, unexamined embedded JWKS, software
+statements, malformed, duplicate or oversized JSON are refused by this
+intentionally narrow check. Other
+metadata fields, such as display names, cannot grant product permissions.
+This is **not** a general CIMD conformance verifier or dynamic registration.
+
+The owning product/operator must additionally:
+
+1. Authorize the exact client URL and account/registration approval out of
+   band. Fetch over validated HTTPS with a bounded size and time, strict TLS
+   trust, no unsafe redirect, no private/loopback/link-local/resolved address
+   access or DNS-rebinding exposure; never fetch an unknown URL during an
+   OAuth request. Confirm the document source, ownership and any unsupported
+   metadata fields before deciding the scope/callback ceiling.
+2. Keep the approved callback(s), selected method, scoped privileges,
+   operator/approval record, observed metadata fingerprint/time, and a
+   deliberate revalidation policy in **product-owned durable state**. AChrix
+   does not introduce a second registration database.
+3. Revalidate independently of authorization requests and evaluate both
+   compatibility and the product's previously approved metadata baseline.
+   On incompatible or unapproved change, or when source trust/revalidation
+   policy fails, make authoritative `ClientLookup` reject/disable the client
+   **persistently**. A later healthy fetch does not silently re-enable it.
+   Only an explicit new approval may restore it. Existing access/refresh
+   grants are subject to current client state on every protected use; product
+   logout must not independently revoke them. If policy requires revocation,
+   use explicit Disconnect/revocation rather than treating a failed fetch
+   as a user logout.
+4. Preserve protected evidence of the decision and failure cause without
+   leaking response bodies, secrets, OAuth codes or tokens into public
+   responses/logs. Plan enrollment recovery, metadata drift response and
+   client credential lifecycle before any public release.
+
+A unit regression exercises this contract with a product-owned
+`ClientLookup`: validated metadata admits the client; a removed callback
+disables it; restoring metadata alone does **not** revive it without an
+explicit product approval. A real product intake workflow and safe network
+retrieval remain separately owned release acceptance, not work performed
+by this helper.
+
 ## Development verification
 
 Production migration accepts UTF8 PostgreSQL **18.6 or later patch releases
@@ -221,10 +282,10 @@ or production activation are permitted by this candidate. The final protocol
 contract, retained-state retention/privacy policy, client lifecycle,
 AS ceremony logout, user-facing UI and **first-class URL-client onboarding**
 still require independent evidence and **author-separated HIGH_ASSURANCE**
-review. Actual ChatGPT and Claude OAuth/MCP tests on a disposable QA endpoint
-used an explicitly pinned test-only CIMD alias before the first-class
-pre-enrolled URL client candidate existed; those tests **do not yet prove**
-native ChatGPT onboarding with the first-class URL client registration.
+review. Actual native-client OAuth/MCP onboarding and tool acceptance evidence is
+bound to its exact disposable test issuer, build and date in Issue #125;
+it cannot establish a stable public protocol contract or production
+readiness merely because a synthetic or native QA fixture passes.
 
 ## Unfinished acceptance boundaries
 
