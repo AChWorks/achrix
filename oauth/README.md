@@ -144,6 +144,14 @@ callback and a protected Diagnostic sink. The caller owns pool.Close() and schem
   means **trusted pre-registration only**, not open CIMD enrollment. This
   limited mode intentionally avoids request-driven SSRF and DNS rebinding.
   See [CIMD draft §9.2](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-03).
+  Section 9.2 explicitly permits operator pre-registration without request-time
+  retrieval; the issuer's discovery flag signals this **restricted URL-ID
+  capability**, not admission of arbitrary metadata URLs. The issuer omits
+  the flag when no enabled URL client is configured. A real HTTPS/PostgreSQL
+  regression checks discovery, a trusted-document compatibility decision,
+  rejection of unregistered URL IDs, and the registered URL's
+  authorization-code/refresh flow. It does not prove automatic CIMD enrollment
+  or establish a stable public contract for all ChatGPT/Claude configurations.
 - The consumer implements Bridge Verify through
   issuer.VerifyAccess(ctx, exactResourceURL, bearer) and maps an invalid
   grant to bridge.ErrInvalidCredential. It retains Bridge Admit and
