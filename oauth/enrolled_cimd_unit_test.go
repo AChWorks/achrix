@@ -34,6 +34,9 @@ func TestEnrolledCIMDClientIDValidation(t *testing.T) {
 		{"https://private.internal/oauth/client.json", false},
 		{"https://user@chatgpt.com/oauth/client.json", false},
 		{"https://chatgpt.com:443/oauth/client.json", false},
+		{"https://chatgpt.com:/oauth/client.json", false}, // empty explicit port must not be canonical
+		{"https://chatgpt.com:/oauth/client.json?", false},
+		{"https://chatgpt.com/oauth/client.json?", false}, // empty query delimiter is still a query
 		{"https://chatgpt.com/oauth/client.json?key=x", false},
 		{"https://chatgpt.com/oauth/client.json#fragment", false},
 		{"https://chatgpt.com/a/../oauth/client.json", false},

@@ -273,9 +273,14 @@ func validClientID(id string) bool {
 	}
 	if strings.HasPrefix(id, "https://") {
 		u, err := url.Parse(id)
+		// A parsed field being empty is not enough to establish absence
+		// of its delimiter: net/url preserves both a trailing '?' via
+		// ForceQuery and a trailing ':' in Host while Port() is empty.
+		// Compare DNS authority to the hostname as written rather than
+		// rewriting the exact registered client ID.
 		if err != nil || u.String() != id || u.Scheme != "https" ||
-			u.Host == "" || u.Port() != "" || u.User != nil ||
-			u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" ||
+			u.Host == "" || u.Host != u.Hostname() || u.User != nil ||
+			u.ForceQuery || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" ||
 			u.Path == "" || u.Path == "/" || !validURLPath(u, false) ||
 			!validHTTPHost(u) || net.ParseIP(u.Hostname()) != nil ||
 			!strings.Contains(u.Hostname(), ".") ||
