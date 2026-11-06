@@ -274,6 +274,41 @@ func (f *fixture) tokens(client, secret, grantType, value string) TokenResponse 
 func TestPreEnrolledURLClientCodeRefreshAndIssuerBinding(t *testing.T) {
 	f := newFixture(t)
 	const id = "https://chatgpt.com/oauth/client.json"
+
+	// Pre-registration checks an operator-supplied document outside the
+	// OAuth request path; discovery only signals this approved URL-ID mode.
+	doc := checkedMetadata(t, map[string]any{"redirect_uris": []string{testCallback}})
+	if err := ValidatePreEnrolledClientMetadata(f.srv.clients[id], doc); err != nil {
+		t.Fatalf("pre-enrolled client metadata incompatible: %v", err)
+	}
+	discovery := f.mustReq(http.MethodGet, f.srv.MetadataPath(), "", "")
+	if discovery.StatusCode != http.StatusOK {
+		t.Fatalf("HTTPS issuer discovery failed: %d", discovery.StatusCode)
+	}
+	var metadata map[string]any
+	if err := json.NewDecoder(discovery.Body).Decode(&metadata); err != nil {
+		t.Fatal(err)
+	}
+	if metadata["issuer"] != f.web.URL || metadata["client_id_metadata_document_supported"] != true {
+		t.Fatalf("pre-registered URL support not truthfully discoverable: issuer=%v CIMD=%v",
+			metadata["issuer"], metadata["client_id_metadata_document_supported"])
+	}
+	methods, ok := metadata["token_endpoint_auth_methods_supported"].([]any)
+	if !ok || !slices.Contains(methods, any("none")) || slices.Contains(methods, any("private_key_jwt")) {
+		t.Fatalf("discovery advertises wrong URL client authentication methods: %v", methods)
+	}
+	for _, unsupported := range []string{"registration_endpoint", "userinfo_endpoint", "jwks_uri"} {
+		if _, advertised := metadata[unsupported]; advertised {
+			t.Fatalf("unimplemented endpoint advertised: %s", unsupported)
+		}
+	}
+	// Even when URL-client support is advertised, an otherwise canonical but
+	// unregistered URL must not be accepted or dynamically enrolled.
+	unknown := f.mustReq(http.MethodGet, authURL(f, "https://unknown.example.com/client.json"), "", "alice")
+	if unknown.StatusCode != http.StatusBadRequest || unknown.Header.Get("Location") != "" {
+		t.Fatalf("unregistered CIMD URL admitted or redirected: status=%d", unknown.StatusCode)
+	}
+
 	code, _ := f.consent(id, "alice")
 	// A different, otherwise valid public client cannot redeem this code.
 	if other := f.tokenCall("public.example", "", "authorization_code", code); other.StatusCode != http.StatusBadRequest {
