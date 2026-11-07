@@ -525,6 +525,201 @@ async function pickerProof({page,endpoint,asset,probe,selectable,nonMedia=false,
   await root.evaluate(node=>node.remove());
 }
 
+// Exercise the published widget on a real authenticated HTTPS Media/Admin
+// page with a deliberately test-only, site-bound BFF simulation. The two
+// aliases delegate back to the real Media service, then narrow their metadata
+// to separate declared site identities. Product-owned authorization/routing is
+// NOT supplied or claimed by this Foundation browser test.
+async function pickerEndpointProof({page,endpoint,assets,probe}) {
+  const before=await probe();
+  const routes={
+    a:"/admin/sites/site/site-a/media/picker",
+    b:"/admin/sites/site/site-b/media/picker"
+  };
+  const data={a:assets[0],b:assets[1]};
+  const observed=[];
+  const network=[];
+  const observeRequest=request=>{
+    const path=new URL(request.url()).pathname;
+    if(path.includes("/media/picker")) network.push(path);
+  };
+  page.on("request",observeRequest);
+  let hold=null;
+  const pendingReleases=[];
+  const handler=async route=>{
+    const request=route.request(), url=new URL(request.url());
+    const entry=Object.entries(routes).find(([,root])=>url.pathname.startsWith(root+"/"));
+    assert(entry && url.origin===endpoint.origin && request.method()==="GET",
+      "test BFF only accepts exact same-origin site-bound GET");
+    const [site,root]=entry, suffix=url.pathname.slice(root.length);
+    assert(["/messages","/page","/asset/"+assets[0].id,"/asset/"+assets[1].id].includes(suffix),
+      "test BFF cannot invent another Media operation");
+    observed.push({site,path:url.pathname,method:request.method()});
+    let delayed=false;
+    if(hold && hold.path===url.pathname) {
+      const pending=hold; hold=null;
+      delayed=true;
+      pending.started();
+      await pending.resume;
+    }
+    try {
+      if(suffix.startsWith("/asset/") && suffix!=="/asset/"+data[site].id) {
+        await route.fulfill({status:404,contentType:"application/json",body:'{"code":"not_found"}'});
+        return;
+      }
+      const upstream=await route.fetch({url:endpoint.origin+"/admin/media/picker"+suffix});
+      if(suffix==="/page" && upstream.ok()) {
+        const payload=await upstream.json();
+        assert(Array.isArray(payload.assets) && payload.assets.some(a=>a.id===data[site].id),
+          "test alias must delegate to authenticated, actual ready Media data");
+        await route.fulfill({response:upstream,contentType:"application/json",
+          body:JSON.stringify({assets:payload.assets.filter(a=>a.id===data[site].id),next_cursor:""})});
+      } else {
+        await route.fulfill({response:upstream});
+      }
+    } catch(error) {
+      // A cancelled stale request cannot be fulfilled after endpoint change.
+      if(!delayed) throw error;
+    }
+  };
+  await page.route("**/admin/sites/site/*/media/picker/**",handler);
+  const arm=path=>{
+    let seen,release;
+    const started=new Promise(resolve=>{seen=resolve;});
+    const resume=new Promise(resolve=>{release=resolve;});
+    hold={path,started:seen,resume};
+    pendingReleases.push(release);
+    return {started,release};
+  };
+  try {
+    await page.evaluate(roots=>{
+      window.__achrixScopedEvents={a:[],b:[]};
+      for(const site of ["a","b"]) {
+        const picker=document.createElement("achrix-media-picker");
+        picker.id="achrix-scoped-"+site;
+        picker.setAttribute("endpoint",roots[site]);
+        picker.addEventListener("achrix:media-selected",event=>
+          window.__achrixScopedEvents[site].push(event.detail));
+        document.body.append(picker);
+      }
+    },routes);
+    const a=page.locator("#achrix-scoped-a"),b=page.locator("#achrix-scoped-b");
+    await a.locator("summary").waitFor();
+    await b.locator("summary").waitFor();
+    await a.locator("summary").click();
+    await b.locator("summary").click();
+    await a.locator("li button").first().waitFor();
+    await b.locator("li button").first().waitFor();
+    assert.equal(await a.locator("li button").count(),1,"A has only A's scoped result");
+    assert.equal(await b.locator("li button").count(),1,"B has only B's scoped result");
+    assert((await a.locator("li button").innerText()).includes(data.a.filename));
+    assert((await b.locator("li button").innerText()).includes(data.b.filename));
+    assert(!(await a.innerText()).includes(data.b.filename) &&
+      !(await b.innerText()).includes(data.a.filename),
+      "concurrent component instances must never show the other's result");
+
+    // A simulated BFF enforces exact-site selection, even when guessed by ID.
+    const forbidden=await page.evaluate(async ({root,id})=>{
+      const response=await fetch(root+"/asset/"+id,{credentials:"same-origin",cache:"no-store"});
+      return {status:response.status,body:await response.text()};
+    },{root:routes.a,id:data.b.id});
+    assert.equal(forbidden.status,404);
+    assert(!forbidden.body.includes(data.b.filename),"foreign choice contains no metadata");
+
+    const chooseA=page.waitForResponse(r=>new URL(r.url()).pathname===routes.a+"/asset/"+data.a.id);
+    const chooseB=page.waitForResponse(r=>new URL(r.url()).pathname===routes.b+"/asset/"+data.b.id);
+    await Promise.all([a.locator("li button").click(),b.locator("li button").click()]);
+    assert.equal((await chooseA).status(),200);
+    assert.equal((await chooseB).status(),200);
+    await page.waitForFunction(()=>window.__achrixScopedEvents.a.length===1&&window.__achrixScopedEvents.b.length===1);
+    assert.deepEqual((await page.evaluate(()=>window.__achrixScopedEvents)).a.map(v=>v.id),[data.a.id]);
+    assert.deepEqual((await page.evaluate(()=>window.__achrixScopedEvents)).b.map(v=>v.id),[data.b.id]);
+
+    // Switching a root while a list response is in flight must not display
+    // stale content or overwrite the next site's controller/visible state.
+    const delayedPage=arm(routes.a+"/page");
+    await a.locator("summary").click();
+    await delayedPage.started;
+    await a.evaluate((element,root)=>element.setAttribute("endpoint",root),routes.b);
+    delayedPage.release();
+    await a.locator("summary").waitFor();
+    await a.locator("summary").click();
+    await a.locator("li button").first().waitFor();
+    assert((await a.innerText()).includes(data.b.filename));
+    assert(!(await a.innerText()).includes(data.a.filename),
+      "late page from previous endpoint cannot overwrite new root");
+    assert.deepEqual((await page.evaluate(()=>window.__achrixScopedEvents)).a.map(v=>v.id),[data.a.id],
+      "endpoint switch must never implicitly select");
+
+    // A stale exact selection must not emit an event after the root changes.
+    await a.evaluate((element,root)=>element.setAttribute("endpoint",root),routes.a);
+    await a.locator("summary").waitFor();
+    await a.locator("summary").click();
+    await a.locator("li button").first().waitFor();
+    const delayedChoice=arm(routes.a+"/asset/"+data.a.id);
+    await a.locator("li button").first().click();
+    await delayedChoice.started;
+    await a.evaluate((element,root)=>element.setAttribute("endpoint",root),routes.b);
+    delayedChoice.release();
+    await a.locator("summary").waitFor();
+    assert.deepEqual((await page.evaluate(()=>window.__achrixScopedEvents)).a.map(v=>v.id),[data.a.id],
+      "late selection was incorrectly dispatched");
+    await a.locator("summary").click();
+    await a.locator("li button").first().waitFor();
+    await a.locator("li button").first().click();
+    await page.waitForFunction(()=>window.__achrixScopedEvents.a.length===2);
+    assert.deepEqual((await page.evaluate(()=>window.__achrixScopedEvents)).a.map(v=>v.id),
+      [data.a.id,data.b.id],"new endpoint's own selection must remain possible");
+
+    // The catalog response is also fenced; an old locale response must
+    // never initialize or relabel a newly selected site.
+    const delayedCatalog=arm(routes.a+"/messages");
+    await a.evaluate((element,root)=>element.setAttribute("endpoint",root),routes.a);
+    await delayedCatalog.started;
+    await a.evaluate((element,root)=>element.setAttribute("endpoint",root),routes.b);
+    delayedCatalog.release();
+    await a.locator("summary").waitFor();
+    assert.equal(await a.evaluate(node=>node.root),routes.b);
+    assert.equal(await a.locator("summary").innerText(),
+      endpoint.language==="fa"?"انتخاب فایل موجود":"Choose an existing file");
+
+    // Invalid endpoint syntax may not fall back to the global default, touch
+    // the network, or be browser-normalized into another application's route.
+    const malformed=["","//evil.example/path","https://evil.example/path",
+      "/admin/../media/picker","/admin/./media/picker","/admin//media/picker",
+      "/admin/%2e%2e/media/picker","/admin/media/picker?x=1",
+      "/admin/media/picker#x","/admin\\media/picker",
+      "/admin/media/picker/","/admin/media/picker;next"];
+    const beforeInvalid=network.length;
+    for(const invalid of malformed) {
+      await b.evaluate((element,root)=>element.setAttribute("endpoint",root),invalid);
+      assert.equal(await b.locator('p[role="alert"]').count(),1,"invalid path fails closed");
+      assert.equal(await b.locator("summary").count(),0,"invalid root cannot open picker");
+    }
+    assert.equal(network.length,beforeInvalid,"invalid endpoint must send no Media request or default fallback");
+    await b.evaluate((element,root)=>element.setAttribute("endpoint",root),routes.b);
+    await b.locator("summary").waitFor();
+    // Reconnect while a valid page is open resets per-instance state and
+    // reloads its own authenticated Media catalog.
+    await b.evaluate(node=>{node.remove();document.body.append(node);});
+    await b.locator("summary").waitFor();
+    assert(observed.some(v=>v.site==="a"&&v.path.endsWith("/messages")) &&
+      observed.some(v=>v.site==="b"&&v.path.endsWith("/messages")));
+    sameState(before,await probe(),"two endpoint-scoped pickers do not mutate private Media");
+  } finally {
+    // A failed assertion must not leave a delayed route unresolved.
+    for(const release of pendingReleases) release();
+    hold=null;
+    await page.unroute("**/admin/sites/site/*/media/picker/**",handler);
+    page.off("request",observeRequest);
+    await page.evaluate(()=>{
+      document.querySelector("#achrix-scoped-a")?.remove();
+      document.querySelector("#achrix-scoped-b")?.remove();
+      delete window.__achrixScopedEvents;
+    });
+  }
+}
+
 async function mediaFlow({page,navigate,responseSubmit,request,csrf,probe,endpoint,fa,context,images,files}) {
   await navigate("/admin/media");
   assert.equal(await page.locator("#media-empty").isVisible(),true,"real empty library");
@@ -563,6 +758,7 @@ async function mediaFlow({page,navigate,responseSubmit,request,csrf,probe,endpoi
   assert.equal(await jpegRow.locator("bdi").first().innerText(),jpegName,"stored markup-like filename rendered as text");
   assert.equal(await jpegRow.locator("img,svg,[onerror]").count(),0,"module-owned refreshed DOM uses contextual escaping");
   await pickerProof({page,endpoint,asset:second,probe,selectable:true});
+  await pickerEndpointProof({page,endpoint,assets:[first,second],probe});
   // These are original owned files, not preview/conversion outputs of Media.
   // Chromium itself produces complete WebP/WebM fixtures for this pinned test.
   const nativeFiles=await page.evaluate(async ()=>{

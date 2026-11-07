@@ -2,7 +2,15 @@
 "use strict";
 (() => {
   if (customElements.get("achrix-media-picker")) return;
-  const root = "/admin/media/picker";
+  const defaultRoot = "/admin/media/picker";
+  // A literal, same-origin absolute path, never an URL or browser-normalized path.
+  // Forbid encoded/ambiguous separators, dot segments, queries and fragments.
+  const endpointPattern = /^\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/;
+  const endpointRoot = element => {
+    const value = element.getAttribute("endpoint");
+    return value === null ? defaultRoot :
+      value.length <= 256 && endpointPattern.test(value) ? value : null;
+  };
   const idPattern = /^[A-Z2-7]{26}$/;
   const cursorPattern = /^[A-Za-z0-9_-]{36}$/;
   const mimePattern = /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/;
@@ -24,23 +32,62 @@
     a.state === "ready";
 
   class MediaPicker extends HTMLElement {
+    static get observedAttributes() { return ["endpoint"]; }
+    attributeChangedCallback(_name, oldValue, newValue) {
+      if (oldValue === newValue) return;
+      this.reset();
+      if (this.isConnected) this.connectedCallback();
+    }
     connectedCallback() {
       if (this.initialized || this.initializing) return;
+      const root = endpointRoot(this);
+      if (!root) {
+        this.showError("service_unavailable");
+        return;
+      }
+      const generation = this.generation || 0;
+      this.root = root;
       this.initializing = true;
-      this.initialize().finally(() => { this.initializing = false; });
+      this.initialize(root, generation).finally(() => {
+        if (this.generation === generation) this.initializing = false;
+      });
     }
-    async initialize() {
+    disconnectedCallback() { this.reset(); }
+    reset() {
+      this.generation = (this.generation || 0) + 1;
+      if (this.controller) this.controller.abort();
+      if (this.catalogController) this.catalogController.abort();
+      this.controller = null;
+      this.catalogController = null;
+      this.root = null;
+      this.initialized = false;
+      this.initializing = false;
+      this.busy = false;
+      this.replaceChildren();
+    }
+    current(root, generation) {
+      return this.isConnected && this.generation === generation && this.root === root;
+    }
+    showError(key) {
+      const notice = make("p", window.AChrixI18n.text("admin", key));
+      notice.setAttribute("role", "alert");
+      this.replaceChildren(notice);
+    }
+    async initialize(root, generation) {
+      const controller = new AbortController();
+      this.catalogController = controller;
       try {
         // The Admin shell only sends the active surface's browser domain.
         // Get Media-owned messages through its authenticated, request-local
         // catalog rather than assuming a product page embeds that domain.
         const response = await fetch(root + "/messages", {
           method: "GET", credentials: "same-origin", mode: "same-origin", redirect: "error",
-          referrerPolicy: "no-referrer", cache: "no-store", headers: {Accept: "application/json"}
+          referrerPolicy: "no-referrer", cache: "no-store", headers: {Accept: "application/json"},
+          signal: controller.signal
         });
         if (!response.ok) throw new Error(response.status === 403 ? "denied" : "unavailable");
         const payload = await response.json();
-        if (!this.isConnected) return;
+        if (!this.current(root, generation)) return;
         if (!payload || payload.locale !== document.documentElement.lang ||
             !payload.messages || typeof payload.messages !== "object" ||
             messageKeys.some(key => typeof payload.messages[key] !== "string" ||
@@ -51,14 +98,13 @@
         this.mount();
         this.initialized = true;
       } catch (error) {
-        if (!this.isConnected) return;
+        if (!this.current(root, generation)) return;
         // This fallback exists in every Admin surface, including non-Media
         // pages. Never silently substitute English for the selected locale.
-        const key = error.message === "denied" ? "permission_denied" :
-          error.message === "locale" ? "locale_unavailable" : "service_unavailable";
-        const notice = make("p", window.AChrixI18n.text("admin", key));
-        notice.setAttribute("role", "alert");
-        this.replaceChildren(notice);
+        this.showError(error.message === "denied" ? "permission_denied" :
+          error.message === "locale" ? "locale_unavailable" : "service_unavailable");
+      } finally {
+        if (this.catalogController === controller) this.catalogController = null;
       }
     }
     text(key) { return this.words[key]; }
@@ -101,10 +147,7 @@
         }
       });
     }
-    disconnectedCallback() {
-      if (this.controller) this.controller.abort();
-    }
-    async request(path) {
+    async request(path, root, generation) {
       if (this.controller) this.controller.abort();
       const controller = new AbortController();
       this.controller = controller;
@@ -120,7 +163,7 @@
           throw new Error(code === "permission_denied" ? "denied" : code === "not_found" ? "stale" : "unavailable");
         }
         const data = await response.json();
-        if (this.controller !== controller || !this.isConnected || !this.details.open) return null;
+        if (this.controller !== controller || !this.current(root, generation) || !this.details.open) return null;
         return data;
       } finally {
         clearTimeout(timeout);
@@ -134,13 +177,14 @@
     async page(cursor) {
       if (this.busy || !this.details.open) return;
       if (cursor && !cursorPattern.test(cursor)) { this.message("unavailable"); return; }
+      const root = this.root, generation = this.generation;
       this.busy = true;
       this.refresh.disabled = true;
       this.next.disabled = true;
       this.message("loading");
       try {
-        const data = await this.request("/page" + (cursor ? "/" + cursor : ""));
-        if (!data) return;
+        const data = await this.request("/page" + (cursor ? "/" + cursor : ""), root, generation);
+        if (!data || !this.current(root, generation)) return;
         if (!Array.isArray(data.assets) || data.assets.length > 25 ||
             typeof data.next_cursor !== "string" ||
             (data.next_cursor && !cursorPattern.test(data.next_cursor)) ||
@@ -165,22 +209,26 @@
         this.next.hidden = !this.nextCursor;
         this.message(this.list.childElementCount ? "ready" : "empty");
       } catch (error) {
+        if (!this.current(root, generation)) return;
         if (error.name !== "AbortError") this.message(error.message === "denied" ? "denied" : "unavailable");
         this.list.replaceChildren();
         this.next.hidden = true;
       } finally {
-        this.busy = false;
-        this.refresh.disabled = false;
-        this.next.disabled = false;
+        if (this.current(root, generation)) {
+          this.busy = false;
+          this.refresh.disabled = false;
+          this.next.disabled = false;
+        }
       }
     }
     async choose(id) {
       if (this.busy || !this.details.open || !idPattern.test(id)) return;
+      const root = this.root, generation = this.generation;
       this.busy = true;
       this.message("loading");
       try {
-        const data = await this.request("/asset/" + id);
-        if (!data) return;
+        const data = await this.request("/asset/" + id, root, generation);
+        if (!data || !this.current(root, generation)) return;
         const asset = data.asset;
         if (!valid(asset) || asset.id !== id || this.accepts && !this.accepts.has(asset.mime)) {
           this.message("stale");
@@ -197,9 +245,10 @@
         this.dispatchEvent(new CustomEvent("achrix:media-selected", {detail:selection, bubbles:true}));
         this.summary.focus();
       } catch (error) {
-        if (error.name !== "AbortError") this.message(error.message === "denied" ? "denied" : error.message === "stale" ? "stale" : "unavailable");
+        if (this.current(root, generation) && error.name !== "AbortError")
+          this.message(error.message === "denied" ? "denied" : error.message === "stale" ? "stale" : "unavailable");
       } finally {
-        this.busy = false;
+        if (this.current(root, generation)) this.busy = false;
       }
     }
   }
