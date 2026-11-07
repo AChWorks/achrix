@@ -23,7 +23,50 @@ Within the existing Media Admin surface, `GET /admin/media/picker.js` serves an 
 <achrix-media-picker accept="image/png,image/jpeg"></achrix-media-picker>
 ```
 
-**Cross-surface localization:** the shared Admin shell deliberately puts only the active surface's domain (and `admin`) in the browser page. The picker must not assume `media` is there: on connect it loads its bounded static labels from authenticated `GET /admin/media/picker/messages` using the existing Media `Surface.Catalogs`, current request-selected locale and ordinary `media.List` gate. The exact selection response returns its human confirmation already formatted through that same request-local Media catalog. There is no duplicated English/Persian dictionary or separate client-side formatter. A failed/denied catalog request or language mismatch displays the current page's shared Admin localized error and **does not initialize the picker**; a reconnect or page refresh can safely retry. Products using `Config.SelectLanguage` must keep the selected locale consistent across the page and authenticated same-origin Media requests (for example, via their existing session preference), otherwise the picker fails closed instead of silently switching language. No extra media permission is implied.
+**Per-instance endpoint (optional):** The `endpoint` attribute selects a fixed
+same-origin Picker HTTP root for this one element. If omitted, the root remains
+`/admin/media/picker`, preserving existing consumers. For a trusted product
+Control origin with explicit selected-site routing, an example is:
+
+```html
+<achrix-media-picker
+  endpoint="/admin/sites/site/site-a/media/picker"
+  accept="image/png,image/jpeg"></achrix-media-picker>
+```
+
+The supplied endpoint must be a **literal path**, beginning with one `/`,
+containing only nonempty ASCII `[A-Za-z0-9_-]` segments separated by one `/`,
+and at most 256 characters. Absolute URLs, protocol-relative paths, empty
+attributes, trailing/doubled slashes, dot segments, percent escapes, fragments,
+queries, backslashes and ambiguous Unicode are invalid and **fail closed**:
+there is no fallback to the default route and no fetch to the rejected target.
+Products should HTML-attribute-escape trusted, already validated server-side
+routes; the element does not infer an active site from cookies, Referer or tabs.
+
+The Control origin must serve the **unchanged official** `picker.js` asset from the
+selected Media component version under its existing authenticated script
+route (the site-origin Media Admin script route does not automatically exist
+on Control). The product must mount a **same-origin, authenticated and
+explicitly site-bound** handler at that root, exposing `GET {endpoint}/messages`,
+`GET {endpoint}/page[/{cursor}]` and `GET {endpoint}/asset/{id}`
+with the published Picker response shapes. It must resolve the site from that
+request's fixed path, verify the current Control principal's authorization to
+that site and the site's `media.List` permission **before any collection
+metadata**, and delegate exact choice to that same site's `media.Select`
+under current policy. Do not forward site cookies, borrow the Site Admin
+session, create an ambient last-selected-site route, or grant `List` to ordinary
+scoped editors merely to make the picker work. These BFF/site policy concerns
+are **product owned**, not new Foundation permissions or a global Media API.
+
+Changing `endpoint` on a connected element invalidates in-flight catalog,
+page and selection requests, clears old results and events, and loads the new
+root's localized catalog before browsing. Disconnect/reconnect likewise
+invalidates prior work. Independently mounted elements do not share endpoint,
+controller, cursor, results or event state. A caller must treat each
+`achrix:media-selected` result as a proposal only and reauthorize/save against
+its own explicitly selected site and current revision/operation preconditions.
+
+**Cross-surface localization:** the shared Admin shell deliberately puts only the active surface's domain (and `admin`) in the browser page. The picker must not assume `media` is there: on connect it loads its bounded static labels from authenticated `GET {endpoint}/messages` (default `GET /admin/media/picker/messages`) using the existing Media `Surface.Catalogs`, current request-selected locale and ordinary `media.List` gate. The exact selection response returns its human confirmation already formatted through that same request-local Media catalog. There is no duplicated English/Persian dictionary or separate client-side formatter. A failed/denied catalog request or language mismatch displays the current page's shared Admin localized error and **does not initialize the picker**; a reconnect or page refresh can safely retry. Products using `Config.SelectLanguage` must keep the selected locale consistent across the page and authenticated same-origin Media requests (for example, via their existing session preference), otherwise the picker fails closed instead of silently switching language. No extra media permission is implied.
 
 The product's external script listens for the bubbling `achrix:media-selected` event. Its immutable `detail` contains `{id, filename, mime, size, width, height, revision}`, with `revision` as an exact decimal **string**. This is a proposed reference, not an executed product edit or permission token; submit it through the product's ordinary authorized Application operation, which must recheck its own business/site scope, permitted MIME and current Media state. The optional `accept` attribute filters on canonical MIME strings for user convenience; it is never a server access control.
 

@@ -2,7 +2,15 @@
 "use strict";
 (() => {
   if (customElements.get("achrix-media-picker")) return;
-  const root = "/admin/media/picker";
+  const defaultRoot = "/admin/media/picker";
+  // A literal, same-origin absolute path, never an URL or browser-normalized path.
+  // Forbid encoded/ambiguous separators, dot segments, queries and fragments.
+  const endpointPattern = /^\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/;
+  const endpointRoot = element => {
+    const value = element.getAttribute("endpoint");
+    return value === null ? defaultRoot :
+      value.length <= 256 && endpointPattern.test(value) ? value : null;
+  };
   const idPattern = /^[A-Z2-7]{26}$/;
   const cursorPattern = /^[A-Za-z0-9_-]{36}$/;
   const mimePattern = /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/;
@@ -24,23 +32,73 @@
     a.state === "ready";
 
   class MediaPicker extends HTMLElement {
+    static get observedAttributes() { return ["endpoint"]; }
+    attributeChangedCallback(_name, oldValue, newValue) {
+      if (oldValue === newValue) return;
+      this.reset();
+      if (this.isConnected) this.connectedCallback();
+    }
     connectedCallback() {
       if (this.initialized || this.initializing) return;
+      const root = endpointRoot(this);
+      if (!root) {
+        this.showError("service_unavailable");
+        return;
+      }
+      // A default (attribute-free) element has no attributeChangedCallback;
+      // initialize its generation before accepting the first catalog response.
+      this.generation = this.generation || 0;
+      const generation = this.generation;
+      this.root = root;
       this.initializing = true;
-      this.initialize().finally(() => { this.initializing = false; });
+      this.initialize(root, generation).finally(() => {
+        if (this.generation === generation) this.initializing = false;
+      });
     }
-    async initialize() {
+    disconnectedCallback() { this.reset(); }
+    reset() {
+      this.generation = (this.generation || 0) + 1;
+      if (this.controller) this.controller.abort();
+      if (this.catalogController) this.catalogController.abort();
+      this.controller = null;
+      this.catalogController = null;
+      this.root = null;
+      this.initialized = false;
+      this.initializing = false;
+      this.busy = false;
+      this.details = null;
+      this.summary = null;
+      this.replaceChildren();
+    }
+    current(root, generation) {
+      return this.isConnected && this.generation === generation && this.root === root;
+    }
+    currentControl(root, generation, details, control) {
+      // Detached controls retain their listeners. Never let an old mount
+      // initiate a request against a replacement endpoint (even A -> B -> A).
+      return this.current(root, generation) && this.details === details &&
+        details.isConnected && details.contains(control);
+    }
+    showError(key) {
+      const notice = make("p", window.AChrixI18n.text("admin", key));
+      notice.setAttribute("role", "alert");
+      this.replaceChildren(notice);
+    }
+    async initialize(root, generation) {
+      const controller = new AbortController();
+      this.catalogController = controller;
       try {
         // The Admin shell only sends the active surface's browser domain.
         // Get Media-owned messages through its authenticated, request-local
         // catalog rather than assuming a product page embeds that domain.
         const response = await fetch(root + "/messages", {
           method: "GET", credentials: "same-origin", mode: "same-origin", redirect: "error",
-          referrerPolicy: "no-referrer", cache: "no-store", headers: {Accept: "application/json"}
+          referrerPolicy: "no-referrer", cache: "no-store", headers: {Accept: "application/json"},
+          signal: controller.signal
         });
         if (!response.ok) throw new Error(response.status === 403 ? "denied" : "unavailable");
         const payload = await response.json();
-        if (!this.isConnected) return;
+        if (!this.current(root, generation)) return;
         if (!payload || payload.locale !== document.documentElement.lang ||
             !payload.messages || typeof payload.messages !== "object" ||
             messageKeys.some(key => typeof payload.messages[key] !== "string" ||
@@ -51,14 +109,13 @@
         this.mount();
         this.initialized = true;
       } catch (error) {
-        if (!this.isConnected) return;
+        if (!this.current(root, generation)) return;
         // This fallback exists in every Admin surface, including non-Media
         // pages. Never silently substitute English for the selected locale.
-        const key = error.message === "denied" ? "permission_denied" :
-          error.message === "locale" ? "locale_unavailable" : "service_unavailable";
-        const notice = make("p", window.AChrixI18n.text("admin", key));
-        notice.setAttribute("role", "alert");
-        this.replaceChildren(notice);
+        this.showError(error.message === "denied" ? "permission_denied" :
+          error.message === "locale" ? "locale_unavailable" : "service_unavailable");
+      } finally {
+        if (this.catalogController === controller) this.catalogController = null;
       }
     }
     text(key) { return this.words[key]; }
@@ -87,24 +144,33 @@
       this.result.setAttribute("aria-live", "polite");
       this.details.append(controls, this.notice, this.list);
       this.append(this.details, this.result);
-      this.refresh.addEventListener("click", () => this.page(""));
-      this.next.addEventListener("click", () => this.page(this.nextCursor));
-      this.details.addEventListener("toggle", () => {
-        if (this.details.open) this.page("");
+      const mountedDetails = this.details, root = this.root, generation = this.generation;
+      const refresh = this.refresh, next = this.next;
+      refresh.addEventListener("click", () => {
+        if (this.currentControl(root, generation, mountedDetails, refresh)) this.page("");
+      });
+      next.addEventListener("click", () => {
+        if (this.currentControl(root, generation, mountedDetails, next)) this.page(this.nextCursor);
+      });
+      mountedDetails.addEventListener("toggle", () => {
+        // The previous detached DOM may deliver a queued toggle event after
+        // a route change. It must never operate on the new Picker instance.
+        if (this.details !== mountedDetails || !mountedDetails.isConnected) return;
+        if (mountedDetails.open) this.page("");
         else if (this.controller) this.controller.abort();
       });
-      this.addEventListener("keydown", event => {
-        if (event.key === "Escape" && this.details.open) {
-          event.preventDefault();
-          this.details.open = false;
-          this.summary.focus();
-        }
-      });
+      if (!this.escapeBound) {
+        this.escapeBound = true;
+        this.addEventListener("keydown", event => {
+          if (event.key === "Escape" && this.details?.isConnected && this.details.open) {
+            event.preventDefault();
+            this.details.open = false;
+            this.summary.focus();
+          }
+        });
+      }
     }
-    disconnectedCallback() {
-      if (this.controller) this.controller.abort();
-    }
-    async request(path) {
+    async request(path, root, generation) {
       if (this.controller) this.controller.abort();
       const controller = new AbortController();
       this.controller = controller;
@@ -120,7 +186,7 @@
           throw new Error(code === "permission_denied" ? "denied" : code === "not_found" ? "stale" : "unavailable");
         }
         const data = await response.json();
-        if (this.controller !== controller || !this.isConnected || !this.details.open) return null;
+        if (this.controller !== controller || !this.current(root, generation) || !this.details.open) return null;
         return data;
       } finally {
         clearTimeout(timeout);
@@ -134,13 +200,14 @@
     async page(cursor) {
       if (this.busy || !this.details.open) return;
       if (cursor && !cursorPattern.test(cursor)) { this.message("unavailable"); return; }
+      const root = this.root, generation = this.generation, mountedDetails = this.details;
       this.busy = true;
       this.refresh.disabled = true;
       this.next.disabled = true;
       this.message("loading");
       try {
-        const data = await this.request("/page" + (cursor ? "/" + cursor : ""));
-        if (!data) return;
+        const data = await this.request("/page" + (cursor ? "/" + cursor : ""), root, generation);
+        if (!data || !this.current(root, generation)) return;
         if (!Array.isArray(data.assets) || data.assets.length > 25 ||
             typeof data.next_cursor !== "string" ||
             (data.next_cursor && !cursorPattern.test(data.next_cursor)) ||
@@ -159,28 +226,34 @@
           const detail = make("span", " · " + asset.mime + " · " + asset.size + " B");
           detail.dir = "ltr";
           item.append(select, detail);
-          select.addEventListener("click", () => this.choose(asset.id));
+          select.addEventListener("click", () => {
+            if (this.currentControl(root, generation, mountedDetails, select)) this.choose(asset.id);
+          });
           this.list.append(item);
         }
         this.next.hidden = !this.nextCursor;
         this.message(this.list.childElementCount ? "ready" : "empty");
       } catch (error) {
+        if (!this.current(root, generation)) return;
         if (error.name !== "AbortError") this.message(error.message === "denied" ? "denied" : "unavailable");
         this.list.replaceChildren();
         this.next.hidden = true;
       } finally {
-        this.busy = false;
-        this.refresh.disabled = false;
-        this.next.disabled = false;
+        if (this.current(root, generation)) {
+          this.busy = false;
+          this.refresh.disabled = false;
+          this.next.disabled = false;
+        }
       }
     }
     async choose(id) {
       if (this.busy || !this.details.open || !idPattern.test(id)) return;
+      const root = this.root, generation = this.generation;
       this.busy = true;
       this.message("loading");
       try {
-        const data = await this.request("/asset/" + id);
-        if (!data) return;
+        const data = await this.request("/asset/" + id, root, generation);
+        if (!data || !this.current(root, generation)) return;
         const asset = data.asset;
         if (!valid(asset) || asset.id !== id || this.accepts && !this.accepts.has(asset.mime)) {
           this.message("stale");
@@ -197,9 +270,10 @@
         this.dispatchEvent(new CustomEvent("achrix:media-selected", {detail:selection, bubbles:true}));
         this.summary.focus();
       } catch (error) {
-        if (error.name !== "AbortError") this.message(error.message === "denied" ? "denied" : error.message === "stale" ? "stale" : "unavailable");
+        if (this.current(root, generation) && error.name !== "AbortError")
+          this.message(error.message === "denied" ? "denied" : error.message === "stale" ? "stale" : "unavailable");
       } finally {
-        this.busy = false;
+        if (this.current(root, generation)) this.busy = false;
       }
     }
   }
