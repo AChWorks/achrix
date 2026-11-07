@@ -73,6 +73,12 @@
     current(root, generation) {
       return this.isConnected && this.generation === generation && this.root === root;
     }
+    currentControl(root, generation, details, control) {
+      // Detached controls retain their listeners. Never let an old mount
+      // initiate a request against a replacement endpoint (even A -> B -> A).
+      return this.current(root, generation) && this.details === details &&
+        details.isConnected && details.contains(control);
+    }
     showError(key) {
       const notice = make("p", window.AChrixI18n.text("admin", key));
       notice.setAttribute("role", "alert");
@@ -138,9 +144,14 @@
       this.result.setAttribute("aria-live", "polite");
       this.details.append(controls, this.notice, this.list);
       this.append(this.details, this.result);
-      this.refresh.addEventListener("click", () => this.page(""));
-      this.next.addEventListener("click", () => this.page(this.nextCursor));
-      const mountedDetails = this.details;
+      const mountedDetails = this.details, root = this.root, generation = this.generation;
+      const refresh = this.refresh, next = this.next;
+      refresh.addEventListener("click", () => {
+        if (this.currentControl(root, generation, mountedDetails, refresh)) this.page("");
+      });
+      next.addEventListener("click", () => {
+        if (this.currentControl(root, generation, mountedDetails, next)) this.page(this.nextCursor);
+      });
       mountedDetails.addEventListener("toggle", () => {
         // The previous detached DOM may deliver a queued toggle event after
         // a route change. It must never operate on the new Picker instance.
@@ -189,7 +200,7 @@
     async page(cursor) {
       if (this.busy || !this.details.open) return;
       if (cursor && !cursorPattern.test(cursor)) { this.message("unavailable"); return; }
-      const root = this.root, generation = this.generation;
+      const root = this.root, generation = this.generation, mountedDetails = this.details;
       this.busy = true;
       this.refresh.disabled = true;
       this.next.disabled = true;
@@ -215,7 +226,9 @@
           const detail = make("span", " · " + asset.mime + " · " + asset.size + " B");
           detail.dir = "ltr";
           item.append(select, detail);
-          select.addEventListener("click", () => this.choose(asset.id));
+          select.addEventListener("click", () => {
+            if (this.currentControl(root, generation, mountedDetails, select)) this.choose(asset.id);
+          });
           this.list.append(item);
         }
         this.next.hidden = !this.nextCursor;

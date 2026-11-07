@@ -679,6 +679,61 @@ async function pickerEndpointProof({page,endpoint,assets,probe}) {
     assert.deepEqual((await page.evaluate(()=>window.__achrixScopedEvents)).a.map(v=>v.id),[data.a.id],
       "endpoint switch must never implicitly select");
 
+    // REQUIRED-1 regression: old Refresh, Next and asset buttons retain their
+    // click listeners after reset. A new, idle B picker must ignore ALL
+    // old-A controls even if an asset ID is recognized in the new scope.
+    await a.evaluate((node,root)=>node.setAttribute("endpoint",root),routes.a);
+    await a.locator("summary").waitFor();
+    await a.locator("summary").click();
+    await ready("a");
+    await a.evaluate(node=>{
+      // Expose a valid previous-page cursor so the old Next click handler
+      // is exercised, without changing the live backend's pagination.
+      node.nextCursor = "A".repeat(36);
+      node.next.hidden = false;
+    });
+    const oldRefresh=await a.locator("button").nth(0).elementHandle();
+    const oldNext=await a.locator("button").nth(1).elementHandle();
+    const oldAsset=await a.locator("li button").first().elementHandle();
+    await a.evaluate((node,root)=>node.setAttribute("endpoint",root),routes.b);
+    await a.locator("summary").waitFor();
+    await a.locator("summary").click();
+    await ready("a");
+    const beforeOldClicks={
+      network:network.length, requests:observed.length,
+      events:(await page.evaluate(()=>window.__achrixScopedEvents.a.length)),
+      state:await a.evaluate(node=>({
+        root:node.root, cursor:node.nextCursor, list:node.list.textContent,
+        notice:node.notice.textContent, detailsOpen:node.details.open, busy:node.busy
+      }))
+    };
+    await page.evaluate(()=>{window.__achrixFocusBefore=document.activeElement;});
+    for(const [name,control] of [["Refresh",oldRefresh],["Next",oldNext],["Asset",oldAsset]]) {
+      await control.evaluate(node=>{
+        if(node.isConnected) throw Error("stale test control is unexpectedly attached");
+        node.dispatchEvent(new MouseEvent("click",{bubbles:true}));
+      });
+      await page.waitForTimeout(80);
+      assert.equal(network.length,beforeOldClicks.network,name+" stale click sent a network request");
+      assert.equal(observed.length,beforeOldClicks.requests,name+" stale click reached the scoped BFF");
+      assert.equal(await page.evaluate(()=>window.__achrixScopedEvents.a.length),
+        beforeOldClicks.events,name+" stale click emitted a selection event");
+      assert.deepEqual(await a.evaluate(node=>({
+        root:node.root, cursor:node.nextCursor, list:node.list.textContent,
+        notice:node.notice.textContent, detailsOpen:node.details.open, busy:node.busy
+      })),beforeOldClicks.state,name+" stale click mutated replacement UI");
+      assert.equal(await page.evaluate(()=>document.activeElement===window.__achrixFocusBefore),
+        true,name+" stale click moved focus");
+    }
+    await Promise.all([oldRefresh.dispose(),oldNext.dispose(),oldAsset.dispose()]);
+    await page.evaluate(()=>delete window.__achrixFocusBefore);
+    // The replacement controls are still functional after rejecting old ones.
+    const freshRefresh=page.waitForResponse(r=>new URL(r.url()).pathname===routes.b+"/page");
+    await a.locator("button").first().click();
+    assert.equal((await freshRefresh).status(),200,"new endpoint Refresh still works");
+    await ready("a");
+    assert((await a.locator("li button").first().innerText()).includes(data.b.filename));
+
     // A stale exact selection must not emit an event after the root changes.
     await a.evaluate((element,root)=>element.setAttribute("endpoint",root),routes.a);
     await a.locator("summary").waitFor();
