@@ -43,8 +43,11 @@ there is no fallback to the default route and no fetch to the rejected target.
 Products should HTML-attribute-escape trusted, already validated server-side
 routes; the element does not infer an active site from cookies, Referer or tabs.
 
-The product must mount a **same-origin, authenticated and explicitly site-bound**
-handler at that root, exposing `GET {endpoint}/messages`,
+The Control origin must serve the **unchanged official** `picker.js` asset from the
+selected Media component version under its existing authenticated script
+route (the site-origin Media Admin script route does not automatically exist
+on Control). The product must mount a **same-origin, authenticated and
+explicitly site-bound** handler at that root, exposing `GET {endpoint}/messages`,
 `GET {endpoint}/page[/{cursor}]` and `GET {endpoint}/asset/{id}`
 with the published Picker response shapes. It must resolve the site from that
 request's fixed path, verify the current Control principal's authorization to
@@ -63,7 +66,7 @@ controller, cursor, results or event state. A caller must treat each
 `achrix:media-selected` result as a proposal only and reauthorize/save against
 its own explicitly selected site and current revision/operation preconditions.
 
-**Cross-surface localization:** the shared Admin shell deliberately puts only the active surface's domain (and `admin`) in the browser page. The picker must not assume `media` is there: on connect it loads its bounded static labels from authenticated `GET /admin/media/picker/messages` using the existing Media `Surface.Catalogs`, current request-selected locale and ordinary `media.List` gate. The exact selection response returns its human confirmation already formatted through that same request-local Media catalog. There is no duplicated English/Persian dictionary or separate client-side formatter. A failed/denied catalog request or language mismatch displays the current page's shared Admin localized error and **does not initialize the picker**; a reconnect or page refresh can safely retry. Products using `Config.SelectLanguage` must keep the selected locale consistent across the page and authenticated same-origin Media requests (for example, via their existing session preference), otherwise the picker fails closed instead of silently switching language. No extra media permission is implied.
+**Cross-surface localization:** the shared Admin shell deliberately puts only the active surface's domain (and `admin`) in the browser page. The picker must not assume `media` is there: on connect it loads its bounded static labels from authenticated `GET {endpoint}/messages` (default `GET /admin/media/picker/messages`) using the existing Media `Surface.Catalogs`, current request-selected locale and ordinary `media.List` gate. The exact selection response returns its human confirmation already formatted through that same request-local Media catalog. There is no duplicated English/Persian dictionary or separate client-side formatter. A failed/denied catalog request or language mismatch displays the current page's shared Admin localized error and **does not initialize the picker**; a reconnect or page refresh can safely retry. Products using `Config.SelectLanguage` must keep the selected locale consistent across the page and authenticated same-origin Media requests (for example, via their existing session preference), otherwise the picker fails closed instead of silently switching language. No extra media permission is implied.
 
 The product's external script listens for the bubbling `achrix:media-selected` event. Its immutable `detail` contains `{id, filename, mime, size, width, height, revision}`, with `revision` as an exact decimal **string**. This is a proposed reference, not an executed product edit or permission token; submit it through the product's ordinary authorized Application operation, which must recheck its own business/site scope, permitted MIME and current Media state. The optional `accept` attribute filters on canonical MIME strings for user convenience; it is never a server access control.
 
