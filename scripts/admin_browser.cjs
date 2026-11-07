@@ -583,6 +583,18 @@ async function pickerEndpointProof({page,endpoint,assets,probe}) {
     }
   };
   await page.route("**/admin/sites/site/*/media/picker/**",handler);
+  // A list button can be visible before the component's asynchronous
+  // page() finally releases its busy guard. Wait for actual readiness, not
+  // only DOM presence, before exercising the selection contract.
+  const idle=site=>page.waitForFunction(site=>{
+    const picker=document.querySelector("#achrix-scoped-"+site);
+    return picker && !picker.busy;
+  },site);
+  const ready=site=>page.waitForFunction(site=>{
+    const picker=document.querySelector("#achrix-scoped-"+site);
+    return picker && !picker.busy && picker.details?.open &&
+      picker.list?.querySelector("li button");
+  },site);
   const arm=path=>{
     let seen,release;
     const started=new Promise(resolve=>{seen=resolve;});
@@ -626,18 +638,26 @@ async function pickerEndpointProof({page,endpoint,assets,probe}) {
     assert.equal(forbidden.status,404);
     assert(!forbidden.body.includes(data.b.filename),"foreign choice contains no metadata");
 
-    const chooseA=page.waitForResponse(r=>new URL(r.url()).pathname===routes.a+"/asset/"+data.a.id);
-    const chooseB=page.waitForResponse(r=>new URL(r.url()).pathname===routes.b+"/asset/"+data.b.id);
-    await Promise.all([a.locator("li button").click(),b.locator("li button").click()]);
-    assert.equal((await chooseA).status(),200);
-    assert.equal((await chooseB).status(),200);
-    await page.waitForFunction(()=>window.__achrixScopedEvents.a.length===1&&window.__achrixScopedEvents.b.length===1);
+    await Promise.all([ready("a"),ready("b")]);
+    // Concurrently mounted roots stay independent even while one selection
+    // closes its details; assert real Media.Select network paths AND events.
+    await a.locator("li button").click();
+    await page.waitForFunction(()=>window.__achrixScopedEvents.a.length===1);
+    assert.equal(await b.locator("details").evaluate(node=>node.open),true,
+      "choice on A must not close B");
+    await b.locator("li button").click();
+    await page.waitForFunction(()=>window.__achrixScopedEvents.b.length===1);
+    for(const [site,asset] of [["a",data.a],["b",data.b]]) {
+      assert(observed.some(v=>v.site===site && v.path===routes[site]+"/asset/"+asset.id),
+        "exact authenticated Media selection request missing for "+site);
+    }
     assert.deepEqual((await page.evaluate(()=>window.__achrixScopedEvents)).a.map(v=>v.id),[data.a.id]);
     assert.deepEqual((await page.evaluate(()=>window.__achrixScopedEvents)).b.map(v=>v.id),[data.b.id]);
 
     // Switching a root while a list response is in flight must not display
     // stale content or overwrite the next site's controller/visible state.
     const delayedPage=arm(routes.a+"/page");
+    await idle("a");
     await a.locator("summary").click();
     await delayedPage.started;
     const staleDetails=await a.locator("details").elementHandle();
@@ -646,6 +666,7 @@ async function pickerEndpointProof({page,endpoint,assets,probe}) {
     await a.locator("summary").waitFor();
     await a.locator("summary").click();
     await a.locator("li button").first().waitFor();
+    await ready("a");
     const newScopePages=observed.filter(v=>v.path===routes.b+"/page").length;
     await staleDetails.evaluate(node=>node.dispatchEvent(new Event("toggle")));
     await page.waitForTimeout(100);
@@ -663,6 +684,7 @@ async function pickerEndpointProof({page,endpoint,assets,probe}) {
     await a.locator("summary").waitFor();
     await a.locator("summary").click();
     await a.locator("li button").first().waitFor();
+    await ready("a");
     const delayedChoice=arm(routes.a+"/asset/"+data.a.id);
     await a.locator("li button").first().click();
     await delayedChoice.started;
@@ -673,6 +695,7 @@ async function pickerEndpointProof({page,endpoint,assets,probe}) {
       "late selection was incorrectly dispatched");
     await a.locator("summary").click();
     await a.locator("li button").first().waitFor();
+    await ready("a");
     await a.locator("li button").first().click();
     await page.waitForFunction(()=>window.__achrixScopedEvents.a.length===2);
     assert.deepEqual((await page.evaluate(()=>window.__achrixScopedEvents)).a.map(v=>v.id),
