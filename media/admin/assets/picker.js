@@ -63,6 +63,8 @@
       this.initialized = false;
       this.initializing = false;
       this.busy = false;
+      this.details = null;
+      this.summary = null;
       this.replaceChildren();
     }
     current(root, generation) {
@@ -135,17 +137,24 @@
       this.append(this.details, this.result);
       this.refresh.addEventListener("click", () => this.page(""));
       this.next.addEventListener("click", () => this.page(this.nextCursor));
-      this.details.addEventListener("toggle", () => {
-        if (this.details.open) this.page("");
+      const mountedDetails = this.details;
+      mountedDetails.addEventListener("toggle", () => {
+        // The previous detached DOM may deliver a queued toggle event after
+        // a route change. It must never operate on the new Picker instance.
+        if (this.details !== mountedDetails || !mountedDetails.isConnected) return;
+        if (mountedDetails.open) this.page("");
         else if (this.controller) this.controller.abort();
       });
-      this.addEventListener("keydown", event => {
-        if (event.key === "Escape" && this.details.open) {
-          event.preventDefault();
-          this.details.open = false;
-          this.summary.focus();
-        }
-      });
+      if (!this.escapeBound) {
+        this.escapeBound = true;
+        this.addEventListener("keydown", event => {
+          if (event.key === "Escape" && this.details?.isConnected && this.details.open) {
+            event.preventDefault();
+            this.details.open = false;
+            this.summary.focus();
+          }
+        });
+      }
     }
     async request(path, root, generation) {
       if (this.controller) this.controller.abort();

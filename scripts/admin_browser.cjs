@@ -640,11 +640,18 @@ async function pickerEndpointProof({page,endpoint,assets,probe}) {
     const delayedPage=arm(routes.a+"/page");
     await a.locator("summary").click();
     await delayedPage.started;
+    const staleDetails=await a.locator("details").elementHandle();
     await a.evaluate((element,root)=>element.setAttribute("endpoint",root),routes.b);
     delayedPage.release();
     await a.locator("summary").waitFor();
     await a.locator("summary").click();
     await a.locator("li button").first().waitFor();
+    const newScopePages=observed.filter(v=>v.path===routes.b+"/page").length;
+    await staleDetails.evaluate(node=>node.dispatchEvent(new Event("toggle")));
+    await page.waitForTimeout(100);
+    assert.equal(observed.filter(v=>v.path===routes.b+"/page").length,newScopePages,
+      "detached old toggle event must never trigger a new-scope request");
+    await staleDetails.dispose();
     assert((await a.innerText()).includes(data.b.filename));
     assert(!(await a.innerText()).includes(data.a.filename),
       "late page from previous endpoint cannot overwrite new root");
