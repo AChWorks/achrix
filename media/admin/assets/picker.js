@@ -45,7 +45,10 @@
         this.showError("service_unavailable");
         return;
       }
-      const generation = this.generation || 0;
+      // A default (attribute-free) element has no attributeChangedCallback;
+      // initialize its generation before accepting the first catalog response.
+      this.generation = this.generation || 0;
+      const generation = this.generation;
       this.root = root;
       this.initializing = true;
       this.initialize(root, generation).finally(() => {
